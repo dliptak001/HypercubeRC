@@ -1,0 +1,22 @@
+# Build artifacts
+cmake-build-*/
+build/
+*.exe
+*.obj
+*.o
+*.a
+
+# IDE files
+.idea/
+*.iml
+.vs/
+.vscode/
+*.user
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude Code (development only)
+.claude/
+CLAUDE.md
