@@ -1,6 +1,6 @@
 # HypercubeRC
 
-A reservoir computer built on a Boolean hypercube graph.
+A reservoir computer with hypercube-structured connectivity.
 
 Licensed under the [Apache License 2.0](LICENSE).
 
