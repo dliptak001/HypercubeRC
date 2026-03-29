@@ -1,17 +1,13 @@
 /// @file StreamingAnomaly.cpp
-/// @brief Streaming anomaly detection example.
+/// @brief Streaming anomaly detection — industrial process monitoring.
 ///
-/// Simulates industrial process monitoring: a reservoir learns normal behavior,
-/// then detects anomalies when the process deviates. Three distinct anomaly
-/// events are injected — a noise spike, a DC drift, and a frequency shift —
-/// each separated by normal operation to show clean detection and recovery.
+/// A reservoir learns normal process behavior, then monitors a live stream
+/// for deviations. Three anomaly types are injected — noise spike, DC drift,
+/// frequency shift — each separated by normal operation. Demonstrates clean
+/// detection of all three and automatic recovery without retraining.
 ///
-/// To build and run:
-///   cmake -B build -DCMAKE_BUILD_TYPE=Release
-///   cmake --build build
-///   ./build/StreamingAnomaly              (default: raw features)
-///   ./build/StreamingAnomaly raw          (explicit raw)
-///   ./build/StreamingAnomaly translation  (translation 2.5N features)
+/// See StreamingAnomaly.md for a detailed walkthrough, expected output, and
+/// suggested experiments.
 
 #include <iostream>
 #include <iomanip>

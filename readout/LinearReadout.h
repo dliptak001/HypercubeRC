@@ -3,24 +3,44 @@
 #include <cstddef>
 #include <vector>
 
-/// @brief Online linear readout via LMS/SGD — preferred readout for DIM < 8.
+/// @brief Online linear readout trained by stochastic gradient descent (SGD).
 ///
-/// Trains a single-layer linear model (weights + bias) using the least mean squares
-/// (Widrow-Hoff) update rule with MSE-based pocket: after each epoch, saves the weight
-/// vector if MSE is the lowest seen so far. Returns the pocket (best) weights.
+/// In reservoir computing, the reservoir's weights are fixed — only the
+/// readout layer is trained. This class implements the simplest readout:
+/// a single linear layer (weights + bias) that maps reservoir state features
+/// to a scalar prediction.
 ///
-/// Features are standardized (zero mean, unit variance) before training. The mean and
-/// scale are computed from the training set and applied automatically in PredictRaw.
-/// This is critical for the translation layer which produces mixed-scale features:
-/// x in [-1,1], x² in [0,1] (biased), x*x' in [-1,1].
+/// **How training works.** The readout is trained online using the LMS
+/// (Least Mean Squares / Widrow-Hoff) update rule — a form of SGD where
+/// each training sample nudges the weights by a step proportional to the
+/// prediction error. A "pocket" mechanism tracks the best weight vector
+/// seen across all epochs (lowest MSE on the training set), so the final
+/// model is the best snapshot rather than the last iterate.
 ///
-/// L2 weight decay (default 1e-4) acts as online Ridge regularization. Learning rate
-/// decay (default 0.01) ensures convergence. Bias is not decayed.
+/// **Feature standardization.** Before training, all features are
+/// standardized to zero mean and unit variance. This is critical when
+/// using the translation layer, which produces features at different
+/// scales: raw states x in [-1,1], squared terms x² in [0,1] (biased
+/// positive), and antipodal products x*x' in [-1,1]. Without
+/// standardization, the gradient would be dominated by whichever feature
+/// group has the largest variance, and the others would be undertrained.
+/// The learned mean and scale are applied automatically during prediction.
 ///
-/// All values follow the pipeline convention:
+/// **Regularization.** L2 weight decay (default 1e-4) shrinks weights
+/// toward zero each update, acting as online Ridge regularization to
+/// prevent overfitting. Learning rate decay (default 0.01) reduces the
+/// step size over epochs to ensure convergence. The bias term is not
+/// decayed — it should be free to shift the output.
+///
+/// **When to use.** LinearReadout is preferred for smaller reservoirs
+/// (DIM < 8, N < 256) where the SGD approach converges quickly. For
+/// larger reservoirs, RidgeRegression provides a closed-form optimum
+/// that is both faster and more accurate.
+///
+/// **Interface conventions:**
 ///   - Features: float, any range (standardized internally)
-///   - Targets: float, continuous values for regression or {-1.0, +1.0} for classification
-///   - PredictRaw: continuous output; Predict: thresholded at 0.0 to {-1.0, +1.0}
+///   - Targets: float — continuous for regression, {-1, +1} for classification
+///   - PredictRaw(): continuous output; Predict(): thresholded at 0
 
 class LinearReadout
 {

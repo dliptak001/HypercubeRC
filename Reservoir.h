@@ -9,32 +9,49 @@
 /// Translation: optimized for 2.5N-dim readout via TranslationLayer.
 enum class FeatureMode { Raw, Translation };
 
-/// Continuous echo-state reservoir on a DIM-dimensional Boolean hypercube (N = 2^DIM vertices).
+/// @brief Echo-state reservoir whose neurons live on a Boolean hypercube.
 ///
-/// Each vertex gathers weighted outputs from 2*DIM neighbors:
-///   - DIM Hamming-shell connections: cumulative-bit selectors (1, 3, 7, 15, ...).
-///   - DIM nearest-neighbor connections: single-bit flips (1<<0, 1<<1, ...).
+/// A Boolean hypercube of dimension DIM is a graph with N = 2^DIM vertices,
+/// where each vertex is addressed by a DIM-bit binary index. Two vertices
+/// are neighbors when their indices differ by exactly one bit — the edge
+/// set is defined entirely by XOR, so no adjacency list is stored.
 ///
-/// Neighbor masks are computed inline from the loop index — no adjacency storage.
-/// Each vertex has fully independent weights (N * 2*DIM recurrent).
-/// The weighted sum is passed through tanh(alpha * sum).
+/// This class places one neuron at every vertex. At each timestep, every
+/// neuron computes a weighted sum of its neighbors' previous outputs,
+/// applies tanh(alpha * sum), and writes the result to its state slot.
+/// The full N-dimensional state vector is then available to a downstream
+/// readout (see ESN for the complete pipeline).
 ///
-/// Recurrent weights are rescaled via power iteration to the target spectral radius.
-/// Input is injected into vtx_output_ via per-vertex random projection weights (W_in).
-/// Inputs are clamped to [-1, +1]. Multi-input mode uses block-partitioned injection:
-/// each input channel drives a contiguous block of N/K vertices (K = num_inputs).
-/// Each block is a subcube of the hypercube with DIM-log2(K) internal nearest-neighbor
-/// connections. Cross-block mixing happens through shell connections and high-bit
-/// nearest-neighbor flips. Call InjectInput() before Step().
+/// **Connectivity.** Each neuron receives from 2*DIM neighbors, organized
+/// into two families of DIM connections each:
 ///
-/// **Dual default system:** Two sets of per-DIM optimized hyperparameters are provided:
-///   - Raw defaults (RawSpectralRadius, RawInputScaling): optimized for N-dim raw readout.
-///   - Translation defaults (TranslationSpectralRadius, TranslationInputScaling):
-///     optimized for 2.5N-dim readout via TranslationLayer.
-/// Create() selects the appropriate defaults based on the FeatureMode parameter.
-/// Explicit SR/input scaling values override the mode-based defaults.
+///   - **Shell connections** (cumulative-bit masks 1, 3, 7, 15, ...):
+///     connect vertices whose low-order bits are progressively scrambled,
+///     mixing information across multiple bit positions at once.
 ///
-/// Readout uses Outputs() which exposes N floats after the synchronous swap.
+///   - **Nearest-neighbor connections** (single-bit flips 1, 2, 4, 8, ...):
+///     connect each vertex to its DIM Hamming-distance-1 neighbors,
+///     providing local coupling along every dimension of the hypercube.
+///
+/// Every connection has its own learned weight, giving N * 2*DIM total
+/// recurrent weights. Neighbor addresses are computed inline from the
+/// loop index (v XOR mask) — no adjacency storage is needed.
+///
+/// **Input injection.** External input is projected onto neuron states via
+/// per-vertex random weights (W_in). Inputs are clamped to [-1, +1].
+/// In multi-input mode (K channels), the N vertices are block-partitioned
+/// into K contiguous groups, each driven by one input channel.
+///
+/// **Spectral radius.** After random initialization, recurrent weights are
+/// rescaled so the spectral norm (estimated via power iteration) matches
+/// a target spectral radius. Two sets of per-DIM optimized defaults are
+/// provided — one for raw N-feature readout, one for 2.5N translation
+/// readout — selected automatically by the FeatureMode parameter.
+/// Explicit values override the defaults.
+///
+/// **Usage.** Construct via the static Create() factory, then alternate
+/// InjectInput() and Step() calls. Read the N-dimensional state from
+/// Outputs() after each Step().
 template <size_t DIM>
 class Reservoir
 {

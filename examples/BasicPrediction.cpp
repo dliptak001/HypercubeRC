@@ -1,23 +1,12 @@
 /// @file BasicPrediction.cpp
 /// @brief Minimal example: predict a sine wave using HypercubeRC.
 ///
-/// This is the simplest possible end-to-end demo of the reservoir computing
-/// pipeline. It generates a sine wave, feeds it into the reservoir, trains
-/// a linear readout to predict the next value, and reports the error.
+/// The simplest end-to-end reservoir computing demo. A sine wave is fed into
+/// the reservoir, and a linear readout learns to predict the next value from
+/// the reservoir's internal state alone. Start here if you're new to RC.
 ///
-/// The pipeline:
-///   1. Generate input signal (sine wave)
-///   2. Create ESN and drive it (warmup + collect)
-///   3. Optionally apply translation layer (N -> 2.5N features)
-///   4. Train LinearReadout on features
-///   5. Evaluate prediction quality on held-out test set
-///
-/// To build and run:
-///   cmake -B build -DCMAKE_BUILD_TYPE=Release
-///   cmake --build build
-///   ./build/BasicPrediction            (default: translation features)
-///   ./build/BasicPrediction raw        (raw N features)
-///   ./build/BasicPrediction translation (explicit translation)
+/// See BasicPrediction.md for a detailed walkthrough, expected output, and
+/// suggested experiments.
 
 #include <iostream>
 #include <iomanip>

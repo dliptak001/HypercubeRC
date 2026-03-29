@@ -4,30 +4,50 @@
 #include <cmath>
 #include <vector>
 
-/// @brief Ridge regression readout — optimal linear readout for RC evaluation.
+/// @brief Closed-form Ridge regression readout — the mathematically optimal
+///        linear readout for reservoir computing evaluation.
 ///
-/// Finds the globally optimal linear mapping from reservoir states to targets by
-/// solving [W; b] = (X'X + λI)^{-1} X'y via Gaussian elimination with partial pivoting.
-/// The feature matrix is internally augmented with a bias column of 1.0s; the bias is
-/// NOT regularized (only feature weights are penalized), so the intercept is free to
-/// shift the decision boundary.
+/// Where LinearReadout iterates toward a solution via SGD, Ridge regression
+/// solves for the globally optimal weights in one shot by solving the normal
+/// equations with L2 regularization:
 ///
-/// Public interface accepts float (matching Reservoir and LinearReadout). Matrix math
-/// (X'X accumulation, solve, back-substitution) is performed in double precision for
-/// numerical stability. X'X computation is OpenMP-parallelized; each thread computes
-/// its own row of the upper triangle, which is then mirrored — no write contention.
+///   [W; b] = (X'X + lambda * I)^{-1} X'y
 ///
-/// Cost: O(N² * samples) for X'X, O(N³) for the solve. Use for DIM >= 8 where
-/// the closed-form optimum outperforms SGD. Use LinearReadout for DIM < 8.
+/// This gives the unique weight vector that minimizes squared error plus a
+/// penalty on weight magnitude. The result is deterministic — no learning
+/// rate, no epochs, no random initialization.
 ///
-/// Features are standardized (zero mean, unit variance) before solving. This ensures
-/// the regularization term λI penalizes all feature weights equally regardless of
-/// scale — critical for the translation layer which produces mixed-scale features.
+/// **Why Ridge and not plain least squares?** When the number of features
+/// approaches or exceeds the number of training samples (common in RC —
+/// a DIM=8 reservoir with translation has 640 features), the X'X matrix
+/// becomes ill-conditioned or singular. The lambda*I term (default lambda=1.0)
+/// adds a small positive value to the diagonal, ensuring the system is
+/// always solvable and preventing the weights from exploding to fit noise.
 ///
-/// All values follow the pipeline convention:
+/// **How the solve works.** The feature matrix X is augmented with a bias
+/// column of 1.0s. X'X is accumulated in double precision for numerical
+/// stability, then solved via Gaussian elimination with partial pivoting.
+/// The bias weight is NOT regularized — it should be free to shift the
+/// output without penalty. X'X computation is OpenMP-parallelized; each
+/// thread owns a row of the upper triangle, which is mirrored afterward.
+///
+/// **Feature standardization.** All features are standardized (zero mean,
+/// unit variance) before solving. This ensures the lambda*I penalty treats
+/// all features equally regardless of scale — without this, the
+/// translation layer's mixed-scale features (x in [-1,1], x² in [0,1],
+/// x*x' in [-1,1]) would be regularized unevenly, biasing the solution
+/// toward whichever feature group has the largest raw variance. The learned
+/// mean and scale are applied automatically during prediction.
+///
+/// **Cost:** O(N² * samples) to build X'X, O(N³) to solve. This is fast
+/// for reservoir-scale problems (N up to ~2500 features) and provides the
+/// optimal solution that SGD can only approximate. Preferred for DIM >= 8;
+/// for smaller reservoirs, LinearReadout is lighter-weight and sufficient.
+///
+/// **Interface conventions:**
 ///   - Features: float, any range (standardized internally)
-///   - Targets: float, continuous values for regression or {-1.0, +1.0} for classification
-///   - PredictRaw: continuous output; Predict: thresholded at 0.0 to {-1.0, +1.0}
+///   - Targets: float — continuous for regression, {-1, +1} for classification
+///   - PredictRaw(): continuous output; Predict(): thresholded at 0
 
 class RidgeRegression
 {

@@ -1,21 +1,14 @@
 /// @file SignalClassification.cpp
 /// @brief Classify waveform types from reservoir states.
 ///
-/// Demonstrates the reservoir as a feature extractor for pattern recognition.
-/// Four waveform types — sine, square, triangle, chirp — are fed to the reservoir
-/// in alternating blocks. Each waveform has a distinct frequency and dynamic
-/// signature. One-vs-rest binary readouts classify each timestep by waveform type
-/// using the reservoir state as features.
+/// The reservoir acts as a feature extractor for pattern recognition. Four
+/// waveform types — sine, square, triangle, chirp — cycle in alternating blocks.
+/// One-vs-rest readouts classify each timestep by waveform type using only the
+/// reservoir state, with per-class accuracy, confusion matrix, and transition
+/// dynamics analysis.
 ///
-/// This is the only example that exercises multi-class inference via argmax over
-/// one-vs-rest PredictRaw() scores, with per-class accuracy and confusion matrix.
-///
-/// To build and run:
-///   cmake -B build -DCMAKE_BUILD_TYPE=Release
-///   cmake --build build
-///   ./build/SignalClassification              (default: translation features)
-///   ./build/SignalClassification translation  (explicit translation)
-///   ./build/SignalClassification raw          (raw N features — much lower accuracy)
+/// See SignalClassification.md for a detailed walkthrough, expected output, and
+/// suggested experiments.
 
 #include <iostream>
 #include <iomanip>

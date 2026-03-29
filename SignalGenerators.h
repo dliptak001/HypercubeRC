@@ -15,6 +15,24 @@
 // ---------------------------------------------------------------------------
 // Mackey-Glass delay differential equation (tau=17)
 // ---------------------------------------------------------------------------
+
+/// @brief Generate a Mackey-Glass chaotic time series.
+///
+/// The Mackey-Glass delay differential equation is a standard benchmark for
+/// chaotic time series prediction in reservoir computing:
+///
+///   dx/dt = beta * x(t-tau) / (1 + x(t-tau)^n) - gamma * x(t)
+///
+/// With tau=17, n=10, beta=0.2, gamma=0.1, the system exhibits low-dimensional
+/// chaos — deterministic but aperiodic, making it ideal for testing whether a
+/// reservoir can track complex nonlinear dynamics.
+///
+/// The series is integrated with Euler stepping (dt=1) from a flat initial
+/// condition (x=1.2). The first 1000+tau transient steps are discarded so the
+/// returned values lie on the attractor.
+///
+/// @param total_steps Number of attractor samples to return.
+/// @return Vector of total_steps floats (unnormalized; call Normalize() for [-1,1]).
 inline std::vector<float> GenerateMackeyGlass(size_t total_steps)
 {
     constexpr size_t TAU = 17;
@@ -40,6 +58,15 @@ inline std::vector<float> GenerateMackeyGlass(size_t total_steps)
 // ---------------------------------------------------------------------------
 // Min-max normalize to [-1, 1]
 // ---------------------------------------------------------------------------
+
+/// @brief Normalize a signal to the [-1, +1] range (min-max scaling).
+///
+/// Reservoir inputs are clamped to [-1, +1], so raw signals must be scaled
+/// to this range before injection. This function applies min-max normalization:
+///   x_normalized = (x - midpoint) / half_range
+/// where midpoint = (max+min)/2 and half_range = (max-min)/2.
+///
+/// If the signal is constant (zero range), it is left unchanged.
 inline void Normalize(std::vector<float>& series)
 {
     if (series.empty()) return;
@@ -54,9 +81,28 @@ inline void Normalize(std::vector<float>& series)
 // ---------------------------------------------------------------------------
 // NARMA-10 nonlinear autoregressive benchmark
 // ---------------------------------------------------------------------------
+
+/// Input-target pair returned by GenerateNARMA10.
 struct NARMASeq { std::vector<float> inputs; std::vector<float> targets; };
 
-/// @pre total_steps >= 11 (the NARMA recurrence needs 10 history steps).
+/// @brief Generate a NARMA-10 input/target sequence.
+///
+/// NARMA-10 (Nonlinear AutoRegressive Moving Average, order 10) is the
+/// standard reservoir computing benchmark for combined memory and nonlinear
+/// computation. The target recurrence is:
+///
+///   y(t+1) = 0.3*y(t) + 0.05*y(t)*sum(y(t-i), i=0..9) + 1.5*u(t-9)*u(t) + 0.1
+///
+/// The product term u(t-9)*u(t) requires remembering input from 10 steps ago,
+/// while the y(t)*sum(...) term requires nonlinear mixing — a reservoir must
+/// have both memory depth and computational capacity to perform well.
+///
+/// Inputs u(t) are uniform random in [0, 0.5]. Targets y(t) are clamped to [0, 1].
+///
+/// @param input_seed  RNG seed for deterministic input generation.
+/// @param total_steps Length of the returned sequences.
+/// @return NARMASeq with .inputs (u) and .targets (y), each of total_steps floats.
+/// @pre total_steps >= 11 (the recurrence needs 10 history steps).
 inline NARMASeq GenerateNARMA10(uint64_t input_seed, size_t total_steps)
 {
     std::mt19937_64 rng(input_seed);
@@ -82,6 +128,12 @@ inline NARMASeq GenerateNARMA10(uint64_t input_seed, size_t total_steps)
 // ---------------------------------------------------------------------------
 // NRMSE computation
 // ---------------------------------------------------------------------------
+
+/// @brief Normalized Root Mean Squared Error from raw prediction arrays.
+///
+/// NRMSE = RMSE / std(targets). A value of 1.0 means the model predicts
+/// no better than the target mean; 0.0 is perfect. Standard RC benchmarks
+/// report NRMSE so results are comparable across different target scales.
 inline double ComputeNRMSE(const float* pred, const float* targets, size_t n)
 {
     double mean = 0.0;
