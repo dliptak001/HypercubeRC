@@ -227,7 +227,7 @@ size_t LinearReadout::CountCorrect(const float* features, const float* labels,
     size_t correct = 0;
     for (size_t s = 0; s < num_samples; ++s)
     {
-        if (Predict(features + s * num_features_) == labels[s])
+        if (Predict(features + s * num_features_) * labels[s] > 0.0f)
             ++correct;
     }
     return correct;

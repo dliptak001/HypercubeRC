@@ -1,28 +1,24 @@
 #include "Reservoir.h"
+#include <cassert>
 #include <cstring>
 #include <cmath>
+#include <random>
 #include <stdexcept>
 
 
 template <size_t DIM>
 Reservoir<DIM>::Reservoir(const uint64_t rng_seed,
-                    const float alpha,
-                    const float leak,
-                    const float spectral_radius,
-                    const float input_scaling,
-                    const size_t num_inputs)
+                          const float alpha,
+                          const float spectral_radius,
+                          std::vector<float> block_scaling)
     : rng_seed_(rng_seed),
-      num_inputs_(num_inputs),
+      num_inputs_(block_scaling.size()),
       alpha_(alpha),
-      leak_(leak),
-      retain_(1.0f - leak),
       spectral_radius_(spectral_radius),
-      input_scaling_(input_scaling)
+      block_scaling_(std::move(block_scaling))
 {
     if (alpha_ <= 0.0f)
         throw std::invalid_argument("alpha must be positive");
-    if (leak_ < 0.0f || leak_ > 1.0f)
-        throw std::invalid_argument("leak must be in [0.0, 1.0]");
 
     Initialize();
 }
@@ -30,7 +26,8 @@ Reservoir<DIM>::Reservoir(const uint64_t rng_seed,
 template <size_t DIM>
 void Reservoir<DIM>::Initialize()
 {
-    std::mt19937_64 rng(rng_seed_); std::uniform_real_distribution<double> dist(-1.0, 1.0);
+    std::mt19937_64 rng(rng_seed_);
+    std::uniform_real_distribution<double> dist(-1.0, 1.0);
 
     memset(vtx_state_, 0, N * sizeof(float));
     memset(vtx_output_, 0, N * sizeof(float));
@@ -51,10 +48,25 @@ void Reservoir<DIM>::Initialize()
             vtx_weight_[i] *= scale;
     }
 
-    // Initialize W_in — all N vertices receive input
-    vtx_input_weight_.resize(N * num_inputs_);
-    for (size_t i = 0; i < N * num_inputs_; i++)
-        vtx_input_weight_[i] = static_cast<float>(dist(rng)) * input_scaling_;
+    // Initialize W_in — one weight per vertex, scaling determined by block assignment
+    vtx_input_weight_.resize(N);
+    const size_t block_size = N / num_inputs_;
+    for (size_t k = 0; k < num_inputs_; k++)
+    {
+        const size_t start = k * block_size;
+        const size_t end = (k + 1 == num_inputs_) ? N : start + block_size;
+        for (size_t v = start; v < end; v++)
+            vtx_input_weight_[v] = static_cast<float>(dist(rng)) * block_scaling_[k];
+    }
+}
+
+template <size_t DIM>
+void Reservoir<DIM>::Step()
+{
+    for (size_t v = 0; v < N; v++)
+        UpdateState(v);
+
+    memcpy(vtx_output_, vtx_state_, N * sizeof(float));
 }
 
 template <size_t DIM>
@@ -63,25 +75,24 @@ void Reservoir<DIM>::UpdateState(size_t v)
     const float* w = vtx_weight_.data() + v * NUM_CONNECTIONS;
     float s = 0.0f;
 
-    // Hamming shells: masks (1<<(i+1))-1 → 1, 3, 7, 15, ...
+    // Recurrent: Hamming shells (1, 3, 7, 15, ...)
     for (size_t i = 0; i < DIM; i++)
-        s += vtx_output_[(v ^ ShellMask(i)) & MASK] * w[i];
+        s += vtx_output_[v ^ ShellMask(i)] * w[i];
 
-    // Nearest neighbors: masks 1<<i → 1, 2, 4, 8, ...
+    // Recurrent: Nearest neighbors (1, 2, 4, 8, ...)
     for (size_t i = 0; i < DIM; i++)
-        s += vtx_output_[(v ^ NearestMask(i)) & MASK] * w[DIM + i];
+        s += vtx_output_[v ^ NearestMask(i)] * w[DIM + i];
 
-    const float raw = std::tanh(alpha_ * s);
-    vtx_state_[v] = retain_ * vtx_state_[v] + leak_ * raw;
+    vtx_state_[v] = std::tanh(alpha_ * s);
 }
-
 
 template <size_t DIM>
 float Reservoir<DIM>::EstimateSpectralRadius() const
 {
     std::vector<float> x(N), y(N);
 
-    std::mt19937_64 rng(rng_seed_ + 12345); std::uniform_real_distribution<double> dist(-1.0, 1.0);
+    std::mt19937_64 rng(rng_seed_ + 12345);
+    std::uniform_real_distribution<double> dist(-1.0, 1.0);
     float norm = 0.0f;
     for (size_t v = 0; v < N; v++)
     {
@@ -101,9 +112,9 @@ float Reservoir<DIM>::EstimateSpectralRadius() const
             const float* w = vtx_weight_.data() + v * NUM_CONNECTIONS;
 
             for (size_t i = 0; i < DIM; i++)
-                s += w[i] * x[(v ^ ShellMask(i)) & MASK];
+                s += w[i] * x[v ^ ShellMask(i)];
             for (size_t i = 0; i < DIM; i++)
-                s += w[DIM + i] * x[(v ^ NearestMask(i)) & MASK];
+                s += w[DIM + i] * x[v ^ NearestMask(i)];
 
             y[v] = s;
         }
@@ -125,56 +136,21 @@ float Reservoir<DIM>::EstimateSpectralRadius() const
 }
 
 template <size_t DIM>
-void Reservoir<DIM>::InjectInput(float input)
+void Reservoir<DIM>::InjectInput(size_t block, float input)
 {
+    assert(block < num_inputs_ && "InjectInput: block index out of range");
     if (input < -1.0f) input = -1.0f;
     else if (input > 1.0f) input = 1.0f;
 
-    for (size_t v = 0; v < N; v++)
-        vtx_output_[v] += vtx_input_weight_[v * num_inputs_] * input;
+    const size_t block_size = N / num_inputs_;
+    const size_t start = block * block_size;
+    const size_t end = (block + 1 == num_inputs_) ? N : start + block_size;
+    for (size_t v = start; v < end; v++)
+        vtx_output_[v] += vtx_input_weight_[v] * input;
 }
 
-template <size_t DIM>
-void Reservoir<DIM>::InjectInput(const float* inputs)
-{
-    float clamped[64];
-    std::vector<float> clamped_heap;
-    float* inp;
-    if (num_inputs_ <= 64)
-        inp = clamped;
-    else
-    {
-        clamped_heap.resize(num_inputs_);
-        inp = clamped_heap.data();
-    }
-    for (size_t k = 0; k < num_inputs_; k++)
-    {
-        float v = inputs[k];
-        if (v < -1.0f) v = -1.0f;
-        else if (v > 1.0f) v = 1.0f;
-        inp[k] = v;
-    }
-
-    for (size_t v = 0; v < N; v++)
-    {
-        float sum = 0.0f;
-        const float* w = vtx_input_weight_.data() + v * num_inputs_;
-        for (size_t k = 0; k < num_inputs_; k++)
-            sum += w[k] * inp[k];
-        vtx_output_[v] += sum;
-    }
-}
-
-template <size_t DIM>
-void Reservoir<DIM>::Step()
-{
-    #pragma omp parallel for schedule(static) if(N >= 4096)
-    for (size_t v = 0; v < N; v++)
-        UpdateState(v);
-    memcpy(vtx_output_, vtx_state_, N * sizeof(float));
-}
-
-// Explicit template instantiations (DIM 5-10)
+// Explicit template instantiations (DIM 4-10)
+template class Reservoir<4>;
 template class Reservoir<5>;
 template class Reservoir<6>;
 template class Reservoir<7>;

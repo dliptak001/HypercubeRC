@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <random>
 #include <cstddef>
 #include <cmath>
 #include "../ESN.h"

@@ -5,8 +5,10 @@
 #include <vector>
 #include <cstddef>
 #include <cmath>
+#include <limits>
 #include "../ESN.h"
 #include "../TranslationLayer.h"
+#include "../SignalGenerators.h"
 
 /// @brief Diagnostic: Mackey-Glass chaotic time series prediction.
 ///
@@ -86,36 +88,6 @@ private:
 
     static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
 
-    static std::vector<float> GenerateMackeyGlass(size_t total_steps)
-    {
-        constexpr size_t TAU = 17;
-        constexpr float BETA = 0.2f, GAMMA = 0.1f, N_EXP = 10.0f, DT = 1.0f;
-
-        size_t total_with_history = total_steps + TAU + 1000;
-        std::vector<float> x(total_with_history, 1.2f);
-
-        for (size_t t = TAU; t < total_with_history - 1; ++t)
-        {
-            float x_tau = x[t - TAU];
-            float dx = BETA * x_tau / (1.0f + std::pow(x_tau, N_EXP)) - GAMMA * x[t];
-            x[t + 1] = x[t] + DT * dx;
-        }
-
-        std::vector<float> result(total_steps);
-        size_t offset = total_with_history - total_steps;
-        for (size_t t = 0; t < total_steps; ++t)
-            result[t] = x[offset + t];
-        return result;
-    }
-
-    static void Normalize(std::vector<float>& series)
-    {
-        float lo = series[0], hi = series[0];
-        for (float v : series) { if (v < lo) lo = v; if (v > hi) hi = v; }
-        float mid = (hi + lo) / 2.0f, half = (hi - lo) / 2.0f;
-        for (float& v : series) v = (v - mid) / half;
-    }
-
     static double ComputeNRMSE(const LinearReadout& readout, const float* features,
                                 const float* targets, size_t num_samples, size_t num_features)
     {
@@ -132,7 +104,7 @@ private:
             var += (y - mean) * (y - mean);
             mse += (y - y_hat) * (y - y_hat);
         }
-        if (var < 1e-12) return 0.0;
+        if (var < 1e-12) return std::numeric_limits<double>::infinity();
         return std::sqrt(mse / num_samples) / std::sqrt(var / num_samples);
     }
 

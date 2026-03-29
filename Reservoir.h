@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <memory>
 #include <vector>
-#include <random>
 
 /// Continuous echo-state reservoir on a DIM-dimensional Boolean hypercube (N = 2^DIM vertices).
 ///
@@ -12,80 +11,129 @@
 ///   - DIM nearest-neighbor connections: single-bit flips (1<<0, 1<<1, ...).
 ///
 /// Neighbor masks are computed inline from the loop index — no adjacency storage.
-/// Each vertex has fully independent weights (N * 2*DIM total recurrent weights).
-/// The weighted sum is passed through tanh(alpha * sum) with exponential leak.
+/// Each vertex has fully independent weights (N * 2*DIM recurrent).
+/// The weighted sum is passed through tanh(alpha * sum).
 ///
 /// Recurrent weights are rescaled via power iteration to the target spectral radius.
-/// Input is injected into vtx_output_ via per-vertex random projection weights (W_in matrix)
-/// distributed across the hypercube by bit-reversal permutation.
-/// Supports single-input (float) and multi-input (float*, K channels).
+/// Input is injected into vtx_output_ via per-vertex random projection weights (W_in).
+/// Multi-input mode uses block-partitioned injection: each input channel drives a
+/// contiguous block of N/K vertices (K = num_inputs). Each block is a subcube of the
+/// hypercube with DIM-log2(K) internal nearest-neighbor connections. Cross-block mixing
+/// happens through shell connections and high-bit nearest-neighbor flips.
 /// Call InjectInput() before Step().
 ///
 /// Readout uses Outputs() which exposes N floats after the synchronous swap.
 template <size_t DIM>
 class Reservoir
 {
-    static_assert(DIM >= 5 && DIM <= 10, "DIM must be in 5 <= DIM <= 10");
+    static_assert(DIM >= 4 && DIM <= 10, "DIM must be in 4 <= DIM <= 10");
 
     static constexpr size_t N = 1ULL << DIM;
-    static constexpr size_t MASK = N - 1;
     static constexpr size_t NUM_CONNECTIONS = 2 * DIM;
 
 public:
     static constexpr size_t dim = DIM;
-    static constexpr size_t num_vertices = N;
-    static constexpr size_t num_connections = NUM_CONNECTIONS;
 
-    /// Per-DIM spectral radius defaults — jointly optimized with input_scaling on
-    /// Mackey-Glass h=1, full translation layer, LinearReadout. Alpha=1.0 universal.
-    /// Higher DIM → higher SR (more internal dynamics to sustain).
-    static constexpr float DefaultSpectralRadius()
+    // ----- Raw-feature defaults -----
+    // Jointly optimized on MG h=1 + NARMA-10 + MC, raw N-dim readout.
+    // Balanced across all tasks, not single-task optimal.
+    // See docs/cascade/standalone_baselines.md for sweep data.
+
+    static constexpr float RawSpectralRadius()
     {
-        if constexpr (DIM == 5)  return 0.90f;
-        if constexpr (DIM == 6)  return 1.00f;
-        if constexpr (DIM == 7)  return 1.05f;
-        if constexpr (DIM == 8)  return 1.10f;
-        if constexpr (DIM == 9)  return 1.00f;
-        if constexpr (DIM == 10) return 1.05f;
-        return 1.00f;
+        if constexpr (DIM == 4) return 0.95f;
+        if constexpr (DIM == 5) return 0.80f;
+        if constexpr (DIM == 6) return 0.90f;
+        if constexpr (DIM == 7) return 0.88f;
+        if constexpr (DIM == 8) return 0.88f;
+        if constexpr (DIM == 9) return 0.88f;   // extrapolated from DIM 8, not sweep-verified
+        if constexpr (DIM == 10) return 0.88f;  // extrapolated from DIM 8, not sweep-verified
+        return 0.88f;
     }
 
-    /// Per-DIM input scaling defaults — jointly optimized with SR.
-    /// Smaller reservoirs need stronger input injection.
-    static constexpr float DefaultInputScaling()
+    static constexpr float RawInputScaling()
     {
-        if constexpr (DIM == 5)  return 1.50f;
-        if constexpr (DIM == 6)  return 1.00f;
-        if constexpr (DIM == 7)  return 0.80f;
-        if constexpr (DIM == 8)  return 0.50f;
-        if constexpr (DIM == 9)  return 0.40f;
-        if constexpr (DIM == 10) return 0.40f;
-        return 0.10f;
+        if constexpr (DIM == 4) return 0.05f;
+        if constexpr (DIM == 5) return 0.10f;
+        if constexpr (DIM == 6) return 0.05f;
+        if constexpr (DIM == 7) return 0.03f;
+        if constexpr (DIM == 8) return 0.02f;
+        if constexpr (DIM == 9) return 0.02f;   // extrapolated from DIM 8, not sweep-verified
+        if constexpr (DIM == 10) return 0.02f;  // extrapolated from DIM 8, not sweep-verified
+        return 0.02f;
     }
+
+    // ----- Translation-layer defaults -----
+    // Jointly optimized on MG h=1 + NARMA-10 + MC, translation 2.5N readout.
+    // Balanced across all tasks. Very low input scaling (0.02-0.04) —
+    // translation features amplify dynamics, so less drive is needed.
+    // See docs/cascade/standalone_baselines.md for sweep data.
+
+    static constexpr float TranslationSpectralRadius()
+    {
+        if constexpr (DIM == 4) return 0.88f;
+        if constexpr (DIM == 5) return 0.80f;
+        if constexpr (DIM == 6) return 0.92f;
+        if constexpr (DIM == 7) return 0.92f;
+        if constexpr (DIM == 8) return 0.95f;
+        if constexpr (DIM == 9) return 0.95f;   // extrapolated from DIM 8, not sweep-verified
+        if constexpr (DIM == 10) return 0.95f;  // extrapolated from DIM 8, not sweep-verified
+        return 0.95f;
+    }
+
+    static constexpr float TranslationInputScaling()
+    {
+        if constexpr (DIM == 4) return 0.02f;
+        if constexpr (DIM == 5) return 0.04f;
+        if constexpr (DIM == 6) return 0.02f;
+        if constexpr (DIM == 7) return 0.04f;
+        if constexpr (DIM == 8) return 0.02f;
+        if constexpr (DIM == 9) return 0.02f;   // extrapolated from DIM 8, not sweep-verified
+        if constexpr (DIM == 10) return 0.02f;  // extrapolated from DIM 8, not sweep-verified
+        return 0.02f;
+    }
+
+    // Active defaults — raw features (used by Create() when params are -1)
+    static constexpr float DefaultSpectralRadius() { return RawSpectralRadius(); }
+    static constexpr float DefaultInputScaling()   { return RawInputScaling(); }
 
     static constexpr float default_spectral_radius = DefaultSpectralRadius();
     static constexpr float default_input_scaling = DefaultInputScaling();
 
     /// Inline neighbor mask computation — no stored adjacency.
-    /// Shells [0..DIM):  mask = (1 << (i+1)) - 1  → 1, 3, 7, 15, ...
-    /// Nearest [0..DIM): mask = 1 << i             → 1, 2, 4, 8, ...
+    /// Shells [0..DIM):    mask = (1 << (i+1)) - 1      → 1, 3, 7, 15, ...
+    /// Nearest [0..DIM):   mask = 1 << i                 → 1, 2, 4, 8, ...
     static constexpr uint32_t ShellMask(size_t i) { return (1u << (i + 1)) - 1; }
     static constexpr uint32_t NearestMask(size_t i) { return 1u << i; }
 
+    /// @brief Create a reservoir.
+    /// @param rng_seed         Deterministic initialization seed.
+    /// @param alpha            Tanh steepness (1.0 universally optimal).
+    /// @param spectral_radius  Target SR (-1 = per-DIM default).
+    /// @param block_scaling    Per-block W_in scaling, K values. null = all blocks use DefaultInputScaling().
+    ///                         Pass K floats, one per block. -1.0f entries resolve to DefaultInputScaling().
+    /// @param num_inputs       Number of input blocks (1 = single-input, 2+ = cascade/multi).
     static std::unique_ptr<Reservoir> Create(uint64_t rng_seed,
-                                          float alpha = 1.0f,
-                                          float leak = 1.0f,
-                                          float spectral_radius = 0.0f,
-                                          float input_scaling = 0.0f,
-                                          size_t num_inputs = 1)
+                                             float alpha = 1.0f,
+                                             float spectral_radius = -1.0f,
+                                             const float* block_scaling = nullptr,
+                                             size_t num_inputs = 1)
     {
-        if (spectral_radius <= 0.0f)
+        if (spectral_radius < 0.0f)
             spectral_radius = DefaultSpectralRadius();
-        if (input_scaling <= 0.0f)
-            input_scaling = DefaultInputScaling();
-        return std::unique_ptr<Reservoir>(new Reservoir(rng_seed, alpha, leak,
-                                                  spectral_radius, input_scaling,
-                                                  num_inputs));
+
+        // Build resolved per-block scaling array
+        std::vector<float> scaling(num_inputs);
+        for (size_t k = 0; k < num_inputs; k++)
+        {
+            float s = (block_scaling && block_scaling[k] >= 0.0f)
+                          ? block_scaling[k]
+                          : DefaultInputScaling();
+            scaling[k] = s;
+        }
+
+        return std::unique_ptr<Reservoir>(new Reservoir(rng_seed, alpha,
+                                                        spectral_radius, std::move(scaling)));
     }
 
     Reservoir(const Reservoir&) = delete;
@@ -93,33 +141,28 @@ public:
 
     void Step();
 
-    /// @brief Inject single-channel input before Step().
-    /// @warning Values outside [-1, 1] are silently clamped.
-    void InjectInput(float input);
-
-    /// @brief Inject multi-channel input before Step().
-    /// @param inputs Array of num_inputs floats. Values outside [-1, 1] are silently clamped.
-    void InjectInput(const float* inputs);
+    /// @brief Inject a scalar input into one block before Step().
+    /// @param block  Block index in [0, num_inputs). Each block owns vertices [k*N/K, (k+1)*N/K).
+    /// @param input  Scalar value. Clamped to [-1, 1].
+    void InjectInput(size_t block, float input);
 
     [[nodiscard]] const float* Outputs() const { return vtx_output_; }
+    [[nodiscard]] float GetAlpha() const { return alpha_; }
 
 private:
-    explicit Reservoir(uint64_t rng_seed, float alpha, float leak,
-                    float spectral_radius, float input_scaling,
-                    size_t num_inputs);
+    explicit Reservoir(uint64_t rng_seed, float alpha,
+                       float spectral_radius, std::vector<float> block_scaling);
     uint64_t rng_seed_;
 
     alignas(64) float vtx_state_[N]{};
     alignas(64) float vtx_output_[N]{};
-    std::vector<float> vtx_input_weight_;  // flat [N * num_inputs_] W_in matrix
-    std::vector<float> vtx_weight_;        // flat [N * NUM_CONNECTIONS]
+    std::vector<float> vtx_input_weight_; // flat [N] — one weight per vertex (block-partitioned)
+    std::vector<float> vtx_weight_; // flat [N * NUM_CONNECTIONS]
 
     size_t num_inputs_ = 1;
     float alpha_ = 1.0f;
-    float leak_ = 1.0f;
-    float retain_ = 0.0f;
     float spectral_radius_ = default_spectral_radius;
-    float input_scaling_ = default_input_scaling;
+    std::vector<float> block_scaling_; // per-block W_in scaling [num_inputs]
 
     void Initialize();
     void UpdateState(size_t v);

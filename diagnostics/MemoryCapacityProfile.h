@@ -3,6 +3,7 @@
 #include <iostream>
 #include <iomanip>
 #include <vector>
+#include <random>
 #include <cstddef>
 #include "../ESN.h"
 #include "../TranslationLayer.h"
@@ -12,7 +13,11 @@
 /// For each lag L, fits a LinearReadout from translated reservoir states (2.5N features)
 /// to the continuous input value from L steps ago: target[t] = input[t - L].
 /// Reports per-lag R2 at selected display lags plus total MC (sum of R2 over all
-/// lags 1-50). 3-seed average, consistent with main.cpp RunMC.
+/// lags 1-50). 3-seed average.
+///
+/// NOTE: This diagnostic uses full translation (2.5N features), which yields higher MC
+/// than the standard metric (raw N states). The main.cpp cascade benchmark reports both
+/// raw and full translation side by side.
 ///
 /// This is the standard ESN memory capacity metric from Jaeger (2001), extended
 /// with the full translation layer.

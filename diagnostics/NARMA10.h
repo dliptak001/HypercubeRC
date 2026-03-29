@@ -5,8 +5,10 @@
 #include <vector>
 #include <cstddef>
 #include <cmath>
+#include <limits>
 #include "../ESN.h"
 #include "../TranslationLayer.h"
+#include "../SignalGenerators.h"
 
 /// @brief Diagnostic: NARMA-10 nonlinear benchmark.
 ///
@@ -88,40 +90,6 @@ public:
 private:
     static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
 
-    struct Sequences
-    {
-        std::vector<float> inputs;
-        std::vector<float> targets;
-    };
-
-    static Sequences GenerateNARMA10(uint64_t input_seed, size_t total_steps)
-    {
-        std::mt19937_64 rng(input_seed);
-        std::uniform_real_distribution<double> dist(-1.0, 1.0);
-        std::vector<float> u(total_steps);
-        std::vector<float> y(total_steps, 0.0f);
-
-        for (size_t t = 0; t < total_steps; ++t)
-            u[t] = static_cast<float>(dist(rng)) * 0.25f + 0.25f;
-
-        for (size_t t = 10; t < total_steps - 1; ++t)
-        {
-            float y_sum = 0.0f;
-            for (size_t i = 0; i < 10; ++i)
-                y_sum += y[t - i];
-
-            y[t + 1] = 0.3f * y[t]
-                      + 0.05f * y[t] * y_sum
-                      + 1.5f * u[t - 9] * u[t]
-                      + 0.1f;
-
-            if (y[t + 1] > 1.0f) y[t + 1] = 1.0f;
-            if (y[t + 1] < 0.0f) y[t + 1] = 0.0f;
-        }
-
-        return {u, y};
-    }
-
     static double ComputeNRMSE(const LinearReadout& readout, const float* features,
                                 const float* targets, size_t num_samples, size_t num_features)
     {
@@ -138,7 +106,7 @@ private:
             var += (y - mean) * (y - mean);
             mse += (y - y_hat) * (y - y_hat);
         }
-        if (var < 1e-12) return 0.0;
+        if (var < 1e-12) return std::numeric_limits<double>::infinity();
         return std::sqrt(mse / num_samples) / std::sqrt(var / num_samples);
     }
 

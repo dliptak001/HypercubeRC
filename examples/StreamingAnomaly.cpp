@@ -20,6 +20,7 @@
 #include <iomanip>
 #include <vector>
 #include <cmath>
+#include <random>
 #include "ESN.h"
 #include "TranslationLayer.h"
 

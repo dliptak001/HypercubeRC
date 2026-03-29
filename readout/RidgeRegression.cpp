@@ -171,7 +171,7 @@ double RidgeRegression::Accuracy(const float* features, const float* labels,
     if (num_samples == 0) return 0.0;
     size_t correct = 0;
     for (size_t s = 0; s < num_samples; ++s)
-        if (Predict(features + s * num_features_) == labels[s])
+        if (Predict(features + s * num_features_) * labels[s] > 0.0f)
             ++correct;
     return static_cast<double>(correct) / num_samples;
 }

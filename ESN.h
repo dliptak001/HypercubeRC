@@ -64,63 +64,36 @@ class ESN
 
 public:
     ESN(uint64_t rng_seed,
-          ReadoutType readout_type = ReadoutType::Linear,
-          float alpha = 1.0f, float leak = 1.0f,
-          float spectral_radius = 0.0f,
-          float input_scaling = 0.0f,
-          size_t num_inputs = 1)
-        : reservoir_(Reservoir<DIM>::Create(rng_seed,
-                                       alpha, leak, spectral_radius, input_scaling,
-                                       num_inputs)),
-          readout_type_(readout_type),
-          num_inputs_(num_inputs)
+        ReadoutType readout_type = ReadoutType::Linear,
+        float alpha = 1.0f,
+        float spectral_radius = -1.0f,
+        const float* block_scaling = nullptr,
+        size_t num_inputs = 1)
+        : reservoir_(Reservoir<DIM>::Create(rng_seed, alpha, spectral_radius,
+                                            block_scaling, num_inputs)),
+          readout_type_(readout_type)
     {
     }
 
-    /// @brief Drive the reservoir without recording (single-input).
+    /// @brief Drive the reservoir without recording.
+    /// @param inputs Array of num_steps scalars (single-input mode).
     void Warmup(const float* inputs, size_t num_steps)
     {
         for (size_t s = 0; s < num_steps; ++s)
         {
-            reservoir_->InjectInput(inputs[s]);
+            reservoir_->InjectInput(0, inputs[s]);
             reservoir_->Step();
         }
     }
 
-    /// @brief Drive the reservoir without recording (multi-input).
-    /// inputs is row-major: [num_steps x num_inputs].
-    void WarmupMulti(const float* inputs, size_t num_steps)
-    {
-        for (size_t s = 0; s < num_steps; ++s)
-        {
-            reservoir_->InjectInput(inputs + s * num_inputs_);
-            reservoir_->Step();
-        }
-    }
-
-    /// @brief Drive the reservoir and collect state snapshots (single-input).
+    /// @brief Drive the reservoir and collect state snapshots.
+    /// @param inputs Array of num_steps scalars (single-input mode).
     void Run(const float* inputs, size_t num_steps)
     {
         states_.resize((num_collected_ + num_steps) * N);
         for (size_t s = 0; s < num_steps; ++s)
         {
-            reservoir_->InjectInput(inputs[s]);
-            reservoir_->Step();
-
-            const float* out = reservoir_->Outputs();
-            memcpy(states_.data() + (num_collected_ + s) * N, out, N * sizeof(float));
-        }
-        num_collected_ += num_steps;
-    }
-
-    /// @brief Drive the reservoir and collect state snapshots (multi-input).
-    /// inputs is row-major: [num_steps x num_inputs].
-    void RunMulti(const float* inputs, size_t num_steps)
-    {
-        states_.resize((num_collected_ + num_steps) * N);
-        for (size_t s = 0; s < num_steps; ++s)
-        {
-            reservoir_->InjectInput(inputs + s * num_inputs_);
+            reservoir_->InjectInput(0, inputs[s]);
             reservoir_->Step();
 
             const float* out = reservoir_->Outputs();
@@ -170,14 +143,14 @@ public:
     [[nodiscard]] const float* States() const { return states_.data(); }
     [[nodiscard]] ReadoutType GetReadoutType() const { return readout_type_; }
     [[nodiscard]] const Reservoir<DIM>& GetReservoir() const { return *reservoir_; }
+    [[nodiscard]] float GetAlpha() const { return reservoir_->GetAlpha(); }
 
 private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
     ReadoutType readout_type_;
-    size_t num_inputs_;
     LinearReadout linear_;
     RidgeRegression ridge_;
 
-    std::vector<float> states_;    // flat: num_collected_ * N floats
+    std::vector<float> states_; // flat: num_collected_ * N floats
     size_t num_collected_ = 0;
 };
