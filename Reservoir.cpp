@@ -87,6 +87,9 @@ void Reservoir<DIM>::UpdateState(size_t v)
     vtx_state_[v] = std::tanh(alpha_ * s);
 }
 
+// Power iteration on the (non-symmetric) recurrent weight matrix.
+// This computes the spectral norm (largest singular value), which is the
+// standard proxy for the spectral radius in reservoir computing literature.
 template <size_t DIM>
 float Reservoir<DIM>::EstimateSpectralRadius() const
 {

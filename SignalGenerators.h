@@ -98,3 +98,26 @@ inline double ComputeNRMSE(const float* pred, const float* targets, size_t n)
     if (var < 1e-12) return std::numeric_limits<double>::infinity();
     return std::sqrt(mse / n) / std::sqrt(var / n);
 }
+
+/// @brief NRMSE from a trained readout (calls PredictRaw per sample).
+/// Works with LinearReadout, RidgeRegression, or any type with PredictRaw().
+template <typename Readout>
+double ComputeNRMSE(const Readout& readout, const float* features,
+                    const float* targets, size_t num_samples, size_t num_features)
+{
+    double mean = 0.0;
+    for (size_t s = 0; s < num_samples; ++s)
+        mean += targets[s];
+    mean /= static_cast<double>(num_samples);
+
+    double var = 0.0, mse = 0.0;
+    for (size_t s = 0; s < num_samples; ++s)
+    {
+        double y = targets[s];
+        double y_hat = readout.PredictRaw(features + s * num_features);
+        var += (y - mean) * (y - mean);
+        mse += (y - y_hat) * (y - y_hat);
+    }
+    if (var < 1e-12) return std::numeric_limits<double>::infinity();
+    return std::sqrt(mse / num_samples) / std::sqrt(var / num_samples);
+}

@@ -3,6 +3,7 @@
 #include <limits>
 #include <cstdint>
 #include <numeric>
+#include <stdexcept>
 
 void LinearReadout::Train(const float* features, const float* labels,
                            size_t num_samples, size_t num_features,
@@ -142,7 +143,7 @@ void LinearReadout::TrainIncremental(const float* features, const float* labels,
 
     // Feature count must match existing model
     if (num_features != num_features_)
-        return;
+        throw std::invalid_argument("TrainIncremental: num_features mismatch");
 
     // Save existing model
     auto old_weights = weights_;

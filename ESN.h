@@ -5,8 +5,6 @@
 #include <memory>
 #include <vector>
 #include "Reservoir.h"
-#include "readout/LinearReadout.h"
-#include "readout/RidgeRegression.h"
 
 enum class ReadoutType { Linear, Ridge };
 
@@ -20,8 +18,8 @@ enum class ReadoutType { Linear, Ridge };
 ///
 /// The translation layer is external to this class. Callers access raw states via
 /// States(), apply TranslationTransform(), and pass the expanded features to the
-/// readout. FitAndEvaluate() operates on raw states only — it exists for simple
-/// baselines.
+/// readout. Readouts (LinearReadout, RidgeRegression) are instantiated externally;
+/// ESN stores the ReadoutType for callers to query via GetReadoutType().
 ///
 /// **Pipeline:**
 ///
@@ -106,35 +104,6 @@ public:
         num_collected_ += num_steps;
     }
 
-    /// @brief Fit readout on first train_fraction of collected states, evaluate on the rest.
-    /// @param targets         One target per collected step, aligned with states. {-1.0, +1.0}.
-    /// @param train_fraction  Fraction of collected steps used for training (default 0.7).
-    /// @return Test accuracy [0.0, 1.0].
-    double FitAndEvaluate(const float* targets, double train_fraction = 0.7)
-    {
-        if (num_collected_ < 2)
-            return 0.0;
-
-        const size_t train_size = static_cast<size_t>(num_collected_ * train_fraction);
-        const size_t test_size = num_collected_ - train_size;
-        if (train_size == 0 || test_size == 0)
-            return 0.0;
-
-        const float* test_states = states_.data() + train_size * N;
-        const float* test_targets = targets + train_size;
-
-        if (readout_type_ == ReadoutType::Linear)
-        {
-            linear_.Train(states_.data(), targets, train_size, N);
-            return linear_.Accuracy(test_states, test_targets, test_size);
-        }
-        else
-        {
-            ridge_.Train(states_.data(), targets, train_size, N);
-            return ridge_.Accuracy(test_states, test_targets, test_size);
-        }
-    }
-
     /// @brief Clear collected states. Call between independent evaluations.
     void ClearStates()
     {
@@ -152,8 +121,6 @@ public:
 private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
     ReadoutType readout_type_;
-    LinearReadout linear_;
-    RidgeRegression ridge_;
 
     std::vector<float> states_; // flat: num_collected_ * N floats
     size_t num_collected_ = 0;

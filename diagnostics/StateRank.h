@@ -24,7 +24,10 @@ class StateRank
     static constexpr size_t N = 1ULL << DIM;
 
 public:
-    StateRank() = default;
+    StateRank(ReadoutType readout_type = ReadoutType::Linear)
+        : readout_type_(readout_type)
+    {
+    }
 
     void RunAndPrint(size_t max_components = 30)
     {
@@ -50,7 +53,7 @@ public:
             for (size_t i = 0; i < total; ++i)
                 inputs[i] = static_cast<float>(dist(rng));
 
-            ESN<DIM> esn(seed, ReadoutType::Linear);
+            ESN<DIM> esn(seed, readout_type_);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
 
@@ -132,6 +135,8 @@ public:
     }
 
 private:
+    ReadoutType readout_type_;
+
     static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
 
     struct InputCorr
@@ -272,9 +277,10 @@ private:
         return eigenvalues;
     }
 
-    static void PrintHeader(size_t warmup, size_t collect, size_t max_components)
+    void PrintHeader(size_t warmup, size_t collect, size_t max_components) const
     {
-        std::cout << "=== State Rank Analysis (raw features, 3-seed avg) ===\n";
+        const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "Linear";
+        std::cout << "=== State Rank Analysis (" << rn << " Readout, raw features, 3-seed avg) ===\n";
         std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0 | Leak: 1.0"
                   << " | SR: per-DIM default | Input scaling: per-DIM default\n";
         std::cout << "DIM=" << DIM << "  N=" << N

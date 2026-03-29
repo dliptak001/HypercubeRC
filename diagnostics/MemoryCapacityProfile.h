@@ -8,6 +8,8 @@
 #include "../ESN.h"
 #include "../Reservoir.h"
 #include "../TranslationLayer.h"
+#include "../readout/LinearReadout.h"
+#include "../readout/RidgeRegression.h"
 
 /// @brief Diagnostic: Memory capacity profile across lags 1-50.
 ///
@@ -30,7 +32,10 @@ class MemoryCapacityProfile
     static constexpr size_t MAX_LAG = 50;
 
 public:
-    MemoryCapacityProfile() = default;
+    MemoryCapacityProfile(ReadoutType readout_type = ReadoutType::Linear)
+        : readout_type_(readout_type)
+    {
+    }
 
     void RunAndPrint(const std::vector<size_t>& display_lags = {1, 2, 4, 8, 16, 32, 48})
     {
@@ -52,19 +57,19 @@ public:
             for (size_t i = 0; i < total; ++i)
                 inputs[i] = static_cast<float>(dist(rng));
 
-            ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Translation);
+            ESN<DIM> esn(seed, readout_type_, FeatureMode::Translation);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
 
             // Apply full translation layer
             auto translated = TranslationTransform<DIM>(esn.States(), collect);
 
-            for (size_t lag = 1; lag <= MAX_LAG && lag < collect; ++lag)
+            auto eval_lag = [&](auto& readout, size_t lag)
             {
                 size_t valid = collect - lag;
                 size_t tr = static_cast<size_t>(valid * 0.7);
                 size_t te = valid - tr;
-                if (tr == 0 || te == 0) continue;
+                if (tr == 0 || te == 0) return;
 
                 std::vector<float> targets(valid);
                 for (size_t t = 0; t < valid; ++t)
@@ -72,10 +77,17 @@ public:
 
                 const float* lagged = translated.data() + lag * FEATURES;
 
-                LinearReadout lr;
-                lr.Train(lagged, targets.data(), tr, FEATURES);
-                double r2 = lr.R2(lagged + tr * FEATURES, targets.data() + tr, te);
+                readout.Train(lagged, targets.data(), tr, FEATURES);
+                double r2 = readout.R2(lagged + tr * FEATURES, targets.data() + tr, te);
                 if (r2 > 0.0) r2_sum[lag] += r2;
+            };
+
+            for (size_t lag = 1; lag <= MAX_LAG && lag < collect; ++lag)
+            {
+                if (readout_type_ == ReadoutType::Ridge)
+                { RidgeRegression r; eval_lag(r, lag); }
+                else
+                { LinearReadout r; eval_lag(r, lag); }
             }
         }
 
@@ -101,11 +113,14 @@ public:
     }
 
 private:
+    ReadoutType readout_type_;
+
     static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
 
     void PrintHeader(size_t warmup, size_t collect) const
     {
-        std::cout << "=== Memory Capacity Profile (LinearReadout, full translation, 3-seed avg) ===\n";
+        const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "Linear";
+        std::cout << "=== Memory Capacity Profile (" << rn << " Readout, full translation, 3-seed avg) ===\n";
         std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0 | Leak: 1.0"
                   << " | SR: per-DIM default | Input scaling: per-DIM default\n";
         std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << FEATURES

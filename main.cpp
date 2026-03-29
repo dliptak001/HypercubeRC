@@ -15,32 +15,21 @@
 ///     (10-step history) and nonlinear computation (product terms). Reports
 ///     NRMSE with and without translation. Standard ESN range: 0.2-0.4.
 ///
-/// All benchmarks use LinearReadout, full translation layer (2.5N features),
-/// per-DIM optimized spectral radius and input scaling, and collect = 18*N
-/// training samples (5x oversampling for the 2.5N feature count).
+/// MG and NARMA use RidgeRegression; MC uses LinearReadout (standard for
+/// memory capacity). All use per-DIM optimized spectral radius and input
+/// scaling, and collect = 18*N training samples (5x oversampling for the
+/// 2.5N feature count).
 
 #include <iostream>
 #include <iomanip>
 #include <vector>
-#include <cmath>
 #include <random>
 #include <omp.h>
 #include "ESN.h"
 #include "TranslationLayer.h"
-#include "SignalGenerators.h"
-
-static std::pair<double, double> EvalLinear(const float* features, const float* targets,
-                                            size_t train, size_t test, size_t nf)
-{
-    LinearReadout lr;
-    lr.Train(features, targets, train, nf);
-    double r2 = lr.R2(features + train * nf, targets + train, test);
-    std::vector<float> pred(test);
-    for (size_t s = 0; s < test; ++s)
-        pred[s] = lr.PredictRaw(features + (train + s) * nf);
-    double nrmse = ComputeNRMSE(pred.data(), targets + train, test);
-    return {nrmse, r2};
-}
+#include "readout/LinearReadout.h"
+#include "diagnostics/MackeyGlass.h"
+#include "diagnostics/NARMA10.h"
 
 // ---------------------------------------------------------------------------
 // Sizing: collect = 18*N ensures 5x oversampling for 2.5N translation features.
@@ -105,108 +94,34 @@ static void RunMC(const std::vector<uint64_t>& seeds, size_t max_lag = 50)
 }
 
 // ---------------------------------------------------------------------------
-// MG benchmark (LinearReadout, raw vs full translation)
+// MG benchmark — delegates to MackeyGlass<DIM> diagnostic class.
 // ---------------------------------------------------------------------------
 template <size_t DIM>
-static void RunMG(const std::vector<uint64_t>& seeds, size_t horizon)
+static void RunMG(size_t horizon)
 {
-    constexpr size_t N = 1ULL << DIM;
-    constexpr size_t FULL = TranslationFeatureCount<DIM>();
-    size_t collect = Collect<DIM>() - horizon;
-
-    double s_nr = 0, s_fnr = 0;
-
-    for (uint64_t seed : seeds)
-    {
-        auto series = GenerateMackeyGlass(Warmup<DIM>() + Collect<DIM>() + 20);
-        Normalize(series);
-
-        std::vector<float> tgt(collect);
-        for (size_t t = 0; t < collect; ++t) tgt[t] = series[Warmup<DIM>() + t + horizon];
-        size_t tr = static_cast<size_t>(collect * 0.7), te = collect - tr;
-
-        // Raw features — raw-optimized defaults
-        {
-            ESN<DIM> esn(seed, ReadoutType::Linear);
-            esn.Warmup(series.data(), Warmup<DIM>());
-            esn.Run(series.data() + Warmup<DIM>(), collect);
-            auto [nr, _r] = EvalLinear(esn.States(), tgt.data(), tr, te, N);
-            s_nr += nr;
-        }
-
-        // Translation features — translation-optimized defaults
-        {
-            ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Translation);
-            esn.Warmup(series.data(), Warmup<DIM>());
-            esn.Run(series.data() + Warmup<DIM>(), collect);
-            auto full = TranslationTransform<DIM>(esn.States(), collect);
-            auto [fnr, _f] = EvalLinear(full.data(), tgt.data(), tr, te, FULL);
-            s_fnr += fnr;
-        }
-    }
-
-    double n = static_cast<double>(seeds.size());
-    double nr = s_nr / n, fnr = s_fnr / n;
-    double pct = (nr > 1e-12) ? 100.0 * (fnr - nr) / nr : 0.0;
+    MackeyGlass<DIM> mg(horizon, ReadoutType::Ridge);
+    auto r = mg.Run();
     std::cout << "  " << std::setw(3) << DIM
         << "  | " << std::setw(5) << (1ULL << DIM)
-        << " | " << std::fixed << std::setprecision(4) << std::setw(7) << nr
-        << " | " << std::setprecision(4) << std::setw(7) << fnr
-        << " (" << std::showpos << std::setprecision(1) << std::setw(5) << pct
+        << " | " << std::fixed << std::setprecision(4) << std::setw(7) << r.nrmse_raw
+        << " | " << std::setprecision(4) << std::setw(7) << r.nrmse_full
+        << " (" << std::showpos << std::setprecision(1) << std::setw(5) << r.pct_change
         << "%" << std::noshowpos << ")\n";
 }
 
 // ---------------------------------------------------------------------------
-// NARMA-10 benchmark (LinearReadout, raw vs full translation)
+// NARMA-10 benchmark — delegates to NARMA10<DIM> diagnostic class.
 // ---------------------------------------------------------------------------
 template <size_t DIM>
-static void RunNARMA(const std::vector<uint64_t>& seeds)
+static void RunNARMA()
 {
-    constexpr size_t N = 1ULL << DIM;
-    constexpr size_t FULL = TranslationFeatureCount<DIM>();
-    size_t collect = Collect<DIM>();
-
-    double s_nr = 0, s_fnr = 0;
-
-    for (uint64_t seed : seeds)
-    {
-        auto [u, y] = GenerateNARMA10(seed + 99, Warmup<DIM>() + collect);
-
-        std::vector<float> ri(Warmup<DIM>() + collect);
-        for (size_t t = 0; t < ri.size(); ++t) ri[t] = u[t] * 4.0f - 1.0f;
-
-        std::vector<float> tgt(collect);
-        for (size_t t = 0; t < collect; ++t) tgt[t] = y[Warmup<DIM>() + t];
-        size_t tr = static_cast<size_t>(collect * 0.7), te = collect - tr;
-
-        // Raw features — raw-optimized defaults
-        {
-            ESN<DIM> esn(seed, ReadoutType::Linear);
-            esn.Warmup(ri.data(), Warmup<DIM>());
-            esn.Run(ri.data() + Warmup<DIM>(), collect);
-            auto [nr, _r] = EvalLinear(esn.States(), tgt.data(), tr, te, N);
-            s_nr += nr;
-        }
-
-        // Translation features — translation-optimized defaults
-        {
-            ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Translation);
-            esn.Warmup(ri.data(), Warmup<DIM>());
-            esn.Run(ri.data() + Warmup<DIM>(), collect);
-            auto full = TranslationTransform<DIM>(esn.States(), collect);
-            auto [fnr, _f] = EvalLinear(full.data(), tgt.data(), tr, te, FULL);
-            s_fnr += fnr;
-        }
-    }
-
-    double n = static_cast<double>(seeds.size());
-    double nr = s_nr / n, fnr = s_fnr / n;
-    double pct = (nr > 1e-12) ? 100.0 * (fnr - nr) / nr : 0.0;
+    NARMA10<DIM> narma(ReadoutType::Ridge);
+    auto r = narma.Run();
     std::cout << "  " << std::setw(3) << DIM
         << "  | " << std::setw(5) << (1ULL << DIM)
-        << " | " << std::fixed << std::setprecision(3) << std::setw(7) << nr
-        << " | " << std::setprecision(3) << std::setw(7) << fnr
-        << " (" << std::showpos << std::setprecision(1) << std::setw(5) << pct
+        << " | " << std::fixed << std::setprecision(3) << std::setw(7) << r.nrmse_raw
+        << " | " << std::setprecision(3) << std::setw(7) << r.nrmse_full
+        << " (" << std::showpos << std::setprecision(1) << std::setw(5) << r.pct_change
         << "%" << std::noshowpos << ")\n";
 }
 
@@ -247,11 +162,11 @@ int main()
     std::cout << "reservoir tracks complex, deterministic dynamics.\n\n";
     std::cout << "  DIM |     N |    raw  |   full translation\n";
     std::cout << "  ----+-------+---------+-----------------\n";
-    RunMG<5>(seeds, 1);
-    RunMG<6>(seeds, 1);
-    RunMG<7>(seeds, 1);
-    RunMG<8>(seeds, 1);
-    //RunMG<9>(seeds, 1); RunMG<10>(seeds, 1);
+    RunMG<5>(1);
+    RunMG<6>(1);
+    RunMG<7>(1);
+    RunMG<8>(1);
+    //RunMG<9>(1); RunMG<10>(1);
 
     std::cout << "\n--- NARMA-10 (NRMSE, lower is better) ---\n";
     std::cout << "Nonlinear autoregressive benchmark requiring both memory (10-step\n";
@@ -259,11 +174,11 @@ int main()
     std::cout << "the translation layer has the biggest impact.\n\n";
     std::cout << "  DIM |     N |    raw  |   full translation\n";
     std::cout << "  ----+-------+---------+-----------------\n";
-    RunNARMA<5>(seeds);
-    RunNARMA<6>(seeds);
-    RunNARMA<7>(seeds);
-    RunNARMA<8>(seeds);
-    //RunNARMA<9>(seeds); RunNARMA<10>(seeds);
+    RunNARMA<5>();
+    RunNARMA<6>();
+    RunNARMA<7>();
+    RunNARMA<8>();
+    //RunNARMA<9>(); RunNARMA<10>();
 
     return 0;
 }

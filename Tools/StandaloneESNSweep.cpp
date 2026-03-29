@@ -11,12 +11,15 @@
 #include "../ESN.h"
 #include "../TranslationLayer.h"
 #include "../SignalGenerators.h"
+#include "../readout/LinearReadout.h"
+#include "../readout/RidgeRegression.h"
 
 // =====================================================================
 // Configuration — change these and rebuild
 // =====================================================================
 static constexpr size_t DIM = 8;
 static constexpr bool USE_TRANSLATION = true;
+static constexpr ReadoutType READOUT = ReadoutType::Linear;
 
 static constexpr size_t N = 1ULL << DIM;
 static constexpr size_t NF = USE_TRANSLATION ? TranslationFeatureCount<DIM>() : N;
@@ -50,12 +53,16 @@ static std::vector<float> GetFeatures(const float* states, size_t num_samples)
 static double EvalNRMSE(const float* features, const float* targets,
                         size_t train, size_t test)
 {
-    LinearReadout lr;
-    lr.Train(features, targets, train, NF);
-    std::vector<float> pred(test);
-    for (size_t s = 0; s < test; ++s)
-        pred[s] = lr.PredictRaw(features + (train + s) * NF);
-    return ComputeNRMSE(pred.data(), targets + train, test);
+    auto eval = [&](auto& readout)
+    {
+        readout.Train(features, targets, train, NF);
+        return ComputeNRMSE(readout, features + train * NF, targets + train, test, NF);
+    };
+
+    if constexpr (READOUT == ReadoutType::Ridge)
+    { RidgeRegression r; return eval(r); }
+    else
+    { LinearReadout r; return eval(r); }
 }
 
 // =====================================================================
@@ -77,8 +84,11 @@ static double RunMG(float sr, float inp)
         size_t tr = static_cast<size_t>(collect * 0.7);
         size_t te = collect - tr;
 
+        // SR and input scaling are explicitly controlled; FeatureMode selects
+        // the matching default for any params NOT overridden (none here).
+        constexpr auto MODE = USE_TRANSLATION ? FeatureMode::Translation : FeatureMode::Raw;
         float bs[1] = {inp};
-        ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Raw, 1.0f, sr, bs);
+        ESN<DIM> esn(seed, READOUT, MODE, 1.0f, sr, bs);
         esn.Warmup(series.data(), WARMUP);
         esn.Run(series.data() + WARMUP, collect);
 
@@ -106,8 +116,9 @@ static double RunNARMA(float sr, float inp)
         size_t tr = static_cast<size_t>(COLLECT * 0.7);
         size_t te = COLLECT - tr;
 
+        constexpr auto MODE = USE_TRANSLATION ? FeatureMode::Translation : FeatureMode::Raw;
         float bs[1] = {inp};
-        ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Raw, 1.0f, sr, bs);
+        ESN<DIM> esn(seed, READOUT, MODE, 1.0f, sr, bs);
         esn.Warmup(ri.data(), WARMUP);
         esn.Run(ri.data() + WARMUP, COLLECT);
 
@@ -128,8 +139,9 @@ static double RunMC(float sr, float inp)
         for (size_t i = 0; i < inputs.size(); ++i)
             inputs[i] = static_cast<float>(dist(rng));
 
+        constexpr auto MODE = USE_TRANSLATION ? FeatureMode::Translation : FeatureMode::Raw;
         float bs[1] = {inp};
-        ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Raw, 1.0f, sr, bs);
+        ESN<DIM> esn(seed, READOUT, MODE, 1.0f, sr, bs);
         esn.Warmup(inputs.data(), WARMUP);
         esn.Run(inputs.data() + WARMUP, COLLECT);
 
@@ -148,9 +160,18 @@ static double RunMC(float sr, float inp)
                 tgt[t] = inputs[WARMUP + t];
 
             const float* lagged = feat.data() + lag * NF;
-            LinearReadout lr;
-            lr.Train(lagged, tgt.data(), tr, NF);
-            double r2 = lr.R2(lagged + tr * NF, tgt.data() + tr, te);
+
+            auto eval_r2 = [&](auto& readout)
+            {
+                readout.Train(lagged, tgt.data(), tr, NF);
+                return readout.R2(lagged + tr * NF, tgt.data() + tr, te);
+            };
+
+            double r2;
+            if constexpr (READOUT == ReadoutType::Ridge)
+            { RidgeRegression r; r2 = eval_r2(r); }
+            else
+            { LinearReadout r; r2 = eval_r2(r); }
             if (r2 > 0.0) mc += r2;
         }
         sum += mc;
@@ -165,9 +186,10 @@ int main()
 {
     size_t total = SR_VALUES.size() * INP_VALUES.size();
     const char* mode = USE_TRANSLATION ? "translation (2.5N)" : "raw (N)";
+    const char* rn = (READOUT == ReadoutType::Ridge) ? "Ridge" : "Linear";
 
     std::cout << "=== Standalone ESN Sweep: DIM=" << DIM << " N=" << N
-              << " NF=" << NF << " " << mode
+              << " NF=" << NF << " " << mode << " " << rn
               << " (" << total << " configs, 3-seed avg) ===\n\n";
 
     std::cout << "    SR |  inp |    MG h1 | NARMA-10 |    MC\n";

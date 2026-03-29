@@ -27,6 +27,7 @@
 #include "ESN.h"
 #include "Reservoir.h"
 #include "TranslationLayer.h"
+#include "readout/LinearReadout.h"
 #include "readout/RidgeRegression.h"
 
 int main(int argc, char* argv[])
