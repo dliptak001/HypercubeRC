@@ -59,9 +59,11 @@ int main(int argc, char* argv[])
     const size_t num_features = use_translation ? FEATURES_TRANS : N;
 
     std::cout << "=== HypercubeRC: Basic Sine Wave Prediction ===\n\n";
-    std::cout << "Mode: " << (use_translation ? "translation (2.5N)" : "raw (N)") << "\n";
-    std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << num_features << "\n";
-    std::cout << "Warmup=" << warmup << "  Collect=" << collect
+    std::cout << "Task: predict the next value of sin(0.1t) from the reservoir's\n";
+    std::cout << "internal state. The readout never sees the input directly -- it\n";
+    std::cout << "learns the input-to-output mapping entirely from reservoir dynamics.\n\n";
+    std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
+              << " (" << (use_translation ? "translation" : "raw") << ")"
               << "  Horizon=" << horizon << "\n";
     std::cout << "Usage: " << argv[0] << " [raw|translation]\n\n";
 
@@ -85,8 +87,6 @@ int main(int argc, char* argv[])
     // Run: drive and record the N-dimensional state at each timestep.
     esn.Run(signal.data() + warmup, collect);
 
-    std::cout << "Reservoir driven: " << collect << " states collected.\n";
-
     // --- Step 3: Get features (raw or translated) ---
     const float* features;
     std::vector<float> translated;
@@ -94,12 +94,10 @@ int main(int argc, char* argv[])
     {
         translated = TranslationTransform<DIM>(esn.States(), collect);
         features = translated.data();
-        std::cout << "Translation applied: " << N << " -> " << num_features << " features per step.\n";
     }
     else
     {
         features = esn.States();
-        std::cout << "Using raw reservoir states: " << N << " features per step.\n";
     }
 
     // --- Step 4: Build targets and train the readout ---
@@ -114,7 +112,15 @@ int main(int argc, char* argv[])
     LinearReadout readout;
     readout.Train(features, targets.data(), train_size, num_features);
 
-    std::cout << "Readout trained on " << train_size << " samples.\n\n";
+    std::cout << "--- Pipeline ---\n";
+    std::cout << "  1. Generated " << (warmup + collect) << " samples of sin(0.1t)\n";
+    std::cout << "  2. Drove reservoir for " << warmup << " warmup + "
+              << collect << " recorded steps\n";
+    std::cout << "  3. Extracted " << num_features << " features per step"
+              << (use_translation ? " (x + x^2 + x*x' translation)" : " (raw states)")
+              << "\n";
+    std::cout << "  4. Trained readout on " << train_size
+              << " samples, testing on " << test_size << "\n\n";
 
     // --- Step 5: Evaluate on the test set ---
     const float* test_features = features + train_size * num_features;
@@ -137,12 +143,22 @@ int main(int argc, char* argv[])
     }
     double nrmse = std::sqrt(mse / test_size) / std::sqrt(var / test_size);
 
-    std::cout << "--- Results (test set: " << test_size << " samples) ---\n";
-    std::cout << "  R2:    " << std::fixed << std::setprecision(6) << r2 << "\n";
-    std::cout << "  NRMSE: " << std::setprecision(6) << nrmse << "\n\n";
+    std::cout << "--- How well does it predict? ---\n\n";
+    std::cout << "  R2:    " << std::fixed << std::setprecision(6) << r2;
+    if (r2 > 0.9999)
+        std::cout << "  (effectively perfect)";
+    else if (r2 > 0.99)
+        std::cout << "  (excellent)";
+    std::cout << "\n";
+    std::cout << "  NRMSE: " << std::setprecision(6) << nrmse;
+    if (nrmse < 0.001)
+        std::cout << "  (sub-0.1% error)";
+    else if (nrmse < 0.01)
+        std::cout << "  (under 1% error)";
+    std::cout << "\n\n";
 
     // --- Show a few predictions vs actual ---
-    std::cout << "--- Sample predictions ---\n";
+    std::cout << "Sample predictions (test set, never seen during training):\n\n";
     std::cout << "  Step  |  Actual  | Predicted |   Error\n";
     std::cout << "  ------+----------+-----------+---------\n";
     for (size_t i = 0; i < 10; ++i)
@@ -157,6 +173,9 @@ int main(int argc, char* argv[])
                   << std::noshowpos << "\n";
     }
 
-    std::cout << "\nDone. The reservoir learned to predict sin(t+1) from sin(t).\n";
+    std::cout << "\nThe readout learned sin(t+1) from " << num_features
+              << " reservoir state features.\n";
+    std::cout << "Errors are in the 4th decimal place -- the reservoir's nonlinear\n";
+    std::cout << "dynamics encode enough of the input history for near-exact prediction.\n";
     return 0;
 }

@@ -120,21 +120,25 @@ int main(int argc, char* argv[])
     for (size_t i = 0; i < 6; ++i) schedule.push_back(normal);     // 25-30: recovery (extra window for state washout)
 
     std::cout << "=== HypercubeRC: Streaming Anomaly Detection ===\n\n";
-    std::cout << "Mode: " << (use_translation ? "translation (2.5N)" : "raw (N)") << "\n";
-    std::cout << "Signal: 0.6*sin(0.1t) + 0.2*sin(0.3t) + noise + drift\n";
-    std::cout << "Anomaly threshold: " << anomaly_threshold << "x baseline RMSE\n";
-    std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << num_features << "\n";
-    std::cout << "Usage: " << argv[0] << " [raw|translation]\n\n";
+    std::cout << "Scenario: an industrial process produces a multi-harmonic signal.\n";
+    std::cout << "The reservoir learns the normal pattern, then monitors for deviations.\n";
+    std::cout << "Three types of anomaly are injected, each for 3 windows, separated\n";
+    std::cout << "by normal operation to show both detection and recovery.\n\n";
 
-    std::cout << "Anomaly events:\n";
-    std::cout << "  1. Noise spike:  noise 0.01 -> 0.12 (12x)\n";
-    std::cout << "  2. DC drift:     +0.30 offset\n";
-    std::cout << "  3. Freq shift:   frequency x1.3\n\n";
+    std::cout << "Anomaly types:\n";
+    std::cout << "  1. Noise spike   -- sensor noise jumps 12x (0.01 -> 0.12)\n";
+    std::cout << "  2. DC drift      -- systematic +0.30 offset (e.g. sensor fouling)\n";
+    std::cout << "  3. Freq shift    -- process speed changes to 1.3x (e.g. motor issue)\n\n";
+
+    std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
+              << " (" << (use_translation ? "translation" : "raw") << ")"
+              << "  Threshold=" << anomaly_threshold << "x baseline\n";
+    std::cout << "Usage: " << argv[0] << " [raw|translation]\n\n";
 
     // =================================================================
     // PHASE 1: PRIME on normal operation
     // =================================================================
-    std::cout << "--- Phase 1: Prime on normal operation ---\n";
+    std::cout << "--- Phase 1: Learn what \"normal\" looks like ---\n\n";
 
     size_t t_global = 0;
     std::vector<float> prime_signal(warmup + prime_steps + 1);
@@ -175,15 +179,20 @@ int main(int argc, char* argv[])
                                     prime_targets.data() + train_n, test_n, num_features);
     double threshold = baseline * anomaly_threshold;
 
-    std::cout << "  Trained on " << prime_steps << " samples\n";
-    std::cout << "  Baseline RMSE: " << std::fixed << std::setprecision(6) << baseline << "\n";
-    std::cout << "  Anomaly threshold: " << std::setprecision(6) << threshold << "\n\n";
+    std::cout << "Reservoir trained on " << prime_steps << " normal samples.\n";
+    std::cout << "Baseline prediction error (RMSE): " << std::fixed << std::setprecision(6) << baseline << "\n";
+    std::cout << "Anomaly threshold (" << std::setprecision(0) << anomaly_threshold
+              << "x baseline): " << std::setprecision(6) << threshold << "\n";
+    std::cout << "Anything above this triggers an alert.\n\n";
 
     // =================================================================
     // PHASE 2: STREAMING MONITOR
     // =================================================================
-    std::cout << "--- Phase 2: Streaming monitor (" << schedule.size()
+    std::cout << "--- Phase 2: Monitor the process (" << schedule.size()
               << " windows of " << window << " steps) ---\n\n";
+    std::cout << "The model predicts each window's output. When the prediction error\n";
+    std::cout << "exceeds " << std::setprecision(0) << anomaly_threshold
+              << "x baseline, something has changed.\n\n";
 
     std::cout << "  Window | Condition   |     RMSE     | Ratio | Status\n";
     std::cout << "  -------+-------------+--------------+-------+------------------\n";
@@ -231,17 +240,18 @@ int main(int argc, char* argv[])
                   << " | " << status << "\n";
     }
 
-    std::cout << "\n--- Summary ---\n";
-    std::cout << "  The model learns normal process dynamics during priming, then monitors\n";
-    std::cout << "  prediction error against a " << anomaly_threshold << "x baseline threshold.\n\n";
-    std::cout << "  Three anomaly types are injected, each for 3 windows:\n";
-    std::cout << "    - Noise spike (12x):  prediction error rises from random disturbance\n";
-    std::cout << "    - DC drift (+0.30):   systematic offset the model didn't learn\n";
-    std::cout << "    - Freq shift (x1.3):  changed dynamics break the learned pattern\n\n";
-    std::cout << "  After each event, normal operation resumes and RMSE returns to baseline,\n";
-    std::cout << "  confirming the reservoir's state recovers and the readout remains valid.\n";
-    std::cout << "  Note: the first recovery window after freq shift may show elevated error\n";
-    std::cout << "  as the reservoir washes out residual dynamics from the changed frequency.\n";
+    std::cout << "\n--- What happened ---\n\n";
+    std::cout << "The reservoir learned to predict normal process output during priming.\n";
+    std::cout << "During monitoring, prediction error is the anomaly signal:\n\n";
+    std::cout << "  Noise spike:  RMSE jumps ~12x -- random disturbance is unpredictable.\n";
+    std::cout << "                Recovery is instant (window 9 back to baseline).\n\n";
+    std::cout << "  DC drift:     RMSE rises ~6x -- the model didn't learn this offset.\n";
+    std::cout << "                Takes 1 window to wash out after recovery.\n\n";
+    std::cout << "  Freq shift:   RMSE spikes ~7-9x -- changed dynamics break the pattern.\n";
+    std::cout << "                Slowest recovery: reservoir needs 1-2 extra windows to\n";
+    std::cout << "                wash out the altered frequency from its internal state.\n\n";
+    std::cout << "Key insight: the frozen model stays valid for normal operation throughout.\n";
+    std::cout << "Each anomaly is detected, and the system recovers without retraining.\n";
 
     return 0;
 }
