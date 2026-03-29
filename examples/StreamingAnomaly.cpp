@@ -22,6 +22,7 @@
 #include "ESN.h"
 #include "Reservoir.h"
 #include "TranslationLayer.h"
+#include "readout/RidgeRegression.h"
 
 // --- Signal generation ---
 // Multi-harmonic process: fundamental + 3rd harmonic.
@@ -52,7 +53,8 @@ static double ComputeRMSE(const float* pred, const float* targets, size_t n)
 }
 
 // Predict a batch using the readout, return RMSE
-static double PredictBatch(const LinearReadout& readout, const float* features,
+template <typename Readout>
+static double PredictBatch(const Readout& readout, const float* features,
                             const float* targets, size_t n, size_t num_features)
 {
     std::vector<float> pred(n);
@@ -97,7 +99,7 @@ int main(int argc, char* argv[])
     constexpr float normal_noise = 0.01f;
     constexpr float anomaly_threshold = 5.0f;  // Alert if RMSE > 5x baseline
 
-    const uint64_t seed = 42;
+    constexpr uint64_t seed = 42;
     std::mt19937_64 signal_rng(seed + 777);
     const size_t num_features = use_translation ? FEATURES_TRANS : N;
 
@@ -130,8 +132,13 @@ int main(int argc, char* argv[])
     std::cout << "  2. DC drift      -- systematic +0.30 offset (e.g. sensor fouling)\n";
     std::cout << "  3. Freq shift    -- process speed changes to 1.3x (e.g. motor issue)\n\n";
 
+    auto mode = use_translation ? FeatureMode::Translation : FeatureMode::Raw;
+    ESN<DIM> esn(seed, ReadoutType::Ridge, mode);
+
+    const char* readout_label = (esn.GetReadoutType() == ReadoutType::Ridge) ? "Ridge" : "Linear";
     std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
               << " (" << (use_translation ? "translation" : "raw") << ")"
+              << "  Readout=" << readout_label
               << "  Threshold=" << anomaly_threshold << "x baseline\n\n";
 
     // =================================================================
@@ -144,15 +151,12 @@ int main(int argc, char* argv[])
     GenerateProcess(prime_signal.data(), prime_signal.size(), t_global,
                      normal_noise, 0.0f, 1.0f, signal_rng);
 
-    auto mode = use_translation ? FeatureMode::Translation : FeatureMode::Raw;
-    ESN<DIM> esn(seed, ReadoutType::Linear, mode);
-
     esn.Warmup(prime_signal.data(), warmup);
     esn.Run(prime_signal.data() + warmup, prime_steps);
     t_global += warmup + prime_steps;
 
     // Get features
-    const float* prime_feat_ptr;
+    const float* prime_feat_ptr = nullptr;
     std::vector<float> prime_translated;
     if (use_translation)
     {
@@ -171,72 +175,86 @@ int main(int argc, char* argv[])
     size_t train_n = static_cast<size_t>(prime_steps * 0.7);
     size_t test_n = prime_steps - train_n;
 
-    LinearReadout readout;
-    readout.Train(prime_feat_ptr, prime_targets.data(), train_n, num_features);
-
-    double baseline = PredictBatch(readout, prime_feat_ptr + train_n * num_features,
-                                    prime_targets.data() + train_n, test_n, num_features);
-    double threshold = baseline * anomaly_threshold;
-
-    std::cout << "Reservoir trained on " << prime_steps << " normal samples.\n";
-    std::cout << "Baseline prediction error (RMSE): " << std::fixed << std::setprecision(6) << baseline << "\n";
-    std::cout << "Anomaly threshold (" << std::setprecision(0) << anomaly_threshold
-              << "x baseline): " << std::setprecision(6) << threshold << "\n";
-    std::cout << "Anything above this triggers an alert.\n\n";
-
-    // =================================================================
-    // PHASE 2: STREAMING MONITOR
-    // =================================================================
-    std::cout << "--- Phase 2: Monitor the process (" << schedule.size()
-              << " windows of " << window << " steps) ---\n\n";
-    std::cout << "The model predicts each window's output. When the prediction error\n";
-    std::cout << "exceeds " << std::setprecision(0) << anomaly_threshold
-              << "x baseline, something has changed.\n\n";
-
-    std::cout << "  Window | Condition   |     RMSE     | Ratio | Status\n";
-    std::cout << "  -------+-------------+--------------+-------+------------------\n";
-
-    for (size_t w = 0; w < schedule.size(); ++w)
+    // Train readout and run monitoring — generic over readout type.
+    auto train_and_monitor = [&](auto& readout)
     {
-        const Event& evt = schedule[w];
+        readout.Train(prime_feat_ptr, prime_targets.data(), train_n, num_features);
 
-        esn.ClearStates();
-        std::vector<float> sig(window + 1);
-        GenerateProcess(sig.data(), sig.size(), t_global,
-                         evt.noise, evt.drift, evt.freq, signal_rng);
+        double baseline = PredictBatch(readout, prime_feat_ptr + train_n * num_features,
+                                        prime_targets.data() + train_n, test_n, num_features);
+        double threshold = baseline * anomaly_threshold;
 
-        esn.Run(sig.data(), window);
-        t_global += window;
+        std::cout << "Reservoir trained on " << prime_steps << " normal samples.\n";
+        std::cout << "Baseline prediction error (RMSE): " << std::fixed << std::setprecision(6) << baseline << "\n";
+        std::cout << "Anomaly threshold (" << std::setprecision(0) << anomaly_threshold
+                  << "x baseline): " << std::setprecision(6) << threshold << "\n";
+        std::cout << "Anything above this triggers an alert.\n\n";
 
-        // Get features
-        const float* feat_ptr;
-        std::vector<float> win_translated;
-        if (use_translation)
+        // =================================================================
+        // PHASE 2: STREAMING MONITOR
+        // =================================================================
+        std::cout << "--- Phase 2: Monitor the process (" << schedule.size()
+                  << " windows of " << window << " steps) ---\n\n";
+        std::cout << "The model predicts each window's output. When the prediction error\n";
+        std::cout << "exceeds " << std::setprecision(0) << anomaly_threshold
+                  << "x baseline, something has changed.\n\n";
+
+        std::cout << "  Window | Condition   |     RMSE     | Ratio | Status\n";
+        std::cout << "  -------+-------------+--------------+-------+------------------\n";
+
+        for (size_t w = 0; w < schedule.size(); ++w)
         {
-            win_translated = TranslationTransform<DIM>(esn.States(), window);
-            feat_ptr = win_translated.data();
+            const Event& evt = schedule[w];
+
+            esn.ClearStates();
+            std::vector<float> sig(window + 1);
+            GenerateProcess(sig.data(), sig.size(), t_global,
+                             evt.noise, evt.drift, evt.freq, signal_rng);
+
+            esn.Run(sig.data(), window);
+            t_global += window;
+
+            // Get features
+            const float* feat_ptr = nullptr;
+            std::vector<float> win_translated;
+            if (use_translation)
+            {
+                win_translated = TranslationTransform<DIM>(esn.States(), window);
+                feat_ptr = win_translated.data();
+            }
+            else
+            {
+                feat_ptr = esn.States();
+            }
+
+            std::vector<float> tgt(window);
+            for (size_t t = 0; t < window; ++t)
+                tgt[t] = sig[t + 1];
+
+            double rmse = PredictBatch(readout, feat_ptr, tgt.data(), window, num_features);
+            double ratio = rmse / baseline;
+
+            const char* status = "";
+            if (rmse > threshold)
+                status = "** ANOMALY **";
+
+            std::cout << "  " << std::setw(5) << (w + 1)
+                      << "  | " << evt.label
+                      << " | " << std::setprecision(6) << std::setw(12) << rmse
+                      << " | " << std::setprecision(1) << std::setw(5) << ratio
+                      << " | " << status << "\n";
         }
-        else
-        {
-            feat_ptr = esn.States();
-        }
+    };
 
-        std::vector<float> tgt(window);
-        for (size_t t = 0; t < window; ++t)
-            tgt[t] = sig[t + 1];
-
-        double rmse = PredictBatch(readout, feat_ptr, tgt.data(), window, num_features);
-        double ratio = rmse / baseline;
-
-        const char* status = "";
-        if (rmse > threshold)
-            status = "** ANOMALY **";
-
-        std::cout << "  " << std::setw(5) << (w + 1)
-                  << "  | " << evt.label
-                  << " | " << std::setprecision(6) << std::setw(12) << rmse
-                  << " | " << std::setprecision(1) << std::setw(5) << ratio
-                  << " | " << status << "\n";
+    if (esn.GetReadoutType() == ReadoutType::Ridge)
+    {
+        RidgeRegression readout;
+        train_and_monitor(readout);
+    }
+    else
+    {
+        LinearReadout readout;
+        train_and_monitor(readout);
     }
 
     std::cout << "\n--- What happened ---\n\n";

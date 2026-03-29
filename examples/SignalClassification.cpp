@@ -25,6 +25,7 @@
 #include "ESN.h"
 #include "Reservoir.h"
 #include "TranslationLayer.h"
+#include "readout/RidgeRegression.h"
 
 static constexpr float PI = 3.14159265358979323846f;
 static constexpr size_t NUM_CLASSES = 4;
@@ -92,7 +93,7 @@ int main(int argc, char* argv[])
     constexpr size_t collect = block_size * NUM_CLASSES * num_cycles;  // 12000 timesteps
     constexpr double train_fraction = 0.7;
 
-    const uint64_t seed = 42;
+    constexpr uint64_t seed = 42;
     auto mode = use_translation ? FeatureMode::Translation : FeatureMode::Raw;
     const size_t num_features = use_translation ? FEATURES_TRANS : N;
 
@@ -102,10 +103,6 @@ int main(int argc, char* argv[])
     std::cout << "Four waveforms cycle in blocks of " << block_size << " steps:\n";
     std::cout << "  Sine (f=0.08)  |  Square (f=0.25)  |  Triangle (f=0.15)  |  Chirp (sweep)\n";
     std::cout << "Each has a distinct frequency and dynamic signature.\n\n";
-    std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
-              << " (" << (use_translation ? "translation" : "raw") << ")"
-              << "  Cycles=" << num_cycles << "  Total=" << collect << " steps\n\n";
-
     // --- Step 1: Generate the input signal and labels ---
     // Alternating blocks with per-block phase tracking.
     // Each block starts at phase=0 for its waveform, so the reservoir sees
@@ -130,12 +127,19 @@ int main(int argc, char* argv[])
     }
 
     // --- Step 2: Drive the reservoir ---
-    ESN<DIM> esn(seed, ReadoutType::Linear, mode);
+    ESN<DIM> esn(seed, ReadoutType::Ridge, mode);
+
+    const char* readout_label = (esn.GetReadoutType() == ReadoutType::Ridge) ? "Ridge" : "Linear";
+    std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
+              << " (" << (use_translation ? "translation" : "raw") << ")"
+              << "  Readout=" << readout_label
+              << "  Cycles=" << num_cycles << "  Total=" << collect << " steps\n\n";
+
     esn.Warmup(signal.data(), warmup);
     esn.Run(signal.data() + warmup, collect);
 
     // --- Step 3: Get features ---
-    const float* features;
+    const float* features = nullptr;
     std::vector<float> translated;
     if (use_translation)
     {
@@ -157,37 +161,51 @@ int main(int argc, char* argv[])
         for (size_t c = 0; c < NUM_CLASSES; ++c)
             class_targets[c][t] = (labels[t] == c) ? 1.0f : -1.0f;
 
-    // Train one readout per class
-    std::vector<LinearReadout> readouts(NUM_CLASSES);
-    for (size_t c = 0; c < NUM_CLASSES; ++c)
-        readouts[c].Train(features, class_targets[c].data(), train_size, num_features);
+    // Train one readout per class, evaluate via argmax over PredictRaw scores.
+    // Templated lambda so the same logic works for LinearReadout and RidgeRegression.
+    const float* test_features = features + train_size * num_features;
+    const size_t* test_labels = labels.data() + train_size;
+    std::vector<size_t> predictions(test_size);
+
+    auto train_and_predict = [&](auto& readouts)
+    {
+        for (size_t c = 0; c < NUM_CLASSES; ++c)
+            readouts[c].Train(features, class_targets[c].data(), train_size, num_features);
+
+        for (size_t t = 0; t < test_size; ++t)
+        {
+            size_t predicted = 0;
+            float best_score = readouts[0].PredictRaw(test_features + t * num_features);
+            for (size_t c = 1; c < NUM_CLASSES; ++c)
+            {
+                float score = readouts[c].PredictRaw(test_features + t * num_features);
+                if (score > best_score)
+                {
+                    best_score = score;
+                    predicted = c;
+                }
+            }
+            predictions[t] = predicted;
+        }
+    };
+
+    if (esn.GetReadoutType() == ReadoutType::Ridge)
+    {
+        std::vector<RidgeRegression> readouts(NUM_CLASSES);
+        train_and_predict(readouts);
+    }
+    else
+    {
+        std::vector<LinearReadout> readouts(NUM_CLASSES);
+        train_and_predict(readouts);
+    }
 
     std::cout << "--- Training ---\n";
     std::cout << "Reservoir driven through " << collect << " timesteps.\n";
-    std::cout << "Trained " << NUM_CLASSES << " one-vs-rest readouts on "
+    std::cout << "Trained " << NUM_CLASSES << " one-vs-rest " << readout_label << " readouts on "
               << train_size << " samples (" << num_features << " features each).\n\n";
 
     // --- Step 5: Evaluate on test set ---
-    const float* test_features = features + train_size * num_features;
-    const size_t* test_labels = labels.data() + train_size;
-
-    // Classify each timestep via argmax over readout scores
-    std::vector<size_t> predictions(test_size);
-    for (size_t t = 0; t < test_size; ++t)
-    {
-        size_t predicted = 0;
-        float best_score = readouts[0].PredictRaw(test_features + t * num_features);
-        for (size_t c = 1; c < NUM_CLASSES; ++c)
-        {
-            float score = readouts[c].PredictRaw(test_features + t * num_features);
-            if (score > best_score)
-            {
-                best_score = score;
-                predicted = c;
-            }
-        }
-        predictions[t] = predicted;
-    }
 
     // Build confusion matrix: confusion[actual][predicted]
     size_t confusion[NUM_CLASSES][NUM_CLASSES] = {};
