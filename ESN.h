@@ -29,12 +29,17 @@ enum class ReadoutType { Linear, Ridge };
 ///
 /// **Workflow:**
 ///
-/// 1. **Construct** — Creates the reservoir (Reservoir) with fixed random weights.
-///    Per-DIM spectral radius is applied automatically.
+/// 1. **Construct** — Creates the reservoir with fixed random weights.
+///    Pass FeatureMode::Raw or FeatureMode::Translation to select per-DIM
+///    optimized defaults for spectral radius and input scaling:
 ///
-///        ESN<8> esn(seed, ReadoutType::Ridge);
+///        // Raw features (default):
+///        ESN<8> esn(seed, ReadoutType::Linear);
 ///
-/// 2. **Warmup** — Drive the reservoir to wash out initial conditions (100-500 steps).
+///        // Translation features:
+///        ESN<8> esn(seed, ReadoutType::Linear, FeatureMode::Translation);
+///
+/// 2. **Warmup** — Drive the reservoir to wash out initial conditions (200-500 steps).
 ///
 ///        esn.Warmup(inputs, 200);
 ///
@@ -47,16 +52,14 @@ enum class ReadoutType { Linear, Ridge };
 ///
 /// 5. **ClearStates** — Reset state buffer between independent evaluations.
 ///
-/// **Readout selection:**
-///   - DIM < 8:  Use ReadoutType::Linear (SGD, O(N) — matches or beats Ridge).
-///   - DIM >= 8: Use ReadoutType::Ridge (closed-form optimal, O(N³) solve).
-///
 /// **Design notes:**
-///   - All values (inputs, states, targets, predictions) are in [-1, +1].
+///   - Inputs are clamped to [-1, +1] by InjectInput.
+///   - States are tanh outputs in [-1, +1].
+///   - Targets and predictions are continuous (unbounded for regression).
 ///   - The reservoir produces N = 2^DIM state features per step.
 ///   - States() exposes the raw flat buffer for external analysis.
 ///
-/// @tparam DIM Hypercube dimension (5-10). Vertex count is 2^DIM.
+/// @tparam DIM Hypercube dimension (4-10). Vertex count is 2^DIM.
 template <size_t DIM>
 class ESN
 {
@@ -65,11 +68,12 @@ class ESN
 public:
     ESN(uint64_t rng_seed,
         ReadoutType readout_type = ReadoutType::Linear,
+        FeatureMode mode = FeatureMode::Raw,
         float alpha = 1.0f,
         float spectral_radius = -1.0f,
         const float* block_scaling = nullptr,
         size_t num_inputs = 1)
-        : reservoir_(Reservoir<DIM>::Create(rng_seed, alpha, spectral_radius,
+        : reservoir_(Reservoir<DIM>::Create(rng_seed, mode, alpha, spectral_radius,
                                             block_scaling, num_inputs)),
           readout_type_(readout_type)
     {

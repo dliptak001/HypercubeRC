@@ -151,9 +151,7 @@ ideally more if the signal is noisy.
 
 ```cpp
 // Drive reservoir through historical data (translation-optimized defaults)
-float inp = Reservoir<8>::TranslationInputScaling();
-ESN<8> esn(seed, ReadoutType::Linear, 1.0f,
-           Reservoir<8>::TranslationSpectralRadius(), &inp);
+ESN<8> esn(seed, ReadoutType::Linear, FeatureMode::Translation);
 esn.Warmup(historical_inputs, warmup_steps);
 esn.Run(historical_inputs + warmup_steps, prime_steps);
 

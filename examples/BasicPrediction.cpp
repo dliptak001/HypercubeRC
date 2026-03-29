@@ -74,26 +74,15 @@ int main(int argc, char* argv[])
         signal[t] = std::sin(0.1f * static_cast<float>(t));  // Amplitude 1.0, stays in [-1, 1]
 
     // --- Step 2: Create ESN and drive the reservoir ---
-    std::unique_ptr<ESN<DIM>> esn;
-    if (use_translation)
-    {
-        // Translation-optimized defaults
-        float inp = Reservoir<DIM>::TranslationInputScaling();
-        esn = std::make_unique<ESN<DIM>>(seed, ReadoutType::Linear, 1.0f,
-                                          Reservoir<DIM>::TranslationSpectralRadius(), &inp);
-    }
-    else
-    {
-        // Raw-optimized defaults
-        esn = std::make_unique<ESN<DIM>>(seed, ReadoutType::Linear);
-    }
+    auto mode = use_translation ? FeatureMode::Translation : FeatureMode::Raw;
+    ESN<DIM> esn(seed, ReadoutType::Linear, mode);
 
     // Warmup: drive the reservoir without recording, to wash out initial conditions.
     // After warmup, the reservoir state reflects the input history.
-    esn->Warmup(signal.data(), warmup);
+    esn.Warmup(signal.data(), warmup);
 
     // Run: drive and record the N-dimensional state at each timestep.
-    esn->Run(signal.data() + warmup, collect);
+    esn.Run(signal.data() + warmup, collect);
 
     std::cout << "Reservoir driven: " << collect << " states collected.\n";
 
@@ -102,13 +91,13 @@ int main(int argc, char* argv[])
     std::vector<float> translated;
     if (use_translation)
     {
-        translated = TranslationTransform<DIM>(esn->States(), collect);
+        translated = TranslationTransform<DIM>(esn.States(), collect);
         features = translated.data();
         std::cout << "Translation applied: " << N << " -> " << num_features << " features per step.\n";
     }
     else
     {
-        features = esn->States();
+        features = esn.States();
         std::cout << "Using raw reservoir states: " << N << " features per step.\n";
     }
 

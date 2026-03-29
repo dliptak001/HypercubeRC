@@ -68,9 +68,7 @@ public:
 
             // Full translation — translation-optimized defaults
             {
-                float inp = Reservoir<DIM>::TranslationInputScaling();
-                ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f,
-                             Reservoir<DIM>::TranslationSpectralRadius(), &inp);
+                ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Translation);
                 esn.Warmup(ri.data(), warmup);
                 esn.Run(ri.data() + warmup, collect);
                 auto translated = TranslationTransform<DIM>(esn.States(), collect);

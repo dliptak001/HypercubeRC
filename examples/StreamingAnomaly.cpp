@@ -19,7 +19,6 @@
 #include <cmath>
 #include <cstring>
 #include <random>
-#include <memory>
 #include "ESN.h"
 #include "Reservoir.h"
 #include "TranslationLayer.h"
@@ -141,20 +140,11 @@ int main(int argc, char* argv[])
     GenerateProcess(prime_signal.data(), prime_signal.size(), t_global,
                      normal_noise, 0.0f, 1.0f, signal_rng);
 
-    std::unique_ptr<ESN<DIM>> esn;
-    if (use_translation)
-    {
-        float inp = Reservoir<DIM>::TranslationInputScaling();
-        esn = std::make_unique<ESN<DIM>>(seed, ReadoutType::Linear, 1.0f,
-                                          Reservoir<DIM>::TranslationSpectralRadius(), &inp);
-    }
-    else
-    {
-        esn = std::make_unique<ESN<DIM>>(seed, ReadoutType::Linear);
-    }
+    auto mode = use_translation ? FeatureMode::Translation : FeatureMode::Raw;
+    ESN<DIM> esn(seed, ReadoutType::Linear, mode);
 
-    esn->Warmup(prime_signal.data(), warmup);
-    esn->Run(prime_signal.data() + warmup, prime_steps);
+    esn.Warmup(prime_signal.data(), warmup);
+    esn.Run(prime_signal.data() + warmup, prime_steps);
     t_global += warmup + prime_steps;
 
     // Get features
@@ -162,12 +152,12 @@ int main(int argc, char* argv[])
     std::vector<float> prime_translated;
     if (use_translation)
     {
-        prime_translated = TranslationTransform<DIM>(esn->States(), prime_steps);
+        prime_translated = TranslationTransform<DIM>(esn.States(), prime_steps);
         prime_feat_ptr = prime_translated.data();
     }
     else
     {
-        prime_feat_ptr = esn->States();
+        prime_feat_ptr = esn.States();
     }
 
     std::vector<float> prime_targets(prime_steps);
@@ -201,12 +191,12 @@ int main(int argc, char* argv[])
     {
         const Event& evt = schedule[w];
 
-        esn->ClearStates();
+        esn.ClearStates();
         std::vector<float> sig(window + 1);
         GenerateProcess(sig.data(), sig.size(), t_global,
                          evt.noise, evt.drift, evt.freq, signal_rng);
 
-        esn->Run(sig.data(), window);
+        esn.Run(sig.data(), window);
         t_global += window;
 
         // Get features
@@ -214,12 +204,12 @@ int main(int argc, char* argv[])
         std::vector<float> win_translated;
         if (use_translation)
         {
-            win_translated = TranslationTransform<DIM>(esn->States(), window);
+            win_translated = TranslationTransform<DIM>(esn.States(), window);
             feat_ptr = win_translated.data();
         }
         else
         {
-            feat_ptr = esn->States();
+            feat_ptr = esn.States();
         }
 
         std::vector<float> tgt(window);

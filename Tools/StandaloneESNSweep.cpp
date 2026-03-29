@@ -78,7 +78,7 @@ static double RunMG(float sr, float inp)
         size_t te = collect - tr;
 
         float bs[1] = {inp};
-        ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f, sr, bs);
+        ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Raw, 1.0f, sr, bs);
         esn.Warmup(series.data(), WARMUP);
         esn.Run(series.data() + WARMUP, collect);
 
@@ -107,7 +107,7 @@ static double RunNARMA(float sr, float inp)
         size_t te = COLLECT - tr;
 
         float bs[1] = {inp};
-        ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f, sr, bs);
+        ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Raw, 1.0f, sr, bs);
         esn.Warmup(ri.data(), WARMUP);
         esn.Run(ri.data() + WARMUP, COLLECT);
 
@@ -129,7 +129,7 @@ static double RunMC(float sr, float inp)
             inputs[i] = static_cast<float>(dist(rng));
 
         float bs[1] = {inp};
-        ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f, sr, bs);
+        ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Raw, 1.0f, sr, bs);
         esn.Warmup(inputs.data(), WARMUP);
         esn.Run(inputs.data() + WARMUP, COLLECT);
 

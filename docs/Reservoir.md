@@ -14,7 +14,7 @@ indices — no adjacency list is needed, and neighbor lookup is a single XOR ins
 ## Hypercube Substrate
 
 The graph is a DIM-dimensional Boolean hypercube with N = 2^DIM vertices. DIM is
-constrained to [5, 10], covering 32 to 1024 vertices — the practical deployment range
+constrained to [4, 10], covering 16 to 1024 vertices — the practical deployment range
 for reservoir computing.
 
 | DIM | N    | Connections/vertex | Total weights |
@@ -49,7 +49,7 @@ Each vertex carries two scalars:
 
 | Field | Type | Purpose |
 |---|---|---|
-| `vtx_state_[v]` | `float` | Internal state — updated by tanh(alpha * weighted_sum) with leak |
+| `vtx_state_[v]` | `float` | Internal state — updated by tanh(alpha * weighted_sum) |
 | `vtx_output_[v]` | `float` | Published output — copied from state after synchronous swap |
 
 The separation of state and output is what makes synchronous update work: all vertices
@@ -65,13 +65,8 @@ Each call to `Step()` executes two phases:
 For each vertex v:
 ```
 s = sum over neighbors i: vtx_output_[v ^ mask[i]] * weight[v][i]
-raw = tanh(alpha * s)
-vtx_state_[v] = retain * vtx_state_[v] + leak * raw
+vtx_state_[v] = tanh(alpha * s)
 ```
-
-Where `retain = 1 - leak`. At leak=1.0 (the universal default), state is fully replaced
-each step. At leak<1.0, old state is blended with the new activation (temporal smoothing).
-Leak sweep experiments confirmed leak=1.0 is optimal across DIM 5-10.
 
 ### Phase II: Synchronous Swap
 
@@ -85,41 +80,58 @@ All vertices update simultaneously. The output array is read-only during Phase I
 
 Input is injected via `InjectInput()` before `Step()`. Two modes:
 
-- **Single-input:** `InjectInput(float)` — one scalar, projected to all N vertices via W_in
-- **Multi-input:** `InjectInput(float*)` — K scalars, projected via [N x K] W_in matrix
+- **Single-input:** `InjectInput(block, float)` — one scalar, projected to all N vertices via W_in
+- **Multi-input:** K calls to `InjectInput(k, float)` — each scalar drives block k's vertices
 
 W_in weights are random uniform scaled by `input_scaling`. All N vertices receive input.
 Input values are clamped to [-1, 1].
 
 ## Parameters
 
-All parameters have per-DIM optimized defaults. Pass 0 for SR or input_scaling to use
-the auto-tuned value.
+All parameters have per-DIM optimized defaults. Pass -1 for SR or input_scaling to use
+the auto-tuned value for the selected feature mode.
 
 | Parameter | Default | Role |
 |---|---|---|
 | `rng_seed` | — | Deterministic initialization seed |
+| `mode` | `FeatureMode::Raw` | Selects per-DIM defaults (Raw or Translation) |
 | `alpha` | 1.0 | Tanh steepness — universally optimal |
-| `leak` | 1.0 | Leak rate: 1.0 = no temporal smoothing (universally optimal) |
-| `spectral_radius` | per-DIM | Target spectral radius (0 = auto) |
-| `input_scaling` | per-DIM | W_in weight magnitude (0 = auto) |
+| `spectral_radius` | per-DIM, per-mode | Target spectral radius (-1 = auto) |
+| `block_scaling` | per-DIM, per-mode | Per-block W_in scaling (null = auto) |
 | `num_inputs` | 1 | Number of input channels |
 
 ### Per-DIM Defaults
 
-Jointly optimized on MG h=1 with full translation layer, LinearReadout, 3-seed average.
-Stored in `Reservoir::DefaultSpectralRadius()` and `Reservoir::DefaultInputScaling()`.
+Two sets of defaults, jointly optimized on MG h=1 + NARMA-10 + MC, 3-seed average.
+Resolved by `DefaultSpectralRadius(mode)` and `DefaultInputScaling(mode)`.
+
+**Raw defaults** (optimized for N-dim raw readout):
 
 | DIM | N    | SR   | input_scaling |
 |-----|------|------|---------------|
-| 5   | 32   | 0.90 | 1.50          |
-| 6   | 64   | 1.00 | 1.00          |
-| 7   | 128  | 1.05 | 0.80          |
-| 8   | 256  | 1.10 | 0.50          |
-| 9   | 512  | 1.00 | 0.40          |
-| 10  | 1024 | 1.05 | 0.40          |
+| 4   | 16   | 0.95 | 0.05          |
+| 5   | 32   | 0.80 | 0.10          |
+| 6   | 64   | 0.90 | 0.05          |
+| 7   | 128  | 0.88 | 0.03          |
+| 8   | 256  | 0.88 | 0.02          |
+| 9   | 512  | 0.88 | 0.02          |
+| 10  | 1024 | 0.88 | 0.02          |
 
-Pattern: higher DIM tolerates higher SR; smaller reservoirs need stronger input injection.
+**Translation defaults** (optimized for 2.5N-dim readout via TranslationLayer):
+
+| DIM | N    | SR   | input_scaling |
+|-----|------|------|---------------|
+| 4   | 16   | 0.88 | 0.02          |
+| 5   | 32   | 0.80 | 0.04          |
+| 6   | 64   | 0.92 | 0.02          |
+| 7   | 128  | 0.92 | 0.04          |
+| 8   | 256  | 0.95 | 0.02          |
+| 9   | 512  | 0.95 | 0.02          |
+| 10  | 1024 | 0.95 | 0.02          |
+
+Translation defaults use higher SR (reservoir runs closer to instability) because
+the nonlinear feature expansion amplifies dynamics. Input scaling is uniformly low
+(0.02-0.04) — translation features provide the needed signal gain.
 
 ## Spectral Radius
 

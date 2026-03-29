@@ -52,9 +52,7 @@ public:
             for (size_t i = 0; i < total; ++i)
                 inputs[i] = static_cast<float>(dist(rng));
 
-            float inp = Reservoir<DIM>::TranslationInputScaling();
-            ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f,
-                         Reservoir<DIM>::TranslationSpectralRadius(), &inp);
+            ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Translation);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
 

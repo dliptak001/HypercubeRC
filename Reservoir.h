@@ -4,6 +4,11 @@
 #include <memory>
 #include <vector>
 
+/// Feature mode selector for per-DIM default resolution.
+/// Raw: optimized for N-dim raw readout.
+/// Translation: optimized for 2.5N-dim readout via TranslationLayer.
+enum class FeatureMode { Raw, Translation };
+
 /// Continuous echo-state reservoir on a DIM-dimensional Boolean hypercube (N = 2^DIM vertices).
 ///
 /// Each vertex gathers weighted outputs from 2*DIM neighbors:
@@ -16,11 +21,18 @@
 ///
 /// Recurrent weights are rescaled via power iteration to the target spectral radius.
 /// Input is injected into vtx_output_ via per-vertex random projection weights (W_in).
-/// Multi-input mode uses block-partitioned injection: each input channel drives a
-/// contiguous block of N/K vertices (K = num_inputs). Each block is a subcube of the
-/// hypercube with DIM-log2(K) internal nearest-neighbor connections. Cross-block mixing
-/// happens through shell connections and high-bit nearest-neighbor flips.
-/// Call InjectInput() before Step().
+/// Inputs are clamped to [-1, +1]. Multi-input mode uses block-partitioned injection:
+/// each input channel drives a contiguous block of N/K vertices (K = num_inputs).
+/// Each block is a subcube of the hypercube with DIM-log2(K) internal nearest-neighbor
+/// connections. Cross-block mixing happens through shell connections and high-bit
+/// nearest-neighbor flips. Call InjectInput() before Step().
+///
+/// **Dual default system:** Two sets of per-DIM optimized hyperparameters are provided:
+///   - Raw defaults (RawSpectralRadius, RawInputScaling): optimized for N-dim raw readout.
+///   - Translation defaults (TranslationSpectralRadius, TranslationInputScaling):
+///     optimized for 2.5N-dim readout via TranslationLayer.
+/// Create() selects the appropriate defaults based on the FeatureMode parameter.
+/// Explicit SR/input scaling values override the mode-based defaults.
 ///
 /// Readout uses Outputs() which exposes N floats after the synchronous swap.
 template <size_t DIM>
@@ -93,12 +105,17 @@ public:
         return 0.02f;
     }
 
-    // Active defaults — raw features (used by Create() when params are -1)
-    static constexpr float DefaultSpectralRadius() { return RawSpectralRadius(); }
-    static constexpr float DefaultInputScaling()   { return RawInputScaling(); }
+    /// Resolve the default spectral radius for a given feature mode.
+    static constexpr float DefaultSpectralRadius(FeatureMode mode = FeatureMode::Raw)
+    {
+        return (mode == FeatureMode::Translation) ? TranslationSpectralRadius() : RawSpectralRadius();
+    }
 
-    static constexpr float default_spectral_radius = DefaultSpectralRadius();
-    static constexpr float default_input_scaling = DefaultInputScaling();
+    /// Resolve the default input scaling for a given feature mode.
+    static constexpr float DefaultInputScaling(FeatureMode mode = FeatureMode::Raw)
+    {
+        return (mode == FeatureMode::Translation) ? TranslationInputScaling() : RawInputScaling();
+    }
 
     /// Inline neighbor mask computation — no stored adjacency.
     /// Shells [0..DIM):    mask = (1 << (i+1)) - 1      → 1, 3, 7, 15, ...
@@ -108,19 +125,21 @@ public:
 
     /// @brief Create a reservoir.
     /// @param rng_seed         Deterministic initialization seed.
+    /// @param mode             Feature mode — selects per-DIM defaults (Raw or Translation).
     /// @param alpha            Tanh steepness (1.0 universally optimal).
-    /// @param spectral_radius  Target SR (-1 = per-DIM default).
-    /// @param block_scaling    Per-block W_in scaling, K values. null = all blocks use DefaultInputScaling().
-    ///                         Pass K floats, one per block. -1.0f entries resolve to DefaultInputScaling().
+    /// @param spectral_radius  Target SR (-1 = per-DIM default for the selected mode).
+    /// @param block_scaling    Per-block W_in scaling, K values. null = mode default for all blocks.
+    ///                         Pass K floats, one per block. -1.0f entries resolve to mode default.
     /// @param num_inputs       Number of input blocks (1 = single-input, 2+ = cascade/multi).
     static std::unique_ptr<Reservoir> Create(uint64_t rng_seed,
+                                             FeatureMode mode = FeatureMode::Raw,
                                              float alpha = 1.0f,
                                              float spectral_radius = -1.0f,
                                              const float* block_scaling = nullptr,
                                              size_t num_inputs = 1)
     {
         if (spectral_radius < 0.0f)
-            spectral_radius = DefaultSpectralRadius();
+            spectral_radius = DefaultSpectralRadius(mode);
 
         // Build resolved per-block scaling array
         std::vector<float> scaling(num_inputs);
@@ -128,7 +147,7 @@ public:
         {
             float s = (block_scaling && block_scaling[k] >= 0.0f)
                           ? block_scaling[k]
-                          : DefaultInputScaling();
+                          : DefaultInputScaling(mode);
             scaling[k] = s;
         }
 
@@ -161,7 +180,7 @@ private:
 
     size_t num_inputs_ = 1;
     float alpha_ = 1.0f;
-    float spectral_radius_ = default_spectral_radius;
+    float spectral_radius_ = RawSpectralRadius();
     std::vector<float> block_scaling_; // per-block W_in scaling [num_inputs]
 
     void Initialize();

@@ -136,9 +136,7 @@ static void RunMG(const std::vector<uint64_t>& seeds, size_t horizon)
 
         // Translation features — translation-optimized defaults
         {
-            float inp = Reservoir<DIM>::TranslationInputScaling();
-            ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f,
-                         Reservoir<DIM>::TranslationSpectralRadius(), &inp);
+            ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Translation);
             esn.Warmup(series.data(), Warmup<DIM>());
             esn.Run(series.data() + Warmup<DIM>(), collect);
             auto full = TranslationTransform<DIM>(esn.States(), collect);
@@ -192,9 +190,7 @@ static void RunNARMA(const std::vector<uint64_t>& seeds)
 
         // Translation features — translation-optimized defaults
         {
-            float inp = Reservoir<DIM>::TranslationInputScaling();
-            ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f,
-                         Reservoir<DIM>::TranslationSpectralRadius(), &inp);
+            ESN<DIM> esn(seed, ReadoutType::Linear, FeatureMode::Translation);
             esn.Warmup(ri.data(), Warmup<DIM>());
             esn.Run(ri.data() + Warmup<DIM>(), collect);
             auto full = TranslationTransform<DIM>(esn.States(), collect);
