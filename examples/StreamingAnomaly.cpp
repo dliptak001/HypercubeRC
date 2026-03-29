@@ -123,7 +123,8 @@ int main(int argc, char* argv[])
     std::cout << "Mode: " << (use_translation ? "translation (2.5N)" : "raw (N)") << "\n";
     std::cout << "Signal: 0.6*sin(0.1t) + 0.2*sin(0.3t) + noise + drift\n";
     std::cout << "Anomaly threshold: " << anomaly_threshold << "x baseline RMSE\n";
-    std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << num_features << "\n\n";
+    std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << num_features << "\n";
+    std::cout << "Usage: " << argv[0] << " [raw|translation]\n\n";
 
     std::cout << "Anomaly events:\n";
     std::cout << "  1. Noise spike:  noise 0.01 -> 0.12 (12x)\n";

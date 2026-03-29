@@ -62,7 +62,8 @@ int main(int argc, char* argv[])
     std::cout << "Mode: " << (use_translation ? "translation (2.5N)" : "raw (N)") << "\n";
     std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << num_features << "\n";
     std::cout << "Warmup=" << warmup << "  Collect=" << collect
-              << "  Horizon=" << horizon << "\n\n";
+              << "  Horizon=" << horizon << "\n";
+    std::cout << "Usage: " << argv[0] << " [raw|translation]\n\n";
 
     // --- Step 1: Generate a sine wave input signal ---
     // The reservoir will learn to predict the next value of this signal.

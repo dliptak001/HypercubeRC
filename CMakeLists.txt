@@ -59,3 +59,7 @@ target_compile_options(BasicPrediction PRIVATE $<$<CONFIG:Release>:-O3 -march=na
 add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp ${CORE_SOURCES})
 target_include_directories(StreamingAnomaly PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/readout)
 target_compile_options(StreamingAnomaly PRIVATE $<$<CONFIG:Release>:-O3 -march=native -ffast-math> -Wall -Wextra -Wno-unknown-pragmas)
+
+add_executable(SignalClassification examples/SignalClassification.cpp ${CORE_SOURCES})
+target_include_directories(SignalClassification PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/readout)
+target_compile_options(SignalClassification PRIVATE $<$<CONFIG:Release>:-O3 -march=native -ffast-math> -Wall -Wextra -Wno-unknown-pragmas)

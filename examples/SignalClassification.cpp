@@ -1,0 +1,281 @@
+/// @file SignalClassification.cpp
+/// @brief Classify waveform types from reservoir states.
+///
+/// Demonstrates the reservoir as a feature extractor for pattern recognition.
+/// Four waveform types — sine, square, triangle, chirp — are fed to the reservoir
+/// in alternating blocks. Each waveform has a distinct frequency and dynamic
+/// signature. One-vs-rest binary readouts classify each timestep by waveform type
+/// using the reservoir state as features.
+///
+/// This is the only example that exercises multi-class inference via argmax over
+/// one-vs-rest PredictRaw() scores, with per-class accuracy and confusion matrix.
+///
+/// To build and run:
+///   cmake -B build -DCMAKE_BUILD_TYPE=Release
+///   cmake --build build
+///   ./build/SignalClassification              (default: translation features)
+///   ./build/SignalClassification translation  (explicit translation)
+///   ./build/SignalClassification raw          (raw N features — much lower accuracy)
+
+#include <iostream>
+#include <iomanip>
+#include <vector>
+#include <cmath>
+#include <cstring>
+#include "ESN.h"
+#include "Reservoir.h"
+#include "TranslationLayer.h"
+
+static constexpr float PI = 3.14159265358979323846f;
+static constexpr size_t NUM_CLASSES = 4;
+static const char* CLASS_NAMES[NUM_CLASSES] = {"Sine    ", "Square  ", "Triangle", "Chirp   "};
+
+// Each waveform has a distinct frequency and dynamic character.
+// The reservoir's recent-input trajectory is completely different for each,
+// making the classes separable from reservoir state alone.
+static float GenerateWaveform(size_t waveform, float phase)
+{
+    switch (waveform)
+    {
+    case 0: // Sine — slow, smooth (freq 0.08)
+        return std::sin(phase);
+
+    case 1: // Square — fast, discontinuous (freq 0.25)
+        return std::sin(phase) >= 0.0f ? 0.9f : -0.9f;
+
+    case 2: // Triangle — medium, piecewise linear (freq 0.15)
+    {
+        float p = std::fmod(phase, 2.0f * PI);
+        if (p < 0) p += 2.0f * PI;
+        return (p < PI) ? (-1.0f + 2.0f * p / PI) : (3.0f - 2.0f * p / PI);
+    }
+
+    case 3: // Chirp — accelerating frequency
+    {
+        // Sweep from freq ~0.1 to ~0.5 using the phase as a proxy for time within block
+        return std::sin(phase + 0.3f * phase * phase);
+    }
+
+    default:
+        return 0.0f;
+    }
+}
+
+// Per-class base frequencies — chosen to produce distinct oscillation rates
+static constexpr float CLASS_FREQ[NUM_CLASSES] = { 0.08f, 0.25f, 0.15f, 0.10f };
+
+int main(int argc, char* argv[])
+{
+    // --- Parse feature mode ---
+    bool use_translation = true;  // default — classification needs translation features
+    if (argc > 1)
+    {
+        if (std::strcmp(argv[1], "raw") == 0)
+            use_translation = false;
+        else if (std::strcmp(argv[1], "translation") == 0)
+            use_translation = true;
+        else
+        {
+            std::cerr << "Usage: " << argv[0] << " [raw|translation]\n";
+            return 1;
+        }
+    }
+
+    // --- Configuration ---
+    constexpr size_t DIM = 7;
+    constexpr size_t N = 1ULL << DIM;
+    constexpr size_t FEATURES_TRANS = TranslationFeatureCount<DIM>();
+
+    constexpr size_t warmup = 300;
+    constexpr size_t block_size = 150;      // Steps per waveform block
+    constexpr size_t num_cycles = 20;       // Full rotations through all 4 classes
+    constexpr size_t collect = block_size * NUM_CLASSES * num_cycles;  // 12000 timesteps
+    constexpr double train_fraction = 0.7;
+
+    const uint64_t seed = 42;
+    auto mode = use_translation ? FeatureMode::Translation : FeatureMode::Raw;
+    const size_t num_features = use_translation ? FEATURES_TRANS : N;
+
+    std::cout << "=== HypercubeRC: Signal Classification ===\n\n";
+    std::cout << "Mode: " << (use_translation ? "translation (2.5N)" : "raw (N)") << "\n";
+    std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << num_features << "\n";
+    std::cout << "Block size: " << block_size << " steps per waveform\n";
+    std::cout << "Cycles: " << num_cycles << "  Total: " << collect << " steps\n";
+    std::cout << "Classes: Sine (f=0.08), Square (f=0.25), Triangle (f=0.15), Chirp (sweep)\n";
+    std::cout << "Usage: " << argv[0] << " [raw|translation]\n\n";
+
+    // --- Step 1: Generate the input signal and labels ---
+    // Alternating blocks with per-block phase tracking.
+    // Each block starts at phase=0 for its waveform, so the reservoir sees
+    // the full characteristic shape from the beginning of every block.
+    std::vector<float> signal(warmup + collect);
+    std::vector<size_t> labels(collect);
+
+    // Warmup: sine
+    for (size_t t = 0; t < warmup; ++t)
+        signal[t] = GenerateWaveform(0, CLASS_FREQ[0] * static_cast<float>(t));
+
+    // Collect: alternating blocks with phase reset per block
+    for (size_t t = 0; t < collect; ++t)
+    {
+        size_t block_idx = t / block_size;
+        size_t waveform = block_idx % NUM_CLASSES;
+        size_t t_in_block = t % block_size;
+
+        labels[t] = waveform;
+        float phase = CLASS_FREQ[waveform] * static_cast<float>(t_in_block);
+        signal[warmup + t] = GenerateWaveform(waveform, phase);
+    }
+
+    // --- Step 2: Drive the reservoir ---
+    ESN<DIM> esn(seed, ReadoutType::Linear, mode);
+    esn.Warmup(signal.data(), warmup);
+    esn.Run(signal.data() + warmup, collect);
+
+    std::cout << "Reservoir driven: " << collect << " states collected.\n";
+
+    // --- Step 3: Get features ---
+    const float* features;
+    std::vector<float> translated;
+    if (use_translation)
+    {
+        translated = TranslationTransform<DIM>(esn.States(), collect);
+        features = translated.data();
+        std::cout << "Translation applied: " << N << " -> " << num_features << " features.\n";
+    }
+    else
+    {
+        features = esn.States();
+        std::cout << "Using raw states: " << num_features << " features.\n";
+    }
+
+    // --- Step 4: Train one-vs-rest readouts ---
+    size_t train_size = static_cast<size_t>(collect * train_fraction);
+    size_t test_size = collect - train_size;
+
+    // Build per-class binary targets: +1 if this class, -1 otherwise
+    std::vector<std::vector<float>> class_targets(NUM_CLASSES, std::vector<float>(collect));
+    for (size_t t = 0; t < collect; ++t)
+        for (size_t c = 0; c < NUM_CLASSES; ++c)
+            class_targets[c][t] = (labels[t] == c) ? 1.0f : -1.0f;
+
+    // Train one readout per class
+    std::vector<LinearReadout> readouts(NUM_CLASSES);
+    for (size_t c = 0; c < NUM_CLASSES; ++c)
+        readouts[c].Train(features, class_targets[c].data(), train_size, num_features);
+
+    std::cout << "Trained " << NUM_CLASSES << " one-vs-rest readouts on "
+              << train_size << " samples.\n\n";
+
+    // --- Step 5: Evaluate on test set ---
+    const float* test_features = features + train_size * num_features;
+    const size_t* test_labels = labels.data() + train_size;
+
+    // Classify each timestep via argmax over readout scores
+    std::vector<size_t> predictions(test_size);
+    for (size_t t = 0; t < test_size; ++t)
+    {
+        size_t predicted = 0;
+        float best_score = readouts[0].PredictRaw(test_features + t * num_features);
+        for (size_t c = 1; c < NUM_CLASSES; ++c)
+        {
+            float score = readouts[c].PredictRaw(test_features + t * num_features);
+            if (score > best_score)
+            {
+                best_score = score;
+                predicted = c;
+            }
+        }
+        predictions[t] = predicted;
+    }
+
+    // Build confusion matrix: confusion[actual][predicted]
+    size_t confusion[NUM_CLASSES][NUM_CLASSES] = {};
+    size_t correct = 0;
+    for (size_t t = 0; t < test_size; ++t)
+    {
+        confusion[test_labels[t]][predictions[t]]++;
+        if (test_labels[t] == predictions[t])
+            correct++;
+    }
+
+    double accuracy = 100.0 * static_cast<double>(correct) / static_cast<double>(test_size);
+
+    // --- Print results ---
+    std::cout << "--- Results (test set: " << test_size << " samples) ---\n";
+    std::cout << "  Overall accuracy: " << std::fixed << std::setprecision(1)
+              << accuracy << "%\n\n";
+
+    // Per-class accuracy
+    std::cout << "  Per-class accuracy:\n";
+    for (size_t c = 0; c < NUM_CLASSES; ++c)
+    {
+        size_t total_c = 0;
+        for (size_t p = 0; p < NUM_CLASSES; ++p)
+            total_c += confusion[c][p];
+        double acc = (total_c > 0) ? 100.0 * confusion[c][c] / total_c : 0.0;
+        std::cout << "    " << CLASS_NAMES[c] << ": " << std::setprecision(1)
+                  << std::setw(5) << acc << "%  (" << confusion[c][c]
+                  << "/" << total_c << ")\n";
+    }
+
+    // Confusion matrix
+    std::cout << "\n  Confusion matrix (rows=actual, cols=predicted):\n";
+    std::cout << "                 ";
+    for (size_t c = 0; c < NUM_CLASSES; ++c)
+        std::cout << CLASS_NAMES[c] << "  ";
+    std::cout << "\n";
+
+    for (size_t a = 0; a < NUM_CLASSES; ++a)
+    {
+        size_t total_a = 0;
+        for (size_t p = 0; p < NUM_CLASSES; ++p)
+            total_a += confusion[a][p];
+
+        std::cout << "    " << CLASS_NAMES[a] << " |";
+        for (size_t p = 0; p < NUM_CLASSES; ++p)
+        {
+            double pct = (total_a > 0) ? 100.0 * confusion[a][p] / total_a : 0.0;
+            std::cout << std::setw(7) << std::setprecision(1) << pct << "%  ";
+        }
+        std::cout << "\n";
+    }
+
+    // Transition analysis: how quickly does the reservoir lock on after a switch?
+    std::cout << "\n  Transition analysis:\n";
+    constexpr size_t margins[] = {3, 5, 10, 20};
+    for (size_t margin : margins)
+    {
+        size_t trans_ok = 0, trans_total = 0;
+        size_t steady_ok = 0, steady_total = 0;
+
+        for (size_t t = 0; t < test_size; ++t)
+        {
+            size_t global_t = train_size + t;
+            size_t pos_in_block = global_t % block_size;
+
+            if (pos_in_block < margin)
+            {
+                trans_total++;
+                if (predictions[t] == test_labels[t]) trans_ok++;
+            }
+            else
+            {
+                steady_total++;
+                if (predictions[t] == test_labels[t]) steady_ok++;
+            }
+        }
+
+        double trans_acc = (trans_total > 0) ? 100.0 * trans_ok / trans_total : 0.0;
+        double steady_acc = (steady_total > 0) ? 100.0 * steady_ok / steady_total : 0.0;
+        std::cout << "    First " << std::setw(2) << margin << " steps: "
+                  << std::setprecision(1) << std::setw(5) << trans_acc
+                  << "%   Remainder: " << std::setw(5) << steady_acc << "%\n";
+    }
+
+    std::cout << "\nThe reservoir identifies waveform type from its internal state.\n";
+    std::cout << "Errors concentrate at block transitions where the reservoir\n";
+    std::cout << "state still reflects the previous waveform's dynamics.\n";
+
+    return 0;
+}
