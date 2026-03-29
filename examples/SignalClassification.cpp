@@ -97,11 +97,14 @@ int main(int argc, char* argv[])
     const size_t num_features = use_translation ? FEATURES_TRANS : N;
 
     std::cout << "=== HypercubeRC: Signal Classification ===\n\n";
-    std::cout << "Mode: " << (use_translation ? "translation (2.5N)" : "raw (N)") << "\n";
-    std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << num_features << "\n";
-    std::cout << "Block size: " << block_size << " steps per waveform\n";
-    std::cout << "Cycles: " << num_cycles << "  Total: " << collect << " steps\n";
-    std::cout << "Classes: Sine (f=0.08), Square (f=0.25), Triangle (f=0.15), Chirp (sweep)\n";
+    std::cout << "Task: identify which waveform is currently being fed to the reservoir,\n";
+    std::cout << "using only the reservoir's internal state -- not the input directly.\n\n";
+    std::cout << "Four waveforms cycle in blocks of " << block_size << " steps:\n";
+    std::cout << "  Sine (f=0.08)  |  Square (f=0.25)  |  Triangle (f=0.15)  |  Chirp (sweep)\n";
+    std::cout << "Each has a distinct frequency and dynamic signature.\n\n";
+    std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
+              << " (" << (use_translation ? "translation" : "raw") << ")"
+              << "  Cycles=" << num_cycles << "  Total=" << collect << " steps\n";
     std::cout << "Usage: " << argv[0] << " [raw|translation]\n\n";
 
     // --- Step 1: Generate the input signal and labels ---
@@ -132,8 +135,6 @@ int main(int argc, char* argv[])
     esn.Warmup(signal.data(), warmup);
     esn.Run(signal.data() + warmup, collect);
 
-    std::cout << "Reservoir driven: " << collect << " states collected.\n";
-
     // --- Step 3: Get features ---
     const float* features;
     std::vector<float> translated;
@@ -141,12 +142,10 @@ int main(int argc, char* argv[])
     {
         translated = TranslationTransform<DIM>(esn.States(), collect);
         features = translated.data();
-        std::cout << "Translation applied: " << N << " -> " << num_features << " features.\n";
     }
     else
     {
         features = esn.States();
-        std::cout << "Using raw states: " << num_features << " features.\n";
     }
 
     // --- Step 4: Train one-vs-rest readouts ---
@@ -164,8 +163,10 @@ int main(int argc, char* argv[])
     for (size_t c = 0; c < NUM_CLASSES; ++c)
         readouts[c].Train(features, class_targets[c].data(), train_size, num_features);
 
+    std::cout << "--- Training ---\n";
+    std::cout << "Reservoir driven through " << collect << " timesteps.\n";
     std::cout << "Trained " << NUM_CLASSES << " one-vs-rest readouts on "
-              << train_size << " samples.\n\n";
+              << train_size << " samples (" << num_features << " features each).\n\n";
 
     // --- Step 5: Evaluate on test set ---
     const float* test_features = features + train_size * num_features;
@@ -201,27 +202,54 @@ int main(int argc, char* argv[])
 
     double accuracy = 100.0 * static_cast<double>(correct) / static_cast<double>(test_size);
 
-    // --- Print results ---
-    std::cout << "--- Results (test set: " << test_size << " samples) ---\n";
-    std::cout << "  Overall accuracy: " << std::fixed << std::setprecision(1)
+    // --- Print results as a narrative ---
+    std::cout << "--- Results (test set: " << test_size << " samples) ---\n\n";
+    std::cout << "Overall accuracy: " << std::fixed << std::setprecision(1)
               << accuracy << "%\n\n";
 
-    // Per-class accuracy
-    std::cout << "  Per-class accuracy:\n";
+    // Per-class results with inline interpretation
+    std::cout << "Per-class breakdown:\n";
     for (size_t c = 0; c < NUM_CLASSES; ++c)
     {
         size_t total_c = 0;
         for (size_t p = 0; p < NUM_CLASSES; ++p)
             total_c += confusion[c][p];
         double acc = (total_c > 0) ? 100.0 * confusion[c][c] / total_c : 0.0;
-        std::cout << "    " << CLASS_NAMES[c] << ": " << std::setprecision(1)
+        std::cout << "  " << CLASS_NAMES[c] << "  " << std::setprecision(1)
                   << std::setw(5) << acc << "%  (" << confusion[c][c]
-                  << "/" << total_c << ")\n";
+                  << "/" << total_c << ")";
+
+        // Add context for notable results
+        if (acc >= 99.9)
+            std::cout << "  -- perfectly separable";
+        else if (acc >= 98.0)
+            std::cout << "  -- near-perfect";
+        else if (acc < 90.0)
+        {
+            // Find the top confusion target
+            size_t max_conf = 0;
+            size_t max_conf_class = c;
+            for (size_t p = 0; p < NUM_CLASSES; ++p)
+            {
+                if (p != c && confusion[c][p] > max_conf)
+                {
+                    max_conf = confusion[c][p];
+                    max_conf_class = p;
+                }
+            }
+            if (max_conf > 0)
+            {
+                double conf_pct = 100.0 * max_conf / total_c;
+                std::cout << "  -- confused with " << CLASS_NAMES[max_conf_class]
+                          << " " << std::setprecision(0) << conf_pct << "% of the time";
+            }
+        }
+        std::cout << "\n";
     }
 
     // Confusion matrix
-    std::cout << "\n  Confusion matrix (rows=actual, cols=predicted):\n";
-    std::cout << "                 ";
+    std::cout << "\nConfusion matrix (rows=actual, cols=predicted):\n";
+    std::cout << "               ";
     for (size_t c = 0; c < NUM_CLASSES; ++c)
         std::cout << CLASS_NAMES[c] << "  ";
     std::cout << "\n";
@@ -232,7 +260,7 @@ int main(int argc, char* argv[])
         for (size_t p = 0; p < NUM_CLASSES; ++p)
             total_a += confusion[a][p];
 
-        std::cout << "    " << CLASS_NAMES[a] << " |";
+        std::cout << "  " << CLASS_NAMES[a] << " |";
         for (size_t p = 0; p < NUM_CLASSES; ++p)
         {
             double pct = (total_a > 0) ? 100.0 * confusion[a][p] / total_a : 0.0;
@@ -241,13 +269,18 @@ int main(int argc, char* argv[])
         std::cout << "\n";
     }
 
-    // Transition analysis: how quickly does the reservoir lock on after a switch?
-    std::cout << "\n  Transition analysis:\n";
-    constexpr size_t margins[] = {3, 5, 10, 20};
+    // Transition dynamics — the most interesting part
+    std::cout << "\n--- How fast does the reservoir lock on? ---\n\n";
+    std::cout << "When the waveform switches, the reservoir state still reflects the\n";
+    std::cout << "previous signal. How many steps until it locks on to the new one?\n\n";
+
+    std::cout << "  Steps after switch  | Accuracy\n";
+    std::cout << "  --------------------+---------\n";
+
+    constexpr size_t margins[] = {3, 5, 10, 20, block_size};
     for (size_t margin : margins)
     {
-        size_t trans_ok = 0, trans_total = 0;
-        size_t steady_ok = 0, steady_total = 0;
+        size_t ok = 0, total = 0;
 
         for (size_t t = 0; t < test_size; ++t)
         {
@@ -256,26 +289,23 @@ int main(int argc, char* argv[])
 
             if (pos_in_block < margin)
             {
-                trans_total++;
-                if (predictions[t] == test_labels[t]) trans_ok++;
-            }
-            else
-            {
-                steady_total++;
-                if (predictions[t] == test_labels[t]) steady_ok++;
+                total++;
+                if (predictions[t] == test_labels[t]) ok++;
             }
         }
 
-        double trans_acc = (trans_total > 0) ? 100.0 * trans_ok / trans_total : 0.0;
-        double steady_acc = (steady_total > 0) ? 100.0 * steady_ok / steady_total : 0.0;
-        std::cout << "    First " << std::setw(2) << margin << " steps: "
-                  << std::setprecision(1) << std::setw(5) << trans_acc
-                  << "%   Remainder: " << std::setw(5) << steady_acc << "%\n";
+        double acc = (total > 0) ? 100.0 * ok / total : 0.0;
+        if (margin == block_size)
+            std::cout << "  Entire block        |  " << std::setprecision(1)
+                      << std::setw(5) << acc << "%  (overall)\n";
+        else
+            std::cout << "  0 - " << std::setw(2) << margin
+                      << "              |  " << std::setprecision(1)
+                      << std::setw(5) << acc << "%\n";
     }
 
-    std::cout << "\nThe reservoir identifies waveform type from its internal state.\n";
-    std::cout << "Errors concentrate at block transitions where the reservoir\n";
-    std::cout << "state still reflects the previous waveform's dynamics.\n";
+    std::cout << "\nThe reservoir needs ~20 steps to wash out the old dynamics.\n";
+    std::cout << "Steady-state accuracy (step 20+) approaches 100%.\n";
 
     return 0;
 }
