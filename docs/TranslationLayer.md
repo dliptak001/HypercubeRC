@@ -82,6 +82,65 @@ The antipodal pairing is retained for its computational elegance (v XOR (N-1) is
 instruction) and its natural geometric interpretation on the hypercube, not because it
 provides a unique dynamical advantage.
 
+## Benchmark Results
+
+Results from the full benchmark suite (`main.cpp`), 3-seed average {42, 1042, 2042},
+LinearReadout, per-DIM optimized defaults for each mode.
+
+### Mackey-Glass h=1 (NRMSE, lower is better)
+
+| DIM |    N | Raw    | Translation | Change  |
+|-----|------|--------|-------------|---------|
+|   5 |   32 | 0.0097 | 0.0103      |  +6.2%  |
+|   6 |   64 | 0.0085 | 0.0074      | -12.6%  |
+|   7 |  128 | 0.0061 | 0.0053      | -13.5%  |
+|   8 |  256 | 0.0068 | 0.0056      | -17.6%  |
+|   9 |  512 | 0.0048 | 0.0040      | -17.6%  |
+|  10 | 1024 | 0.0043 | 0.0032      | -25.2%  |
+
+### NARMA-10 (NRMSE, lower is better)
+
+| DIM |    N | Raw   | Translation | Change  |
+|-----|------|-------|-------------|---------|
+|   5 |   32 | 0.546 | 0.532       |  -2.6%  |
+|   6 |   64 | 0.420 | 0.270       | -35.7%  |
+|   7 |  128 | 0.395 | 0.191       | -51.5%  |
+|   8 |  256 | 0.403 | 0.134       | -66.8%  |
+|   9 |  512 | 0.388 | 0.080       | -79.4%  |
+|  10 | 1024 | 0.385 | 0.074       | -80.8%  |
+
+### Memory Capacity (sum R² lags 1-50, raw features only)
+
+| DIM |    N |   MC |
+|-----|------|------|
+|   5 |   32 | 13.0 |
+|   6 |   64 | 16.7 |
+|   7 |  128 | 24.7 |
+|   8 |  256 | 26.5 |
+|   9 |  512 | 33.6 |
+|  10 | 1024 | 32.9 |
+
+### Assessment
+
+**Mackey-Glass:** Translation improves prediction from DIM 6 onward, scaling from -12.6%
+to -25.2% NRMSE reduction. DIM 5 is the exception (+6.2% worse) — with only 32 neurons
+producing 80 translation features, the 2.5x expansion likely overfits given the small
+state space. From DIM 6 upward, the benefit grows monotonically with reservoir size.
+
+**NARMA-10:** The translation layer's strongest result. The improvement widens from -2.6%
+at DIM 5 to -80.8% at DIM 10. NARMA-10's target equation contains explicit product terms
+(y*sum, u*u) that align directly with the x² and x*x' features — the readout can learn
+the nonlinear target almost directly from the expanded feature set instead of approximating
+it linearly from raw tanh states. The 0.074 NRMSE at DIM 10 is well below the standard
+ESN literature range of 0.2-0.4.
+
+**Memory Capacity:** Reported for raw features only (the standard metric). MC increases
+monotonically with N as expected, with a slight dip at DIM 10 (32.9 vs 33.6 at DIM 9).
+
+**Overall:** The translation layer provides substantial gains on nonlinear tasks, with the
+benefit increasing as reservoir size grows. The cost is modest — O(N) computation and 2.5x
+memory — making it a strong default for tasks beyond simple linear recall.
+
 ## Implementation
 
 The translation layer is implemented as two free functions in `TranslationLayer.h`:

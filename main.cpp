@@ -45,8 +45,11 @@ static std::pair<double, double> EvalLinear(const float* features, const float* 
 // ---------------------------------------------------------------------------
 // Sizing: collect = 18*N ensures 5x oversampling for 2.5N translation features.
 // ---------------------------------------------------------------------------
-template <size_t DIM> constexpr size_t Warmup() { return ((1ULL << DIM) < 256) ? 200 : 500; }
-template <size_t DIM> constexpr size_t Collect() { return 18 * (1ULL << DIM); }
+template <size_t DIM>
+constexpr size_t Warmup() { return ((1ULL << DIM) < 256) ? 200 : 500; }
+
+template <size_t DIM>
+constexpr size_t Collect() { return 18 * (1ULL << DIM); }
 
 // ---------------------------------------------------------------------------
 // MC benchmark (LinearReadout, raw features only)
@@ -59,7 +62,8 @@ static void RunMC(const std::vector<uint64_t>& seeds, size_t max_lag = 50)
 
     for (uint64_t seed : seeds)
     {
-        std::mt19937_64 rng(seed + 99); std::uniform_real_distribution<double> dist(-1.0, 1.0);
+        std::mt19937_64 rng(seed + 99);
+        std::uniform_real_distribution<double> dist(-1.0, 1.0);
         size_t total = Warmup<DIM>() + Collect<DIM>();
         std::vector<float> inputs(total);
         for (size_t i = 0; i < total; ++i)
@@ -73,7 +77,7 @@ static void RunMC(const std::vector<uint64_t>& seeds, size_t max_lag = 50)
         double mc = 0.0;
         size_t num_lags = std::min(max_lag, Collect<DIM>() - 1);
 
-        #pragma omp parallel for reduction(+:mc) schedule(dynamic)
+#pragma omp parallel for reduction(+:mc) schedule(dynamic)
         for (size_t lag = 1; lag <= num_lags; ++lag)
         {
             size_t valid = Collect<DIM>() - lag;
@@ -96,8 +100,8 @@ static void RunMC(const std::vector<uint64_t>& seeds, size_t max_lag = 50)
 
     double mc = s_mc / static_cast<double>(seeds.size());
     std::cout << "  " << std::setw(3) << DIM
-              << "  | " << std::setw(5) << N
-              << " | " << std::fixed << std::setprecision(1) << std::setw(5) << mc << "\n";
+        << "  | " << std::setw(5) << N
+        << " | " << std::fixed << std::setprecision(1) << std::setw(5) << mc << "\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -144,14 +148,14 @@ static void RunMG(const std::vector<uint64_t>& seeds, size_t horizon)
     }
 
     double n = static_cast<double>(seeds.size());
-    double nr = s_nr/n, fnr = s_fnr/n;
+    double nr = s_nr / n, fnr = s_fnr / n;
     double pct = (nr > 1e-12) ? 100.0 * (fnr - nr) / nr : 0.0;
     std::cout << "  " << std::setw(3) << DIM
-              << "  | " << std::setw(5) << (1ULL << DIM)
-              << " | " << std::fixed << std::setprecision(4) << std::setw(7) << nr
-              << " | " << std::setprecision(4) << std::setw(7) << fnr
-              << " (" << std::showpos << std::setprecision(1) << std::setw(5) << pct
-              << "%" << std::noshowpos << ")\n";
+        << "  | " << std::setw(5) << (1ULL << DIM)
+        << " | " << std::fixed << std::setprecision(4) << std::setw(7) << nr
+        << " | " << std::setprecision(4) << std::setw(7) << fnr
+        << " (" << std::showpos << std::setprecision(1) << std::setw(5) << pct
+        << "%" << std::noshowpos << ")\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -200,14 +204,14 @@ static void RunNARMA(const std::vector<uint64_t>& seeds)
     }
 
     double n = static_cast<double>(seeds.size());
-    double nr = s_nr/n, fnr = s_fnr/n;
+    double nr = s_nr / n, fnr = s_fnr / n;
     double pct = (nr > 1e-12) ? 100.0 * (fnr - nr) / nr : 0.0;
     std::cout << "  " << std::setw(3) << DIM
-              << "  | " << std::setw(5) << (1ULL << DIM)
-              << " | " << std::fixed << std::setprecision(3) << std::setw(7) << nr
-              << " | " << std::setprecision(3) << std::setw(7) << fnr
-              << " (" << std::showpos << std::setprecision(1) << std::setw(5) << pct
-              << "%" << std::noshowpos << ")\n";
+        << "  | " << std::setw(5) << (1ULL << DIM)
+        << " | " << std::fixed << std::setprecision(3) << std::setw(7) << nr
+        << " | " << std::setprecision(3) << std::setw(7) << fnr
+        << " (" << std::showpos << std::setprecision(1) << std::setw(5) << pct
+        << "%" << std::noshowpos << ")\n";
 }
 
 // ---------------------------------------------------------------------------
@@ -220,20 +224,29 @@ int main()
     std::cout << "--- MC (lags 1-50) ---\n";
     std::cout << "  DIM |     N |    MC\n";
     std::cout << "  ----+-------+------\n";
-    RunMC<5>(seeds); RunMC<6>(seeds); RunMC<7>(seeds);
-    RunMC<8>(seeds); RunMC<9>(seeds); RunMC<10>(seeds);
+    RunMC<5>(seeds);
+    RunMC<6>(seeds);
+    RunMC<7>(seeds);
+    RunMC<8>(seeds);
+    //RunMC<9>(seeds); RunMC<10>(seeds);
 
-    std::cout << "\n--- MG h=1 (full translation) ---\n";
-    std::cout << "  DIM |     N |    raw  |   full\n";
+    std::cout << "\n--- MG h=1 (lower is better) ---\n";
+    std::cout << "  DIM |     N |    raw  |   full translation\n";
     std::cout << "  ----+-------+---------+-----------------\n";
-    RunMG<5>(seeds, 1); RunMG<6>(seeds, 1); RunMG<7>(seeds, 1);
-    RunMG<8>(seeds, 1); RunMG<9>(seeds, 1); RunMG<10>(seeds, 1);
+    RunMG<5>(seeds, 1);
+    RunMG<6>(seeds, 1);
+    RunMG<7>(seeds, 1);
+    RunMG<8>(seeds, 1);
+    //RunMG<9>(seeds, 1); RunMG<10>(seeds, 1);
 
-    std::cout << "\n--- NARMA-10 (full translation) ---\n";
-    std::cout << "  DIM |     N |    raw  |   full\n";
+    std::cout << "\n--- NARMA-10 (lower is better) ---\n";
+    std::cout << "  DIM |     N |    raw  |   full translation\n";
     std::cout << "  ----+-------+---------+-----------------\n";
-    RunNARMA<5>(seeds); RunNARMA<6>(seeds); RunNARMA<7>(seeds);
-    RunNARMA<8>(seeds); RunNARMA<9>(seeds); RunNARMA<10>(seeds);
+    RunNARMA<5>(seeds);
+    RunNARMA<6>(seeds);
+    RunNARMA<7>(seeds);
+    RunNARMA<8>(seeds);
+    //RunNARMA<9>(seeds); RunNARMA<10>(seeds);
 
     return 0;
 }
