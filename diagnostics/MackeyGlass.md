@@ -1,49 +1,74 @@
-# MackeyGlass Results
+# Mackey-Glass Chaotic Time Series Prediction
 
-## What is Mackey-Glass?
+## What this diagnostic measures
 
-The Mackey-Glass equation is a delay differential equation (tau=17, n=10) that produces
-low-dimensional deterministic chaos. It is the most widely used benchmark for echo-state
-networks because it tests the reservoir's ability to model a nonlinear dynamical system
-from its time series alone.
+The Mackey-Glass equation is a delay differential equation that produces
+low-dimensional deterministic chaos:
 
-The task is one-step-ahead prediction: given x(t), predict x(t+1). The reservoir receives
-the normalized series as input and must learn the underlying dynamics well enough to
-extrapolate one step into the future. NRMSE (Normalized Root Mean Squared Error) measures
-how closely the prediction matches reality, normalized by the target's standard deviation.
+    dx/dt = 0.2 * x(t-17) / (1 + x(t-17)^10) - 0.1 * x(t)
 
-Standard ESN results on MG h=1 range from 0.01 to 0.05 NRMSE. Lower is better.
+With delay tau=17, the system is aperiodic but deterministic — the same
+initial conditions always produce the same trajectory, but the trajectory
+never repeats. This makes it the most widely used benchmark for echo-state
+networks: it tests whether the reservoir can learn complex nonlinear
+dynamics from the time series alone.
 
----
+**The task:** given x(t), predict x(t+1). The reservoir receives the
+normalized series as input and must learn the underlying dynamics well
+enough to extrapolate one step into the future.
 
-Run: 2026-03-23 | LinearReadout | 3-seed avg {42,1042,2042} | Raw vs full translation (2.5N)
-Alpha: 1.0 | Leak: 1.0 | SR: per-DIM default | Input scaling: per-DIM default
-Horizon: 1 (one-step-ahead) | Warmup: 200 (DIM 5-7) / 500 (DIM 8-10) | Collect: 18*N
+**The metric:** NRMSE (Normalized Root Mean Squared Error) = RMSE / std(targets).
+A value of 1.0 means the model predicts no better than the mean; 0.0 is
+perfect. Standard ESN results on MG h=1 range from 0.01 to 0.05.
 
-## Results (NRMSE, lower is better)
+## Why this benchmark matters
 
-| DIM | N    | Raw    | Full Translation | Delta  |
+Mackey-Glass is the "hello world" of reservoir computing benchmarks. It
+tests the reservoir's core capability: tracking a nonlinear dynamical
+system from its time series. Unlike NARMA-10, it doesn't require deep
+memory (the delay is only 17 steps), so it primarily measures the
+reservoir's ability to reconstruct the state space of a chaotic attractor.
+
+The raw vs. translation comparison reveals how much the tanh bottleneck
+limits the linear readout. At larger DIM, the translation layer's
+quadratic features (x², x*x') give the readout access to state-space
+interactions that are invisible in the raw tanh outputs.
+
+## How it works
+
+1. Generate a Mackey-Glass time series (Euler integration, dt=1).
+2. Normalize to [-1, +1] and split into warmup + collect.
+3. For each of 3 seeds {42, 1042, 2042}:
+   - Run with raw features (N states, Raw-optimized SR/input scaling).
+   - Run with translation features (2.5N, Translation-optimized defaults).
+   - Train the selected readout (Ridge or Linear) on 70%, test on 30%.
+4. Report 3-seed average NRMSE for raw and translation, plus % change.
+
+## Sample results
+
+Run with Ridge Readout, 3-seed average:
+
+| DIM | N    | Raw    | Full Translation | Change |
 |-----|------|--------|------------------|--------|
-| 5   | 32   | 0.0155 | 0.0155           | -0.0%  |
-| 6   | 64   | 0.0105 | 0.0108           | +2.4%  |
-| 7   | 128  | 0.0072 | 0.0050           | -30.4% |
-| 8   | 256  | 0.0063 | 0.0039           | -38.3% |
-| 9   | 512  | 0.0039 | 0.0019           | -50.2% |
-| 10  | 1024 | 0.0027 | 0.0013           | -52.0% |
+| 5   | 32   | 0.0174 | 0.0141           | -18.8% |
+| 6   | 64   | 0.0106 | 0.0074           | -29.7% |
+| 7   | 128  | 0.0062 | 0.0045           | -28.1% |
+| 8   | 256  | 0.0060 | 0.0039           | -35.1% |
 
-Standard ESN NRMSE range: 0.01-0.05 (lower is better).
+## What to look for
 
-## Findings
+- **Translation improvement scales with DIM.** Small reservoirs (DIM 5)
+  see modest gains; large reservoirs (DIM 8+) see 30-50%+ improvement
+  because there are enough neurons to support meaningful quadratic features.
 
-- **Full translation layer gives 30-52% NRMSE improvement at DIM 7-10.** The x² and
-  x*x' features break through the tanh nonlinear encoding bottleneck, giving the linear
-  readout access to quadratic interactions in the state space.
-- **DIM 5-6 see no benefit from translation.** At small reservoir sizes, the additional
-  features (80 or 160 vs 32 or 64) don't provide useful information — the reservoir
-  state is too low-dimensional for quadratic products to help, and the increased feature
-  count may slightly overfit.
-- **All DIM values beat the standard ESN range** (0.01-0.05) even with raw features.
-  With full translation at DIM 10, NRMSE of 0.0013 is an order of magnitude better than
-  the typical published baseline.
-- **NRMSE improves monotonically with DIM.** Each DIM step roughly halves the error.
-  DIM=10 with translation (0.0013) is 12x better than DIM=5 raw (0.0155).
+- **All DIM values beat the standard ESN range** (0.01-0.05) even with
+  raw features. The hypercube topology is efficient at encoding chaotic
+  dynamics.
+
+- **NRMSE improves monotonically with DIM.** More neurons = more state
+  dimensions = better reconstruction of the chaotic attractor.
+
+- **Ridge vs. Linear readout.** Ridge regression typically outperforms
+  LinearReadout (SGD) on this benchmark because the closed-form solution
+  finds the true optimum. The difference is larger at higher DIM where
+  the feature space is bigger.
