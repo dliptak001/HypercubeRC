@@ -64,8 +64,7 @@ int main(int argc, char* argv[])
     std::cout << "learns the input-to-output mapping entirely from reservoir dynamics.\n\n";
     std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
               << " (" << (use_translation ? "translation" : "raw") << ")"
-              << "  Horizon=" << horizon << "\n";
-    std::cout << "Usage: " << argv[0] << " [raw|translation]\n\n";
+              << "  Horizon=" << horizon << "\n\n";
 
     // --- Step 1: Generate a sine wave input signal ---
     // The reservoir will learn to predict the next value of this signal.

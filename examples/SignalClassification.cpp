@@ -104,8 +104,7 @@ int main(int argc, char* argv[])
     std::cout << "Each has a distinct frequency and dynamic signature.\n\n";
     std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
               << " (" << (use_translation ? "translation" : "raw") << ")"
-              << "  Cycles=" << num_cycles << "  Total=" << collect << " steps\n";
-    std::cout << "Usage: " << argv[0] << " [raw|translation]\n\n";
+              << "  Cycles=" << num_cycles << "  Total=" << collect << " steps\n\n";
 
     // --- Step 1: Generate the input signal and labels ---
     // Alternating blocks with per-block phase tracking.

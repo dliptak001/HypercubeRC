@@ -132,8 +132,7 @@ int main(int argc, char* argv[])
 
     std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
               << " (" << (use_translation ? "translation" : "raw") << ")"
-              << "  Threshold=" << anomaly_threshold << "x baseline\n";
-    std::cout << "Usage: " << argv[0] << " [raw|translation]\n\n";
+              << "  Threshold=" << anomaly_threshold << "x baseline\n\n";
 
     // =================================================================
     // PHASE 1: PRIME on normal operation
