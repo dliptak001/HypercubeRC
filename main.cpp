@@ -215,9 +215,19 @@ int main()
 {
     const std::vector<uint64_t> seeds = {42, 1042, 2042};
 
-    std::cout << "=== Full Benchmark Suite (LinearReadout, 3-seed avg) ===\n\n";
+    std::cout << "=== HypercubeRC Benchmark Suite ===\n\n";
+    std::cout << "Reservoir computing on a hypercube graph. A fixed random reservoir\n";
+    std::cout << "transforms input into a rich state vector; a linear readout learns\n";
+    std::cout << "the target mapping from those states. All results are 3-seed averages.\n\n";
+    std::cout << "  DIM  -- hypercube dimension; the reservoir has N = 2^DIM neurons\n";
+    std::cout << "  raw  -- readout uses N raw reservoir states\n";
+    std::cout << "  full -- readout uses 2.5N features after translation (x, x^2, x*x')\n";
+    std::cout << "          the extra nonlinear terms help the linear readout decode\n";
+    std::cout << "          information that tanh folds into the state vector\n\n";
 
-    std::cout << "--- MC (lags 1-50) ---\n";
+    std::cout << "--- Memory Capacity (lags 1-50) ---\n";
+    std::cout << "How many past inputs can the reservoir reconstruct? MC = sum of R^2\n";
+    std::cout << "over lags 1-50. Higher is better. Theoretical max = N.\n\n";
     std::cout << "  DIM |     N |    MC\n";
     std::cout << "  ----+-------+------\n";
     RunMC<5>(seeds);
@@ -226,7 +236,9 @@ int main()
     RunMC<8>(seeds);
     //RunMC<9>(seeds); RunMC<10>(seeds);
 
-    std::cout << "\n--- MG h=1 (lower is better) ---\n";
+    std::cout << "\n--- Mackey-Glass h=1 (NRMSE, lower is better) ---\n";
+    std::cout << "One-step prediction of a chaotic time series. Tests how well the\n";
+    std::cout << "reservoir tracks complex, deterministic dynamics.\n\n";
     std::cout << "  DIM |     N |    raw  |   full translation\n";
     std::cout << "  ----+-------+---------+-----------------\n";
     RunMG<5>(seeds, 1);
@@ -235,7 +247,10 @@ int main()
     RunMG<8>(seeds, 1);
     //RunMG<9>(seeds, 1); RunMG<10>(seeds, 1);
 
-    std::cout << "\n--- NARMA-10 (lower is better) ---\n";
+    std::cout << "\n--- NARMA-10 (NRMSE, lower is better) ---\n";
+    std::cout << "Nonlinear autoregressive benchmark requiring both memory (10-step\n";
+    std::cout << "history) and nonlinear computation (product terms). This is where\n";
+    std::cout << "the translation layer has the biggest impact.\n\n";
     std::cout << "  DIM |     N |    raw  |   full translation\n";
     std::cout << "  ----+-------+---------+-----------------\n";
     RunNARMA<5>(seeds);
