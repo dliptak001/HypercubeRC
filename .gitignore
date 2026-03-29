@@ -20,3 +20,4 @@ Thumbs.db
 # Claude Code (development only)
 .claude/
 CLAUDE.md
+how_to_build.md
