@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include "../ESN.h"
+#include "../Reservoir.h"
 #include "../TranslationLayer.h"
 #include "../SignalGenerators.h"
 
@@ -44,12 +45,6 @@ public:
             auto series = GenerateMackeyGlass(warmup + collect + prediction_horizon_ + 20);
             Normalize(series);
 
-            ESN<DIM> esn(seed, ReadoutType::Linear);
-            esn.Warmup(series.data(), warmup);
-            esn.Run(series.data() + warmup, collect);
-
-            const float* states = esn.States();
-
             std::vector<float> targets(collect);
             for (size_t t = 0; t < collect; ++t)
                 targets[t] = series[warmup + t + prediction_horizon_];
@@ -57,17 +52,30 @@ public:
             size_t tr = static_cast<size_t>(collect * 0.7);
             size_t te = collect - tr;
 
-            // Raw features
-            LinearReadout lr_raw;
-            lr_raw.Train(states, targets.data(), tr, N);
-            s_nrmse_raw += ComputeNRMSE(lr_raw, states + tr * N, targets.data() + tr, te, N);
+            // Raw features — raw-optimized defaults
+            {
+                ESN<DIM> esn(seed, ReadoutType::Linear);
+                esn.Warmup(series.data(), warmup);
+                esn.Run(series.data() + warmup, collect);
+                LinearReadout lr_raw;
+                lr_raw.Train(esn.States(), targets.data(), tr, N);
+                s_nrmse_raw += ComputeNRMSE(lr_raw, esn.States() + tr * N,
+                                              targets.data() + tr, te, N);
+            }
 
-            // Full translation
-            auto translated = TranslationTransform<DIM>(states, collect);
-            LinearReadout lr_full;
-            lr_full.Train(translated.data(), targets.data(), tr, FEATURES);
-            s_nrmse_full += ComputeNRMSE(lr_full, translated.data() + tr * FEATURES,
-                                          targets.data() + tr, te, FEATURES);
+            // Full translation — translation-optimized defaults
+            {
+                float inp = Reservoir<DIM>::TranslationInputScaling();
+                ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f,
+                             Reservoir<DIM>::TranslationSpectralRadius(), &inp);
+                esn.Warmup(series.data(), warmup);
+                esn.Run(series.data() + warmup, collect);
+                auto translated = TranslationTransform<DIM>(esn.States(), collect);
+                LinearReadout lr_full;
+                lr_full.Train(translated.data(), targets.data(), tr, FEATURES);
+                s_nrmse_full += ComputeNRMSE(lr_full, translated.data() + tr * FEATURES,
+                                              targets.data() + tr, te, FEATURES);
+            }
         }
 
         double n = static_cast<double>(Seeds().size());

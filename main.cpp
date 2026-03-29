@@ -24,6 +24,7 @@
 #include <vector>
 #include <cmath>
 #include <random>
+#include <omp.h>
 #include "ESN.h"
 #include "TranslationLayer.h"
 #include "SignalGenerators.h"
@@ -70,7 +71,10 @@ static void RunMC(const std::vector<uint64_t>& seeds, size_t max_lag = 50)
 
         const float* st = esn.States();
         double mc = 0.0;
-        for (size_t lag = 1; lag <= max_lag && lag < Collect<DIM>(); ++lag)
+        size_t num_lags = std::min(max_lag, Collect<DIM>() - 1);
+
+        #pragma omp parallel for reduction(+:mc) schedule(dynamic)
+        for (size_t lag = 1; lag <= num_lags; ++lag)
         {
             size_t valid = Collect<DIM>() - lag;
             std::vector<float> tgt(valid);
@@ -113,22 +117,30 @@ static void RunMG(const std::vector<uint64_t>& seeds, size_t horizon)
         auto series = GenerateMackeyGlass(Warmup<DIM>() + Collect<DIM>() + 20);
         Normalize(series);
 
-        ESN<DIM> esn(seed, ReadoutType::Linear);
-        esn.Warmup(series.data(), Warmup<DIM>());
-        esn.Run(series.data() + Warmup<DIM>(), collect);
-
-        const float* st = esn.States();
         std::vector<float> tgt(collect);
         for (size_t t = 0; t < collect; ++t) tgt[t] = series[Warmup<DIM>() + t + horizon];
-
         size_t tr = static_cast<size_t>(collect * 0.7), te = collect - tr;
 
-        auto [nr, _r] = EvalLinear(st, tgt.data(), tr, te, N);
-        s_nr += nr;
+        // Raw features — raw-optimized defaults
+        {
+            ESN<DIM> esn(seed, ReadoutType::Linear);
+            esn.Warmup(series.data(), Warmup<DIM>());
+            esn.Run(series.data() + Warmup<DIM>(), collect);
+            auto [nr, _r] = EvalLinear(esn.States(), tgt.data(), tr, te, N);
+            s_nr += nr;
+        }
 
-        auto full = TranslationTransform<DIM>(st, collect);
-        auto [fnr, _f] = EvalLinear(full.data(), tgt.data(), tr, te, FULL);
-        s_fnr += fnr;
+        // Translation features — translation-optimized defaults
+        {
+            float inp = Reservoir<DIM>::TranslationInputScaling();
+            ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f,
+                         Reservoir<DIM>::TranslationSpectralRadius(), &inp);
+            esn.Warmup(series.data(), Warmup<DIM>());
+            esn.Run(series.data() + Warmup<DIM>(), collect);
+            auto full = TranslationTransform<DIM>(esn.States(), collect);
+            auto [fnr, _f] = EvalLinear(full.data(), tgt.data(), tr, te, FULL);
+            s_fnr += fnr;
+        }
     }
 
     double n = static_cast<double>(seeds.size());
@@ -161,22 +173,30 @@ static void RunNARMA(const std::vector<uint64_t>& seeds)
         std::vector<float> ri(Warmup<DIM>() + collect);
         for (size_t t = 0; t < ri.size(); ++t) ri[t] = u[t] * 4.0f - 1.0f;
 
-        ESN<DIM> esn(seed, ReadoutType::Linear);
-        esn.Warmup(ri.data(), Warmup<DIM>());
-        esn.Run(ri.data() + Warmup<DIM>(), collect);
-
-        const float* st = esn.States();
         std::vector<float> tgt(collect);
         for (size_t t = 0; t < collect; ++t) tgt[t] = y[Warmup<DIM>() + t];
-
         size_t tr = static_cast<size_t>(collect * 0.7), te = collect - tr;
 
-        auto [nr, _r] = EvalLinear(st, tgt.data(), tr, te, N);
-        s_nr += nr;
+        // Raw features — raw-optimized defaults
+        {
+            ESN<DIM> esn(seed, ReadoutType::Linear);
+            esn.Warmup(ri.data(), Warmup<DIM>());
+            esn.Run(ri.data() + Warmup<DIM>(), collect);
+            auto [nr, _r] = EvalLinear(esn.States(), tgt.data(), tr, te, N);
+            s_nr += nr;
+        }
 
-        auto full = TranslationTransform<DIM>(st, collect);
-        auto [fnr, _f] = EvalLinear(full.data(), tgt.data(), tr, te, FULL);
-        s_fnr += fnr;
+        // Translation features — translation-optimized defaults
+        {
+            float inp = Reservoir<DIM>::TranslationInputScaling();
+            ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f,
+                         Reservoir<DIM>::TranslationSpectralRadius(), &inp);
+            esn.Warmup(ri.data(), Warmup<DIM>());
+            esn.Run(ri.data() + Warmup<DIM>(), collect);
+            auto full = TranslationTransform<DIM>(esn.States(), collect);
+            auto [fnr, _f] = EvalLinear(full.data(), tgt.data(), tr, te, FULL);
+            s_fnr += fnr;
+        }
     }
 
     double n = static_cast<double>(seeds.size());

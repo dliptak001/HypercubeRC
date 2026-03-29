@@ -8,28 +8,47 @@
 /// The pipeline:
 ///   1. Generate input signal (sine wave)
 ///   2. Create ESN and drive it (warmup + collect)
-///   3. Apply translation layer (N -> 2.5N features)
-///   4. Train LinearReadout on translated features
+///   3. Optionally apply translation layer (N -> 2.5N features)
+///   4. Train LinearReadout on features
 ///   5. Evaluate prediction quality on held-out test set
 ///
 /// To build and run:
 ///   cmake -B build -DCMAKE_BUILD_TYPE=Release
 ///   cmake --build build
-///   ./build/BasicPrediction
+///   ./build/BasicPrediction            (default: translation features)
+///   ./build/BasicPrediction raw        (raw N features)
+///   ./build/BasicPrediction translation (explicit translation)
 
 #include <iostream>
 #include <iomanip>
 #include <vector>
 #include <cmath>
+#include <cstring>
 #include "ESN.h"
+#include "Reservoir.h"
 #include "TranslationLayer.h"
 
-int main()
+int main(int argc, char* argv[])
 {
+    // --- Parse feature mode ---
+    bool use_translation = false;  // default
+    if (argc > 1)
+    {
+        if (std::strcmp(argv[1], "raw") == 0)
+            use_translation = false;
+        else if (std::strcmp(argv[1], "translation") == 0)
+            use_translation = true;
+        else
+        {
+            std::cerr << "Usage: " << argv[0] << " [raw|translation]\n";
+            return 1;
+        }
+    }
+
     // --- Configuration ---
     constexpr size_t DIM = 7;                // Hypercube dimension (2^7 = 128 neurons)
     constexpr size_t N = 1ULL << DIM;        // Reservoir size
-    constexpr size_t FEATURES = TranslationFeatureCount<DIM>();  // 2.5N = 320
+    constexpr size_t FEATURES_TRANS = TranslationFeatureCount<DIM>();  // 2.5N = 320
 
     constexpr size_t warmup = 200;           // Steps to wash out initial transients
     constexpr size_t collect = 2000;         // Steps to collect training + test data
@@ -37,9 +56,11 @@ int main()
     constexpr double train_fraction = 0.7;   // 70% train, 30% test
 
     const uint64_t seed = 42;               // Reservoir random seed (deterministic)
+    const size_t num_features = use_translation ? FEATURES_TRANS : N;
 
     std::cout << "=== HypercubeRC: Basic Sine Wave Prediction ===\n\n";
-    std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << FEATURES << "\n";
+    std::cout << "Mode: " << (use_translation ? "translation (2.5N)" : "raw (N)") << "\n";
+    std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << num_features << "\n";
     std::cout << "Warmup=" << warmup << "  Collect=" << collect
               << "  Horizon=" << horizon << "\n\n";
 
@@ -53,22 +74,43 @@ int main()
         signal[t] = std::sin(0.1f * static_cast<float>(t));  // Amplitude 1.0, stays in [-1, 1]
 
     // --- Step 2: Create ESN and drive the reservoir ---
-    ESN<DIM> esn(seed);
+    std::unique_ptr<ESN<DIM>> esn;
+    if (use_translation)
+    {
+        // Translation-optimized defaults
+        float inp = Reservoir<DIM>::TranslationInputScaling();
+        esn = std::make_unique<ESN<DIM>>(seed, ReadoutType::Linear, 1.0f,
+                                          Reservoir<DIM>::TranslationSpectralRadius(), &inp);
+    }
+    else
+    {
+        // Raw-optimized defaults
+        esn = std::make_unique<ESN<DIM>>(seed, ReadoutType::Linear);
+    }
 
     // Warmup: drive the reservoir without recording, to wash out initial conditions.
     // After warmup, the reservoir state reflects the input history.
-    esn.Warmup(signal.data(), warmup);
+    esn->Warmup(signal.data(), warmup);
 
     // Run: drive and record the N-dimensional state at each timestep.
-    esn.Run(signal.data() + warmup, collect);
+    esn->Run(signal.data() + warmup, collect);
 
     std::cout << "Reservoir driven: " << collect << " states collected.\n";
 
-    // --- Step 3: Apply translation layer ---
-    // Expand N raw states into 2.5N features (x, x², x*x') for the readout.
-    auto features = TranslationTransform<DIM>(esn.States(), collect);
-
-    std::cout << "Translation applied: " << N << " -> " << FEATURES << " features per step.\n";
+    // --- Step 3: Get features (raw or translated) ---
+    const float* features;
+    std::vector<float> translated;
+    if (use_translation)
+    {
+        translated = TranslationTransform<DIM>(esn->States(), collect);
+        features = translated.data();
+        std::cout << "Translation applied: " << N << " -> " << num_features << " features per step.\n";
+    }
+    else
+    {
+        features = esn->States();
+        std::cout << "Using raw reservoir states: " << N << " features per step.\n";
+    }
 
     // --- Step 4: Build targets and train the readout ---
     // Target: the signal value `horizon` steps into the future.
@@ -80,12 +122,12 @@ int main()
     size_t test_size = collect - train_size;
 
     LinearReadout readout;
-    readout.Train(features.data(), targets.data(), train_size, FEATURES);
+    readout.Train(features, targets.data(), train_size, num_features);
 
     std::cout << "Readout trained on " << train_size << " samples.\n\n";
 
     // --- Step 5: Evaluate on the test set ---
-    const float* test_features = features.data() + train_size * FEATURES;
+    const float* test_features = features + train_size * num_features;
     const float* test_targets = targets.data() + train_size;
 
     double r2 = readout.R2(test_features, test_targets, test_size);
@@ -99,7 +141,7 @@ int main()
     for (size_t i = 0; i < test_size; ++i)
     {
         double y = test_targets[i];
-        double yh = readout.PredictRaw(test_features + i * FEATURES);
+        double yh = readout.PredictRaw(test_features + i * num_features);
         var += (y - mean) * (y - mean);
         mse += (y - yh) * (y - yh);
     }
@@ -116,7 +158,7 @@ int main()
     for (size_t i = 0; i < 10; ++i)
     {
         float actual = test_targets[i];
-        float predicted = readout.PredictRaw(test_features + i * FEATURES);
+        float predicted = readout.PredictRaw(test_features + i * num_features);
         float error = actual - predicted;
         std::cout << "  " << std::setw(5) << (train_size + i)
                   << " | " << std::showpos << std::setprecision(4) << std::setw(8) << actual

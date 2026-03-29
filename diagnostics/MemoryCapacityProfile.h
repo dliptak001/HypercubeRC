@@ -6,6 +6,7 @@
 #include <random>
 #include <cstddef>
 #include "../ESN.h"
+#include "../Reservoir.h"
 #include "../TranslationLayer.h"
 
 /// @brief Diagnostic: Memory capacity profile across lags 1-50.
@@ -51,7 +52,9 @@ public:
             for (size_t i = 0; i < total; ++i)
                 inputs[i] = static_cast<float>(dist(rng));
 
-            ESN<DIM> esn(seed, ReadoutType::Linear);
+            float inp = Reservoir<DIM>::TranslationInputScaling();
+            ESN<DIM> esn(seed, ReadoutType::Linear, 1.0f,
+                         Reservoir<DIM>::TranslationSpectralRadius(), &inp);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
 

@@ -150,8 +150,10 @@ should be large enough for a good fit: at least 18*N samples (the project standa
 ideally more if the signal is noisy.
 
 ```cpp
-// Drive reservoir through historical data
-ESN<8> esn(seed);
+// Drive reservoir through historical data (translation-optimized defaults)
+float inp = Reservoir<8>::TranslationInputScaling();
+ESN<8> esn(seed, ReadoutType::Linear, 1.0f,
+           Reservoir<8>::TranslationSpectralRadius(), &inp);
 esn.Warmup(historical_inputs, warmup_steps);
 esn.Run(historical_inputs + warmup_steps, prime_steps);
 

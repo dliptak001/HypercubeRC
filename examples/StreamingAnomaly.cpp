@@ -14,14 +14,19 @@
 /// To build and run:
 ///   cmake -B build -DCMAKE_BUILD_TYPE=Release
 ///   cmake --build build
-///   ./build/StreamingAnomaly
+///   ./build/StreamingAnomaly              (default: raw features)
+///   ./build/StreamingAnomaly raw          (explicit raw)
+///   ./build/StreamingAnomaly translation  (translation 2.5N features)
 
 #include <iostream>
 #include <iomanip>
 #include <vector>
 #include <cmath>
+#include <cstring>
 #include <random>
+#include <memory>
 #include "ESN.h"
+#include "Reservoir.h"
 #include "TranslationLayer.h"
 
 // --- Signal generation ---
@@ -52,22 +57,35 @@ static double ComputeRMSE(const float* pred, const float* targets, size_t n)
 }
 
 // Predict a batch using the readout, return RMSE
-template <size_t DIM>
 static double PredictBatch(const LinearReadout& readout, const float* features,
-                            const float* targets, size_t n)
+                            const float* targets, size_t n, size_t num_features)
 {
-    constexpr size_t FEATURES = TranslationFeatureCount<DIM>();
     std::vector<float> pred(n);
     for (size_t i = 0; i < n; ++i)
-        pred[i] = readout.PredictRaw(features + i * FEATURES);
+        pred[i] = readout.PredictRaw(features + i * num_features);
     return ComputeRMSE(pred.data(), targets, n);
 }
 
-int main()
+int main(int argc, char* argv[])
 {
+    // --- Parse feature mode ---
+    bool use_translation = true;  // default
+    if (argc > 1)
+    {
+        if (std::strcmp(argv[1], "raw") == 0)
+            use_translation = false;
+        else if (std::strcmp(argv[1], "translation") == 0)
+            use_translation = true;
+        else
+        {
+            std::cerr << "Usage: " << argv[0] << " [raw|translation]\n";
+            return 1;
+        }
+    }
+
     constexpr size_t DIM = 8;
     constexpr size_t N = 1ULL << DIM;
-    constexpr size_t FEATURES = TranslationFeatureCount<DIM>();
+    constexpr size_t FEATURES_TRANS = TranslationFeatureCount<DIM>();
 
     constexpr size_t warmup = 500;
     constexpr size_t prime_steps = 4000;
@@ -82,13 +100,15 @@ int main()
 
     const uint64_t seed = 42;
     std::mt19937_64 signal_rng(seed + 777);
+    const size_t num_features = use_translation ? FEATURES_TRANS : N;
 
     std::cout << "=== HypercubeRC: Streaming Anomaly Detection ===\n\n";
+    std::cout << "Mode: " << (use_translation ? "translation (2.5N)" : "raw (N)") << "\n";
     std::cout << "Signal: 0.6*sin(t) + 0.2*sin(3t) + noise + drift\n";
     std::cout << "Normal: noise=" << normal_noise << "  drift=0.0\n";
     std::cout << "Degraded: noise=" << degraded_noise << "  drift=" << degraded_drift << "\n";
     std::cout << "Anomaly threshold: " << anomaly_threshold << "x baseline RMSE\n";
-    std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << FEATURES << "\n\n";
+    std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << num_features << "\n\n";
 
     // =================================================================
     // PHASE 1: PRIME
@@ -100,12 +120,35 @@ int main()
     GenerateProcess(prime_signal.data(), prime_signal.size(), t_global,
                      normal_noise, 0.0f, signal_rng);
 
-    ESN<DIM> esn(seed);
-    esn.Warmup(prime_signal.data(), warmup);
-    esn.Run(prime_signal.data() + warmup, prime_steps);
+    std::unique_ptr<ESN<DIM>> esn;
+    if (use_translation)
+    {
+        float inp = Reservoir<DIM>::TranslationInputScaling();
+        esn = std::make_unique<ESN<DIM>>(seed, ReadoutType::Linear, 1.0f,
+                                          Reservoir<DIM>::TranslationSpectralRadius(), &inp);
+    }
+    else
+    {
+        esn = std::make_unique<ESN<DIM>>(seed, ReadoutType::Linear);
+    }
+
+    esn->Warmup(prime_signal.data(), warmup);
+    esn->Run(prime_signal.data() + warmup, prime_steps);
     t_global += warmup + prime_steps;
 
-    auto prime_features = TranslationTransform<DIM>(esn.States(), prime_steps);
+    // Get features
+    const float* prime_feat_ptr;
+    std::vector<float> prime_translated;
+    if (use_translation)
+    {
+        prime_translated = TranslationTransform<DIM>(esn->States(), prime_steps);
+        prime_feat_ptr = prime_translated.data();
+    }
+    else
+    {
+        prime_feat_ptr = esn->States();
+    }
+
     std::vector<float> prime_targets(prime_steps);
     for (size_t t = 0; t < prime_steps; ++t)
         prime_targets[t] = prime_signal[warmup + t + 1];
@@ -114,11 +157,11 @@ int main()
     size_t test_n = prime_steps - train_n;
 
     LinearReadout readout;
-    readout.Train(prime_features.data(), prime_targets.data(), train_n, FEATURES);
+    readout.Train(prime_feat_ptr, prime_targets.data(), train_n, num_features);
 
     // Measure baseline on held-out portion (data the readout has NOT seen)
-    double baseline = PredictBatch<DIM>(readout, prime_features.data() + train_n * FEATURES,
-                                         prime_targets.data() + train_n, test_n);
+    double baseline = PredictBatch(readout, prime_feat_ptr + train_n * num_features,
+                                    prime_targets.data() + train_n, test_n, num_features);
     double threshold = baseline * anomaly_threshold;
 
     std::cout << "  Trained on " << prime_steps << " samples\n";
@@ -158,25 +201,37 @@ int main()
         }
 
         // Generate window signal
-        esn.ClearStates();
+        esn->ClearStates();
         std::vector<float> sig(window + 1);
         GenerateProcess(sig.data(), sig.size(), t_global, noise, drift, signal_rng);
 
-        esn.Run(sig.data(), window);
+        esn->Run(sig.data(), window);
         t_global += window;
 
-        auto feat = TranslationTransform<DIM>(esn.States(), window);
+        // Get features for this window
+        const float* feat_ptr;
+        std::vector<float> win_translated;
+        if (use_translation)
+        {
+            win_translated = TranslationTransform<DIM>(esn->States(), window);
+            feat_ptr = win_translated.data();
+        }
+        else
+        {
+            feat_ptr = esn->States();
+        }
+
         std::vector<float> tgt(window);
         for (size_t t = 0; t < window; ++t)
             tgt[t] = sig[t + 1];
 
         // Measure both models
-        double frozen_rmse = PredictBatch<DIM>(frozen_readout, feat.data(), tgt.data(), window);
-        double adapted_rmse = PredictBatch<DIM>(readout, feat.data(), tgt.data(), window);
+        double frozen_rmse = PredictBatch(frozen_readout, feat_ptr, tgt.data(), window, num_features);
+        double adapted_rmse = PredictBatch(readout, feat_ptr, tgt.data(), window, num_features);
 
         // Adapt the live model (low blend for gentle tracking)
         if (w > degrade_start)
-            readout.TrainIncremental(feat.data(), tgt.data(), window, FEATURES, 0.15f);
+            readout.TrainIncremental(feat_ptr, tgt.data(), window, num_features, 0.15f);
 
         // Status
         const char* status = "";
