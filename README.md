@@ -72,7 +72,7 @@ bridges this gap by expanding N raw states into 2.5N features:
 
 This is a fixed algebraic transform with no learned parameters. It gives the linear
 readout access to quadratic state interactions that would otherwise be invisible,
-improving NRMSE by 30-63% on nonlinear tasks at DIM 7-10.
+improving NRMSE by 28-83% on nonlinear tasks at DIM 7-10.
 
 See [docs/TranslationLayer.md](docs/TranslationLayer.md) for design rationale and feature details.
 
@@ -97,43 +97,51 @@ See [docs/Readout.md](docs/Readout.md) for algorithm details, selection policy, 
 
 ## Headline Results
 
-All results: 3-seed average {42, 1042, 2042}, LinearReadout, full translation layer,
-per-DIM optimized spectral radius and input scaling.
+All results: 3-seed average {42, 1042, 2042}, Ridge readout, full translation layer
+(2.5N features), per-DIM optimized spectral radius and input scaling. MC uses Linear
+readout with raw features (the standard metric).
 
 ### Mackey-Glass h=1 (chaotic time series, NRMSE, lower is better)
 
-| DIM | N    | NRMSE  | vs standard ESN (0.01-0.05) |
-|-----|------|--------|------------------------------|
-| 7   | 128  | 0.005  | 2-10x better                 |
-| 8   | 256  | 0.004  | 3-13x better                 |
-| 9   | 512  | 0.002  | 5-25x better                 |
-| 10  | 1024 | 0.001  | 10-50x better                |
+| DIM | N    | Raw    | Translation | vs standard ESN (0.01-0.05) |
+|-----|------|--------|-------------|------------------------------|
+| 5   | 32   | 0.0180 | 0.0132      | Within range                 |
+| 6   | 64   | 0.0106 | 0.0082      | Beats range                  |
+| 7   | 128  | 0.0061 | 0.0044      | 2-11x better                 |
+| 8   | 256  | 0.0061 | 0.0040      | 3-13x better                 |
+| 9   | 512  | 0.0037 | 0.0022      | 5-23x better                 |
+| 10  | 1024 | 0.0028 | 0.0015      | 7-33x better                 |
 
 ### NARMA-10 (nonlinear memory, NRMSE, lower is better)
 
-| DIM | N    | NRMSE | vs standard ESN (0.2-0.4) |
-|-----|------|-------|---------------------------|
-| 8   | 256  | 0.297 | Competitive               |
-| 9   | 512  | 0.187 | Beats range               |
-| 10  | 1024 | 0.148 | Decisively beats range    |
+| DIM | N    | Raw   | Translation | vs standard ESN (0.2-0.4) |
+|-----|------|-------|-------------|---------------------------|
+| 5   | 32   | 0.566 | 0.539       | Above range                |
+| 6   | 64   | 0.417 | 0.264       | Beats range                |
+| 7   | 128  | 0.387 | 0.176       | Beats range                |
+| 8   | 256  | 0.399 | 0.125       | Decisively beats range     |
+| 9   | 512  | 0.377 | 0.072       | 3-6x better                |
+| 10  | 1024 | 0.373 | 0.065       | 3-6x better                |
 
-### Memory Capacity (sum of R², lags 1-50)
+### Memory Capacity (sum of R², lags 1-50, Linear readout, raw features)
 
 | DIM | N    | MC   |
 |-----|------|------|
-| 7   | 128  | 12.9 |
-| 8   | 256  | 19.8 |
-| 9   | 512  | 26.1 |
-| 10  | 1024 | 30.5 |
+| 5   | 32   | 13.0 |
+| 6   | 64   | 16.7 |
+| 7   | 128  | 24.7 |
+| 8   | 256  | 26.5 |
+| 9   | 512  | 33.6 |
+| 10  | 1024 | 33.0 |
 
-Full results with per-lag profiles in [diagnostics/](diagnostics/).
+Full results across DIM 5-10 with per-lag profiles in [diagnostics/](diagnostics/).
 
 *Baseline ESN ranges are from Jaeger (2001) "The 'echo state' approach to analysing and
 training recurrent neural networks" and Rodan & Tino (2011) "Minimum complexity echo
 state networks." These represent typical results for standard random sparse ESNs with
 comparable neuron counts and linear readout on raw features. HypercubeRC's advantage
 comes primarily from the translation layer and feature standardization, which are
-topology-independent enhancements (see [docs/Comparison.md](docs/Comparison.md)).*
+topology-independent enhancements (see [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md)).*
 
 ## Why a Hypercube?
 
@@ -148,7 +156,7 @@ The hypercube's value is architectural:
 - **Deterministic structure** — same DIM always produces the same graph
 - **Hardware-friendly** — XOR addressing maps directly to gates in FPGA/ASIC
 
-See [docs/Comparison.md](docs/Comparison.md) for the full experimental comparison.
+See [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) for the full experimental comparison.
 
 ## Building and Running
 
@@ -160,15 +168,15 @@ cmake --build build
 ./build/HypercubeRC
 ```
 
-The build produces three executables:
+The build produces four executables:
 
 - **`HypercubeRC`** — Full benchmark suite (MC, Mackey-Glass, NARMA-10, DIM 5-10)
-- **`BasicPrediction`** — Minimal example: sine wave prediction in ~80 lines
-- **`StreamingAnomaly`** — Streaming anomaly detection with incremental adaptation
+- **`BasicPrediction`** — Minimal example: sine wave prediction
+- **`SignalClassification`** — Multi-class waveform recognition with confusion matrix
+- **`StreamingAnomaly`** — Streaming anomaly detection with recovery dynamics
 
-Start with `BasicPrediction` to see the pipeline end-to-end, then `StreamingAnomaly`
-for the real-world process monitoring workflow. See [examples/README.md](examples/README.md)
-for detailed descriptions and guidance on adapting them to your own data.
+Start with `BasicPrediction` to see the pipeline end-to-end. Each example has a
+companion `.md` file with a detailed walkthrough.
 
 OpenMP is used for parallelism where beneficial. The build system detects MinGW,
 GCC/Clang, and MSVC automatically.
@@ -180,15 +188,17 @@ HypercubeRC/
   Reservoir.h/cpp        Hypercube reservoir (N = 2^DIM vertices)
   ESN.h                  Pipeline wrapper: Warmup, Run, collect states
   TranslationLayer.h     Feature expansion: x + x² + x*x' (2.5N features)
-  main.cpp               Benchmark suite
+  SignalGenerators.h     Benchmark signal generators and NRMSE utility
+  main.cpp               Benchmark suite (DIM 5-10)
 
   readout/
     LinearReadout.h/cpp   SGD readout with L2 decay and streaming mode
     RidgeRegression.h/cpp Closed-form optimal readout
 
   examples/
-    BasicPrediction.cpp   Minimal sine wave prediction demo
-    StreamingAnomaly.cpp  Streaming anomaly detection with adaptation
+    BasicPrediction.cpp/md      Minimal sine wave prediction demo
+    SignalClassification.cpp/md Multi-class waveform recognition
+    StreamingAnomaly.cpp/md     Streaming anomaly detection
 
   diagnostics/
     MackeyGlass.h/md      Chaotic time series prediction
@@ -200,7 +210,7 @@ HypercubeRC/
     Reservoir.md          Reservoir architecture and parameters
     TranslationLayer.md   Translation layer design
     Readout.md            Readout algorithms and selection policy
-    Comparison.md         Hypercube vs random sparse ESN experiment
+    DoesTopologyMatter.md Hypercube vs random sparse ESN experiment
 ```
 
 ## Documentation
@@ -210,6 +220,6 @@ HypercubeRC/
 | [docs/Reservoir.md](docs/Reservoir.md) | Hypercube graph, connectivity, vertex model, step mechanics, parameters |
 | [docs/TranslationLayer.md](docs/TranslationLayer.md) | Feature expansion rationale, antipodal pairing, standardization |
 | [docs/Readout.md](docs/Readout.md) | LinearReadout and RidgeRegression algorithms, streaming mode, selection policy |
-| [docs/Comparison.md](docs/Comparison.md) | Hypercube vs random ESN: performance, timing, discussion |
+| [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) | Hypercube vs random ESN: does the topology actually matter? |
 
 Diagnostic results with educational introductions are in `diagnostics/*.md`.

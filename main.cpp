@@ -155,7 +155,8 @@ int main()
     RunMC<6>(seeds);
     RunMC<7>(seeds);
     RunMC<8>(seeds);
-    //RunMC<9>(seeds); RunMC<10>(seeds);
+    RunMC<9>(seeds);
+    RunMC<10>(seeds);
 
     std::cout << "\n--- Mackey-Glass h=1 (NRMSE, lower is better) ---\n";
     std::cout << "One-step prediction of a chaotic time series. Tests how well the\n";
@@ -166,7 +167,8 @@ int main()
     RunMG<6>(1);
     RunMG<7>(1);
     RunMG<8>(1);
-    //RunMG<9>(1); RunMG<10>(1);
+    RunMG<9>(1);
+    RunMG<10>(1);
 
     std::cout << "\n--- NARMA-10 (NRMSE, lower is better) ---\n";
     std::cout << "Nonlinear autoregressive benchmark requiring both memory (10-step\n";
@@ -178,7 +180,8 @@ int main()
     RunNARMA<6>();
     RunNARMA<7>();
     RunNARMA<8>();
-    //RunNARMA<9>(); RunNARMA<10>();
+    RunNARMA<9>();
+    RunNARMA<10>();
 
     return 0;
 }

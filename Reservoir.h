@@ -66,7 +66,6 @@ public:
     // ----- Raw-feature defaults -----
     // Jointly optimized on MG h=1 + NARMA-10 + MC, raw N-dim readout.
     // Balanced across all tasks, not single-task optimal.
-    // See docs/cascade/standalone_baselines.md for sweep data.
 
     static constexpr float RawSpectralRadius()
     {
@@ -96,7 +95,6 @@ public:
     // Jointly optimized on MG h=1 + NARMA-10 + MC, translation 2.5N readout.
     // Balanced across all tasks. Very low input scaling (0.02-0.04) —
     // translation features amplify dynamics, so less drive is needed.
-    // See docs/cascade/standalone_baselines.md for sweep data.
 
     static constexpr float TranslationSpectralRadius()
     {
