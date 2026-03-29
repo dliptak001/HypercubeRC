@@ -216,9 +216,15 @@ int main()
     const std::vector<uint64_t> seeds = {42, 1042, 2042};
 
     std::cout << "=== HypercubeRC Benchmark Suite ===\n\n";
-    std::cout << "Reservoir computing on a hypercube graph. A fixed random reservoir\n";
-    std::cout << "transforms input into a rich state vector; a linear readout learns\n";
-    std::cout << "the target mapping from those states. All results are 3-seed averages.\n\n";
+    std::cout << "HypercubeRC is a reservoir computer whose N neurons are arranged on\n";
+    std::cout << "a Boolean hypercube -- a DIM-dimensional graph where each vertex is\n";
+    std::cout << "addressed by a DIM-bit binary index, and two vertices are neighbors\n";
+    std::cout << "if their indices differ by one bit (computed by XOR, no adjacency\n";
+    std::cout << "list needed). Input and output are continuous scalar values.\n\n";
+    std::cout << "The pipeline: drive the reservoir with a scalar input signal, collect\n";
+    std::cout << "the N-dimensional state at each step, then train a linear readout to\n";
+    std::cout << "map those states to the target. The reservoir's weights are fixed --\n";
+    std::cout << "only the readout is learned. All results below are 3-seed averages.\n\n";
     std::cout << "  DIM  -- hypercube dimension; the reservoir has N = 2^DIM neurons\n";
     std::cout << "  raw  -- readout uses N raw reservoir states\n";
     std::cout << "  full -- readout uses 2.5N features after translation (x, x^2, x*x')\n";

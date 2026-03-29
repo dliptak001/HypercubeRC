@@ -1,6 +1,6 @@
 # HypercubeRC
 
-A reservoir computer with hypercube-structured connectivity.
+A reservoir computer whose N neurons are arranged on a Boolean hypercube -- a DIM-dimensional graph where each vertex is addressed by a DIM-bit binary index, and two vertices are neighbors if their indices differ by one bit. Input and output are continuous scalar values.
 
 Licensed under the [Apache License 2.0](LICENSE).
 
