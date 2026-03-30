@@ -76,9 +76,7 @@ public:
     /// @brief Create a reservoir from a fully resolved config.
     static std::unique_ptr<Reservoir> Create(const ReservoirConfig& cfg)
     {
-        return std::unique_ptr<Reservoir>(
-            new Reservoir(cfg.seed, cfg.alpha, cfg.spectral_radius,
-                          cfg.leak_rate, cfg.block_scaling));
+        return std::unique_ptr<Reservoir>(new Reservoir(cfg));
     }
 
     Reservoir(const Reservoir&) = delete;
@@ -95,9 +93,7 @@ public:
     [[nodiscard]] float GetAlpha() const { return alpha_; }
 
 private:
-    explicit Reservoir(uint64_t rng_seed, float alpha,
-                       float spectral_radius, float leak_rate,
-                       std::vector<float> block_scaling);
+    explicit Reservoir(const ReservoirConfig& cfg);
     uint64_t rng_seed_;
 
     alignas(64) float vtx_state_[N]{};

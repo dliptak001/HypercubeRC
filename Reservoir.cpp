@@ -7,17 +7,13 @@
 
 
 template <size_t DIM>
-Reservoir<DIM>::Reservoir(const uint64_t rng_seed,
-                          const float alpha,
-                          const float spectral_radius,
-                          const float leak_rate,
-                          std::vector<float> block_scaling)
-    : rng_seed_(rng_seed),
-      num_inputs_(block_scaling.size()),
-      alpha_(alpha),
-      spectral_radius_(spectral_radius),
-      leak_rate_(leak_rate),
-      block_scaling_(std::move(block_scaling))
+Reservoir<DIM>::Reservoir(const ReservoirConfig& cfg)
+    : rng_seed_(cfg.seed),
+      num_inputs_(cfg.block_scaling.size()),
+      alpha_(cfg.alpha),
+      spectral_radius_(cfg.spectral_radius),
+      leak_rate_(cfg.leak_rate),
+      block_scaling_(cfg.block_scaling)
 {
     if (alpha_ <= 0.0f)
         throw std::invalid_argument("alpha must be positive");
