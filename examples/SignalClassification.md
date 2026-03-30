@@ -69,39 +69,91 @@ Waveform blocks ──> Reservoir ──> State features ──> 4 Readouts ─�
 
 ## What to expect
 
-With DIM=7, translation features, Ridge readout:
+### Leak rate = 1.0 (full replacement)
+
+DIM=7, translation features, Ridge readout, leak_rate=1.0:
 
 | Class | Accuracy | Notes |
 |-------|----------|-------|
 | Sine | 100% | Perfectly separable |
 | Square | 100% | Perfectly separable |
-| Triangle | ~99% | Near-perfect |
-| Chirp | ~88% | Confused with Sine at low sweep frequencies |
+| Triangle | 99.3% | Near-perfect |
+| Chirp | 88.0% | Confused with Sine 9% of the time |
 
-**Overall accuracy: ~97%**
+**Overall accuracy: 96.8%**
 
-The chirp-sine confusion makes physical sense: a chirp starts at a low
-frequency similar to the sine's 0.08, so the reservoir states overlap
-during the slow-sweep portion of each chirp block.
-
-## Transition dynamics
-
-The most interesting part of the output. When the waveform switches, the
-reservoir state still reflects the previous signal. The analysis shows how
-many steps it takes to "lock on" to the new waveform:
+Transition lock-on:
 
 | Steps after switch | Accuracy |
 |--------------------|----------|
-| 0-3 | ~75% (3 of 4 carry over) |
-| 0-5 | ~75% |
-| 0-10 | ~75% |
-| 0-20 | ~76% |
-| Entire block | ~97% |
+| 0-3 | 75.0% |
+| 0-5 | 75.0% |
+| 0-10 | 75.0% |
+| 0-20 | 76.2% |
+| Entire block | 96.8% |
 
-The reservoir needs roughly 20 steps to wash out the old dynamics.
-After that, steady-state accuracy approaches 100%.
+### Leak rate = 0.6 (leaky integrator)
+
+Same configuration with leak_rate=0.6:
+
+| Class | Accuracy | Notes |
+|-------|----------|-------|
+| Sine | 99.3% | Near-perfect |
+| Square | 100% | Perfectly separable |
+| Triangle | 98.7% | Near-perfect |
+| Chirp | 96.7% | Substantially improved |
+
+**Overall accuracy: 98.7%**
+
+Transition lock-on:
+
+| Steps after switch | Accuracy |
+|--------------------|----------|
+| 0-3 | 50.0% |
+| 0-5 | 60.0% |
+| 0-10 | 80.0% |
+| 0-20 | 90.0% |
+| Entire block | 98.7% |
+
+### Comparison
+
+| Metric | leak=1.0 | leak=0.6 | Change |
+|--------|----------|----------|--------|
+| Overall accuracy | 96.8% | 98.7% | +2.0% |
+| Chirp accuracy | 88.0% | 96.7% | +8.7% |
+| Lock-on @ 3 steps | 75.0% | 50.0% | Slower |
+| Lock-on @ 20 steps | 76.2% | 90.0% | Catches up |
+
+### Effect of leak rate on classification
+
+The leaky integrator improves steady-state classification but slows
+transition response — a direct tradeoff between accuracy and agility.
+
+**Better chirp-sine separation.** At leak=1.0, chirp is confused with
+sine 9% of the time because a chirp starts at a low frequency similar
+to sine's 0.08. At leak=0.6, the neurons retain recent frequency history,
+so the readout can distinguish chirp's accelerating sweep from sine's
+constant frequency. Chirp accuracy jumps from 88% to 97%.
+
+**Slower lock-on after transitions.** When the waveform switches, the
+leaky neurons retain state from the previous signal. At leak=1.0, the
+reservoir immediately overwrites its state — lock-on is 75% by step 3.
+At leak=0.6, old state persists longer — lock-on starts at 50% but
+climbs through 80% by step 10 as the new signal gradually overwrites
+the old.
+
+**The tradeoff is task-dependent.** For applications where classification
+accuracy matters more than transition speed (long blocks, stable signals),
+lower leak rates win. For applications where rapid switching is critical
+(short blocks, fast-changing inputs), higher leak rates are better. A
+multi-timescale reservoir could provide both: fast neurons for quick
+lock-on and slow neurons for better steady-state discrimination.
 
 ## Things to try
+
+- **Leak rate.** Set `cfg.leak_rate` in the source. The default for this
+  example is 0.6. Try 1.0 (instant lock-on, lower accuracy) or 0.3
+  (high accuracy, slow transitions).
 
 - **Raw vs. translation.** Pass `raw` as a command-line argument.
   Classification accuracy drops sharply — the nonlinear features from

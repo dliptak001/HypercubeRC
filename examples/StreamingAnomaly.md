@@ -79,7 +79,9 @@ when they return to normal.
 
 ## What to expect
 
-With DIM=8, raw features, Ridge readout:
+### Leak rate = 1.0 (full replacement, default)
+
+DIM=8, raw features, Ridge readout, leak_rate=1.0:
 
 ```
 Windows  1-5:   Normal         RMSE ~0.008   ratio ~1.0
@@ -94,20 +96,66 @@ Window  25:     Normal         RMSE ~0.042   ratio ~5.4  (slow washout)
 Windows 26-30:  Normal         RMSE ~0.008   ratio ~1.0
 ```
 
-**Recovery dynamics** are the most interesting part:
+### Leak rate = 0.3 (leaky integrator)
 
-- **Noise spike** — instant recovery (window 9 is back to baseline).
-  Random noise doesn't alter the reservoir's internal dynamics.
+Same configuration with leak_rate=0.3:
 
-- **DC drift** — 1-window washout. The offset shifts the reservoir
-  state away from the normal trajectory; it takes one window for the
-  tanh neurons to re-center.
+```
+Windows  1-5:   Normal         RMSE ~0.006   ratio ~1.0
+Windows  6-8:   Noise spike    RMSE ~0.07    ratio ~12x  ** ANOMALY **
+Window   9:     Normal         RMSE ~0.007   ratio ~1.1  (instant recovery)
+Windows 10-13:  Normal         RMSE ~0.007   ratio ~1.0
+Windows 14-16:  DC drift       RMSE ~0.43    ratio ~67x  ** ANOMALY **
+Window  17:     Normal         RMSE ~0.108   ratio ~17x  ** ANOMALY ** (slow washout)
+Windows 18-21:  Normal         RMSE ~0.006   ratio ~1.0
+Windows 22-24:  Freq shift     RMSE ~0.16-0.23  ratio ~25-35x  ** ANOMALY **
+Window  25:     Normal         RMSE ~0.150   ratio ~23x  ** ANOMALY ** (slow washout)
+Windows 26-30:  Normal         RMSE ~0.006   ratio ~1.0
+```
 
-- **Frequency shift** — slowest recovery (1-2 extra windows). Changed
-  dynamics alter the reservoir's internal oscillation patterns, which
-  take longer to wash out than a simple offset.
+### Comparison
+
+| Anomaly | Ratio @ leak=1.0 | Ratio @ leak=0.3 | Change |
+|---------|-------------------|-------------------|--------|
+| Noise spike | ~12x | ~12x | Same |
+| DC drift | ~6.5x | ~67x | 10x more sensitive |
+| Freq shift | ~8-10x | ~25-35x | 3-4x more sensitive |
+| Baseline RMSE | 0.0078 | 0.0065 | 17% lower |
+
+### Effect of leak rate on anomaly detection
+
+The leaky integrator (leak_rate < 1.0) causes neurons to retain a
+fraction of their previous state at each step. This has two effects
+on anomaly detection:
+
+**Higher sensitivity to sustained anomalies.** With leak=1.0, a DC
+offset only affects the current step's activation — the neuron fully
+replaces its state. With leak=0.3, 70% of the old (offset-contaminated)
+state persists, so the error compounds across steps. DC drift jumps
+from 6.5x to 67x, and frequency shifts from ~8x to ~30x.
+
+**Slower recovery after anomalies.** The sticky state takes longer to
+wash out. With leak=1.0, the first normal window after a freq shift
+shows 5.4x (borderline). With leak=0.3, it shows 23x — the slow
+neurons are still ringing from the altered dynamics. Recovery takes
+one extra window.
+
+**Noise spike is unaffected.** Random noise averages out regardless
+of leak rate. The leaky integrator smooths it slightly (baseline RMSE
+drops 17%) but the anomaly ratio stays at ~12x.
+
+**For anomaly detection, the slower recovery is a feature, not a bug.**
+You want the alarm to persist until the system fully stabilizes. A
+leak rate of 0.3 provides dramatically higher sensitivity to the
+anomaly types that matter most in industrial monitoring (systematic
+drift and dynamics changes) while adding only one extra window of
+washout time.
 
 ## Things to try
+
+- **Leak rate.** Set `cfg.leak_rate` in the source. Values of 0.2-0.5
+  trade off sensitivity vs recovery speed. The default (1.0) gives fast
+  recovery; lower values give stronger anomaly signals.
 
 - **Lower the threshold.** Change `anomaly_threshold` from 5.0 to 2.0.
   You'll catch anomalies sooner but may see false positives during

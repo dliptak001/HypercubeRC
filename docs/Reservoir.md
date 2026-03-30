@@ -178,10 +178,10 @@ spectral radius in reservoir computing — see the comment in
 
 ## Per-DIM optimized defaults
 
-Two sets of defaults are provided, jointly optimized on MG h=1 +
-NARMA-10 + MC (3-seed average). The `FeatureMode` parameter selects
-which set to use. Pass -1 for SR or input_scaling to use the auto-tuned
-value.
+Two sets of defaults are provided in `ReservoirDefaults.h`, jointly
+optimized on MG h=1 + NARMA-10 + MC (3-seed average). Use
+`ReservoirDefaults<DIM>::MakeConfig(seed, mode)` to build a
+`ReservoirConfig` with the appropriate values for a given `FeatureMode`.
 
 **Raw defaults** (optimized for N-dim raw readout):
 

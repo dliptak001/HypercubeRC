@@ -166,7 +166,8 @@ the readout. This is a standard batch `Train()` call with at least
 18*N samples (the project standard).
 
 ```cpp
-ESN<8> esn(seed, ReadoutType::Ridge, FeatureMode::Translation);
+auto cfg = ReservoirDefaults<8>::MakeConfig(seed, FeatureMode::Translation);
+ESN<8> esn(cfg, ReadoutType::Ridge);
 esn.Warmup(historical_data, 500);
 esn.Run(historical_data + 500, prime_steps);
 

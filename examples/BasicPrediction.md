@@ -55,17 +55,58 @@ Input signal ──> Reservoir ──> State features ──> Readout ──> Pr
 
 ## What to expect
 
-With DIM=7 (128 neurons) and Ridge regression:
+### Leak rate = 1.0 (full replacement, default)
+
+DIM=7, 128 neurons, raw features, Ridge readout, leak_rate=1.0:
 
 | Metric | Value | Meaning |
 |--------|-------|---------|
 | R² | 1.000000 | Effectively perfect fit |
-| NRMSE | ~0.0004 | Sub-0.1% error |
+| NRMSE | 0.000382 | Sub-0.1% error |
 
-Prediction errors are in the 4th decimal place — the reservoir encodes enough
-of the sine's history for near-exact one-step prediction.
+Errors are in the 4th decimal place. The reservoir encodes enough of the
+sine's history for near-exact one-step prediction.
+
+### Leak rate = 0.2 (leaky integrator)
+
+Same configuration with leak_rate=0.2:
+
+| Metric | Value | Meaning |
+|--------|-------|---------|
+| R² | 1.000000 | Effectively perfect fit |
+| NRMSE | 0.000138 | Sub-0.02% error |
+
+Errors drop to the 4th-5th decimal place — a 2.8x reduction in NRMSE.
+
+### Effect of leak rate on periodic prediction
+
+A sine wave is smooth and perfectly periodic. The leaky integrator
+(leak_rate < 1.0) blends old state with new activation at each step:
+
+```
+state[v] = (1 - leak) * old_state[v] + leak * tanh(alpha * s)
+```
+
+At leak=0.2, neurons retain 80% of their previous state. This acts as
+a temporal smoother that benefits periodic signals in two ways:
+
+1. **Phase continuity.** The neuron's state tracks the sine's phase more
+   smoothly, reducing step-to-step jitter in the state representation.
+
+2. **Noise suppression.** Any numerical noise from the recurrent dynamics
+   is dampened by the averaging effect of the slow update.
+
+The improvement is modest in absolute terms (both are near-perfect) because
+sine prediction is trivially easy for a 128-neuron reservoir. The leak rate's
+effect is more dramatic on harder tasks — see the StreamingAnomaly and
+SignalClassification examples for cases where it substantially changes
+detection sensitivity and classification accuracy.
 
 ## Things to try
+
+- **Leak rate.** Set `cfg.leak_rate` in the source. The default for this
+  example is 0.2. Try 1.0 (no leak), 0.5 (moderate), or 0.05 (very slow)
+  and compare NRMSE.
 
 - **Switch readout type.** Change `ReadoutType::Ridge` to `ReadoutType::Linear`
   in the ESN constructor. Ridge gives slightly better results on this easy task;

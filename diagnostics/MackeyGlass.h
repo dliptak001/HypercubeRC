@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <cmath>
 #include "../ESN.h"
-#include "../Reservoir.h"
+#include "../ReservoirDefaults.h"
 #include "../TranslationLayer.h"
 #include "../SignalGenerators.h"
 #include "../readout/LinearReadout.h"
@@ -34,8 +34,10 @@ public:
         double pct_change;  // % change from raw to full
     };
 
-    MackeyGlass(size_t prediction_horizon = 1, ReadoutType readout_type = ReadoutType::Linear)
-        : prediction_horizon_(prediction_horizon), readout_type_(readout_type)
+    MackeyGlass(size_t prediction_horizon = 1, ReadoutType readout_type = ReadoutType::Linear,
+                const ReservoirConfig* config = nullptr)
+        : prediction_horizon_(prediction_horizon), readout_type_(readout_type),
+          config_(config)
     {
     }
 
@@ -69,7 +71,9 @@ public:
 
             // Raw features
             {
-                ESN<DIM> esn(seed, readout_type_);
+                auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed);
+                cfg.seed = seed;
+                ESN<DIM> esn(cfg, readout_type_);
                 esn.Warmup(series.data(), warmup);
                 esn.Run(series.data() + warmup, collect);
                 if (readout_type_ == ReadoutType::Ridge)
@@ -80,7 +84,9 @@ public:
 
             // Full translation
             {
-                ESN<DIM> esn(seed, readout_type_, FeatureMode::Translation);
+                auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed, FeatureMode::Translation);
+                cfg.seed = seed;
+                ESN<DIM> esn(cfg, readout_type_);
                 esn.Warmup(series.data(), warmup);
                 esn.Run(series.data() + warmup, collect);
                 auto translated = TranslationTransform<DIM>(esn.States(), collect);
@@ -119,6 +125,7 @@ public:
 private:
     size_t prediction_horizon_;
     ReadoutType readout_type_;
+    const ReservoirConfig* config_;
 
     static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
 

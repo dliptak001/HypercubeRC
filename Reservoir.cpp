@@ -10,11 +10,13 @@ template <size_t DIM>
 Reservoir<DIM>::Reservoir(const uint64_t rng_seed,
                           const float alpha,
                           const float spectral_radius,
+                          const float leak_rate,
                           std::vector<float> block_scaling)
     : rng_seed_(rng_seed),
       num_inputs_(block_scaling.size()),
       alpha_(alpha),
       spectral_radius_(spectral_radius),
+      leak_rate_(leak_rate),
       block_scaling_(std::move(block_scaling))
 {
     if (alpha_ <= 0.0f)
@@ -84,7 +86,8 @@ void Reservoir<DIM>::UpdateState(size_t v)
     for (size_t i = 0; i < DIM; i++)
         s += vtx_output_[v ^ NearestMask(i)] * w[DIM + i];
 
-    vtx_state_[v] = std::tanh(alpha_ * s);
+    const float activation = std::tanh(alpha_ * s);
+    vtx_state_[v] = (1.0f - leak_rate_) * vtx_output_[v] + leak_rate_ * activation;
 }
 
 // Power iteration on the (non-symmetric) recurrent weight matrix.

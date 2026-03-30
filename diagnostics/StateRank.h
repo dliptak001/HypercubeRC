@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cmath>
 #include "../ESN.h"
+#include "../ReservoirDefaults.h"
 
 /// @brief Diagnostic: Analyze effective rank of reservoir state space
 /// and the input-correlated subspace.
@@ -24,8 +25,9 @@ class StateRank
     static constexpr size_t N = 1ULL << DIM;
 
 public:
-    StateRank(ReadoutType readout_type = ReadoutType::Linear)
-        : readout_type_(readout_type)
+    StateRank(ReadoutType readout_type = ReadoutType::Linear,
+              const ReservoirConfig* config = nullptr)
+        : readout_type_(readout_type), config_(config)
     {
     }
 
@@ -53,7 +55,9 @@ public:
             for (size_t i = 0; i < total; ++i)
                 inputs[i] = static_cast<float>(dist(rng));
 
-            ESN<DIM> esn(seed, readout_type_);
+            auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed);
+            cfg.seed = seed;
+            ESN<DIM> esn(cfg, readout_type_);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
 
@@ -136,6 +140,7 @@ public:
 
 private:
     ReadoutType readout_type_;
+    const ReservoirConfig* config_;
 
     static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
 

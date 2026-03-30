@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <cmath>
 #include "../ESN.h"
-#include "../Reservoir.h"
+#include "../ReservoirDefaults.h"
 #include "../TranslationLayer.h"
 #include "../SignalGenerators.h"
 #include "../readout/LinearReadout.h"
@@ -36,8 +36,9 @@ public:
         double pct_change;  // % change from raw to full
     };
 
-    NARMA10(ReadoutType readout_type = ReadoutType::Linear)
-        : readout_type_(readout_type)
+    NARMA10(ReadoutType readout_type = ReadoutType::Linear,
+            const ReservoirConfig* config = nullptr)
+        : readout_type_(readout_type), config_(config)
     {
     }
 
@@ -74,7 +75,9 @@ public:
 
             // Raw features
             {
-                ESN<DIM> esn(seed, readout_type_);
+                auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed);
+                cfg.seed = seed;
+                ESN<DIM> esn(cfg, readout_type_);
                 esn.Warmup(ri.data(), warmup);
                 esn.Run(ri.data() + warmup, collect);
                 if (readout_type_ == ReadoutType::Ridge)
@@ -85,7 +88,9 @@ public:
 
             // Full translation
             {
-                ESN<DIM> esn(seed, readout_type_, FeatureMode::Translation);
+                auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed, FeatureMode::Translation);
+                cfg.seed = seed;
+                ESN<DIM> esn(cfg, readout_type_);
                 esn.Warmup(ri.data(), warmup);
                 esn.Run(ri.data() + warmup, collect);
                 auto translated = TranslationTransform<DIM>(esn.States(), collect);
@@ -123,6 +128,7 @@ public:
 
 private:
     ReadoutType readout_type_;
+    const ReservoirConfig* config_;
 
     static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
 

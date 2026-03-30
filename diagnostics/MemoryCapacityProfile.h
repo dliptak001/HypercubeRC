@@ -6,7 +6,7 @@
 #include <random>
 #include <cstddef>
 #include "../ESN.h"
-#include "../Reservoir.h"
+#include "../ReservoirDefaults.h"
 #include "../TranslationLayer.h"
 #include "../readout/LinearReadout.h"
 #include "../readout/RidgeRegression.h"
@@ -32,8 +32,9 @@ class MemoryCapacityProfile
     static constexpr size_t MAX_LAG = 50;
 
 public:
-    MemoryCapacityProfile(ReadoutType readout_type = ReadoutType::Linear)
-        : readout_type_(readout_type)
+    MemoryCapacityProfile(ReadoutType readout_type = ReadoutType::Linear,
+                          const ReservoirConfig* config = nullptr)
+        : readout_type_(readout_type), config_(config)
     {
     }
 
@@ -57,7 +58,9 @@ public:
             for (size_t i = 0; i < total; ++i)
                 inputs[i] = static_cast<float>(dist(rng));
 
-            ESN<DIM> esn(seed, readout_type_, FeatureMode::Translation);
+            auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed, FeatureMode::Translation);
+            cfg.seed = seed;
+            ESN<DIM> esn(cfg, readout_type_);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
 
@@ -114,6 +117,7 @@ public:
 
 private:
     ReadoutType readout_type_;
+    const ReservoirConfig* config_;
 
     static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
 

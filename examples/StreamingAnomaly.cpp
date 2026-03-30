@@ -16,7 +16,7 @@
 #include <cstring>
 #include <random>
 #include "ESN.h"
-#include "Reservoir.h"
+#include "ReservoirDefaults.h"
 #include "TranslationLayer.h"
 #include "readout/LinearReadout.h"
 #include "readout/RidgeRegression.h"
@@ -129,8 +129,14 @@ int main(int argc, char* argv[])
     std::cout << "  2. DC drift      -- systematic +0.30 offset (e.g. sensor fouling)\n";
     std::cout << "  3. Freq shift    -- process speed changes to 1.3x (e.g. motor issue)\n\n";
 
+    // Start from per-DIM optimized defaults, then override as needed.
     auto mode = use_translation ? FeatureMode::Translation : FeatureMode::Raw;
-    ESN<DIM> esn(seed, ReadoutType::Ridge, mode);
+    auto cfg = ReservoirDefaults<DIM>::MakeConfig(seed, mode);
+    // cfg.alpha            = 1.0f;    // tanh steepness (1.0 is standard)
+    // cfg.spectral_radius  = 0.92f;   // edge-of-chaos control (higher = longer memory)
+    cfg.leak_rate        = 0.3f;    // leaky integrator (1.0 = full replacement, <1.0 = slower)
+    // cfg.block_scaling    = {0.05f}; // per-block input weight scaling (size = num_inputs)
+    ESN<DIM> esn(cfg, ReadoutType::Ridge);
 
     const char* readout_label = (esn.GetReadoutType() == ReadoutType::Ridge) ? "Ridge" : "Linear";
     std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features

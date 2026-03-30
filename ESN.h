@@ -27,15 +27,9 @@ enum class ReadoutType { Linear, Ridge };
 ///
 /// **Workflow:**
 ///
-/// 1. **Construct** — Creates the reservoir with fixed random weights.
-///    Pass FeatureMode::Raw or FeatureMode::Translation to select per-DIM
-///    optimized defaults for spectral radius and input scaling:
-///
-///        // Raw features (default):
-///        ESN<8> esn(seed, ReadoutType::Linear);
-///
-///        // Translation features:
-///        ESN<8> esn(seed, ReadoutType::Linear, FeatureMode::Translation);
+/// 1. **Construct** — Creates the reservoir from a ReservoirConfig with concrete
+///    parameter values. Use ReservoirDefaults::MakeConfig() to resolve per-DIM
+///    optimized defaults, or build a ReservoirConfig directly.
 ///
 /// 2. **Warmup** — Drive the reservoir to wash out initial conditions (200-500 steps).
 ///
@@ -64,15 +58,9 @@ class ESN
     static constexpr size_t N = 1ULL << DIM;
 
 public:
-    ESN(uint64_t rng_seed,
-        ReadoutType readout_type = ReadoutType::Linear,
-        FeatureMode mode = FeatureMode::Raw,
-        float alpha = 1.0f,
-        float spectral_radius = -1.0f,
-        const float* block_scaling = nullptr,
-        size_t num_inputs = 1)
-        : reservoir_(Reservoir<DIM>::Create(rng_seed, mode, alpha, spectral_radius,
-                                            block_scaling, num_inputs)),
+    explicit ESN(const ReservoirConfig& cfg,
+                 ReadoutType readout_type = ReadoutType::Linear)
+        : reservoir_(Reservoir<DIM>::Create(cfg)),
           readout_type_(readout_type)
     {
     }

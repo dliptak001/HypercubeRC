@@ -16,7 +16,7 @@
 #include <cmath>
 #include <cstring>
 #include "ESN.h"
-#include "Reservoir.h"
+#include "ReservoirDefaults.h"
 #include "TranslationLayer.h"
 #include "readout/LinearReadout.h"
 #include "readout/RidgeRegression.h"
@@ -121,7 +121,13 @@ int main(int argc, char* argv[])
     }
 
     // --- Step 2: Drive the reservoir ---
-    ESN<DIM> esn(seed, ReadoutType::Ridge, mode);
+    // Start from per-DIM optimized defaults, then override as needed.
+    auto cfg = ReservoirDefaults<DIM>::MakeConfig(seed, mode);
+    // cfg.alpha            = 1.0f;    // tanh steepness (1.0 is standard)
+    // cfg.spectral_radius  = 0.92f;   // edge-of-chaos control (higher = longer memory)
+    cfg.leak_rate        = 0.6f;    // leaky integrator (1.0 = full replacement, <1.0 = slower)
+    // cfg.block_scaling    = {0.05f}; // per-block input weight scaling (size = num_inputs)
+    ESN<DIM> esn(cfg, ReadoutType::Ridge);
 
     const char* readout_label = (esn.GetReadoutType() == ReadoutType::Ridge) ? "Ridge" : "Linear";
     std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
