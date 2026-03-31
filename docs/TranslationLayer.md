@@ -156,13 +156,25 @@ pipeline.
 
 ## Implementation
 
-The translation layer is implemented as two free functions in
+The translation layer is implemented as free functions in
 `TranslationLayer.h`:
 
 - `TranslationTransform<DIM>(states, num_samples)` — applies the full
-  x + x² + x*x' transform, returns a `std::vector<float>` of size
-  num_samples * 2.5N.
+  x + x² + x*x' transform to all N vertices. Returns num_samples * 2.5N
+  floats.
+- `TranslationTransformSelected<DIM>(full_states, num_samples, stride, M)`
+  — stride-selected variant. Produces features for M output vertices
+  (selected by stride from the full N-state buffer). Antipodal partners
+  are looked up from the full N-vector, not from the selected subset.
+  Returns num_samples * 2.5M floats.
 - `TranslationFeatureCount<DIM>()` — returns 2.5N (constexpr).
+- `TranslationFeatureCountSelected(M)` — returns M + M + M/2 = 2.5M.
 
-Both are header-only templates, instantiated at compile time for the
+The Selected variant is used throughout the codebase in combination with
+`ESN::OutputStride()` and `ESN::NumOutputVerts()`, allowing the
+`output_fraction` parameter to control readout cost. At the default
+output_fraction=1.0, stride=1 and M=N, so both variants produce
+identical results.
+
+All are header-only templates, instantiated at compile time for the
 DIM values used in the project (4-10).

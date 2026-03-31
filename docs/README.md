@@ -11,7 +11,7 @@ order below.
 
 | Document | What you'll learn |
 |----------|-------------------|
-| [Reservoir.md](Reservoir.md) | How the hypercube reservoir works — topology, connectivity, timestep mechanics, spectral radius, per-DIM defaults |
+| [Reservoir.md](Reservoir.md) | How the hypercube reservoir works — topology, connectivity, timestep mechanics, spectral radius, scale-invariant defaults |
 | [TranslationLayer.md](TranslationLayer.md) | Why raw tanh states limit a linear readout, and how the translation layer breaks through that bottleneck |
 | [Readout.md](Readout.md) | The two readout algorithms (SGD vs. Ridge), when to use each, feature standardization, and streaming mode |
 
@@ -49,6 +49,7 @@ with educational `.md` documentation:
 
 | Document | What it covers |
 |----------|---------------|
+| [ScaleInvariance.md](ScaleInvariance.md) | Why SR=0.90 and input_scaling=0.02 are optimal at every DIM — the hypercube's vertex-transitive topology |
 | [DoesTopologyMatter.md](DoesTopologyMatter.md) | Head-to-head experiment: hypercube vs. random sparse ESN — same performance, different tradeoffs |
 
 ## Key source files
@@ -60,7 +61,7 @@ in the header files are written for an educational audience:
 |--------|----------------|
 | `ESN.h` | `ESN<DIM>` — the pipeline wrapper (warmup, run, collect states) |
 | `Reservoir.h` | `Reservoir<DIM>` — the hypercube reservoir core |
-| `TranslationLayer.h` | `TranslationTransform<DIM>()` — feature expansion |
+| `TranslationLayer.h` | `TranslationTransform<DIM>()`, `TranslationTransformSelected<DIM>()` — feature expansion |
 | `SignalGenerators.h` | `GenerateMackeyGlass()`, `GenerateNARMA10()`, `ComputeNRMSE()` |
 | `readout/LinearReadout.h` | `LinearReadout` — SGD readout with streaming support |
 | `readout/RidgeRegression.h` | `RidgeRegression` — closed-form optimal readout |

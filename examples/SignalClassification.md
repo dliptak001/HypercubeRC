@@ -47,6 +47,9 @@ Waveform blocks ──> Reservoir ──> State features ──> 4 Readouts ─�
   150 steps each     128 neurons   320 features       one-vs-rest             0,1,2,3
 ```
 
+Note: `output_fraction=0.7` is set in the source, but at DIM=7 this rounds
+to stride=1, so all 128 vertices are used. Translation features: 320 (2.5N).
+
 **Step by step:**
 
 1. **Generate signal** — 20 full cycles through all 4 waveforms (80 blocks
@@ -69,41 +72,19 @@ Waveform blocks ──> Reservoir ──> State features ──> 4 Readouts ─�
 
 ## What to expect
 
-### Leak rate = 1.0 (full replacement)
+### Default configuration (leak_rate = 0.35)
 
-DIM=7, translation features, Ridge readout, leak_rate=1.0:
-
-| Class | Accuracy | Notes |
-|-------|----------|-------|
-| Sine | 100% | Perfectly separable |
-| Square | 100% | Perfectly separable |
-| Triangle | 99.3% | Near-perfect |
-| Chirp | 88.0% | Confused with Sine 9% of the time |
-
-**Overall accuracy: 96.8%**
-
-Transition lock-on:
-
-| Steps after switch | Accuracy |
-|--------------------|----------|
-| 0-3 | 75.0% |
-| 0-5 | 75.0% |
-| 0-10 | 75.0% |
-| 0-20 | 76.2% |
-| Entire block | 96.8% |
-
-### Leak rate = 0.6 (leaky integrator)
-
-Same configuration with leak_rate=0.6:
+DIM=7, 128 neurons, output_fraction=0.7, translation features (320),
+Ridge readout, leak_rate=0.35:
 
 | Class | Accuracy | Notes |
 |-------|----------|-------|
 | Sine | 99.3% | Near-perfect |
 | Square | 100% | Perfectly separable |
 | Triangle | 98.7% | Near-perfect |
-| Chirp | 96.7% | Substantially improved |
+| Chirp | 92.7% | Confused with Square 3% and Triangle 4% |
 
-**Overall accuracy: 98.7%**
+**Overall accuracy: 97.7%**
 
 Transition lock-on:
 
@@ -111,36 +92,25 @@ Transition lock-on:
 |--------------------|----------|
 | 0-3 | 50.0% |
 | 0-5 | 60.0% |
-| 0-10 | 80.0% |
-| 0-20 | 90.0% |
-| Entire block | 98.7% |
-
-### Comparison
-
-| Metric | leak=1.0 | leak=0.6 | Change |
-|--------|----------|----------|--------|
-| Overall accuracy | 96.8% | 98.7% | +2.0% |
-| Chirp accuracy | 88.0% | 96.7% | +8.7% |
-| Lock-on @ 3 steps | 75.0% | 50.0% | Slower |
-| Lock-on @ 20 steps | 76.2% | 90.0% | Catches up |
+| 0-10 | 77.5% |
+| 0-20 | 88.8% |
+| Entire block | 97.7% |
 
 ### Effect of leak rate on classification
 
-The leaky integrator improves steady-state classification but slows
-transition response — a direct tradeoff between accuracy and agility.
+The leak rate controls the tradeoff between classification accuracy and
+transition agility.
 
-**Better chirp-sine separation.** At leak=1.0, chirp is confused with
-sine 9% of the time because a chirp starts at a low frequency similar
-to sine's 0.08. At leak=0.6, the neurons retain recent frequency history,
-so the readout can distinguish chirp's accelerating sweep from sine's
-constant frequency. Chirp accuracy jumps from 88% to 97%.
+**Better chirp separation at lower leak rates.** Chirp is the hardest
+class because it starts at a low frequency similar to sine's 0.08. With
+a lower leak rate, the neurons retain recent frequency history, so the
+readout can distinguish chirp's accelerating sweep from sine's constant
+frequency.
 
 **Slower lock-on after transitions.** When the waveform switches, the
-leaky neurons retain state from the previous signal. At leak=1.0, the
-reservoir immediately overwrites its state — lock-on is 75% by step 3.
-At leak=0.6, old state persists longer — lock-on starts at 50% but
-climbs through 80% by step 10 as the new signal gradually overwrites
-the old.
+leaky neurons retain state from the previous signal. Lower leak rates
+mean old state persists longer — lock-on starts at 50% and climbs through
+77.5% by step 10 as the new signal gradually overwrites the old.
 
 **The tradeoff is task-dependent.** For applications where classification
 accuracy matters more than transition speed (long blocks, stable signals),
@@ -152,8 +122,12 @@ lock-on and slow neurons for better steady-state discrimination.
 ## Things to try
 
 - **Leak rate.** Set `cfg.leak_rate` in the source. The default for this
-  example is 0.6. Try 1.0 (instant lock-on, lower accuracy) or 0.3
-  (high accuracy, slow transitions).
+  example is 0.35. Try 1.0 (instant lock-on, lower accuracy) or 0.2
+  (higher accuracy, slower transitions).
+
+- **Output fraction.** Set `cfg.output_fraction` in the source. The default
+  is 0.7, which at DIM=7 yields stride=1 (all 128 vertices). Try lower
+  values at larger DIM to reduce Ridge readout cost.
 
 - **Raw vs. translation.** Pass `raw` as a command-line argument.
   Classification accuracy drops sharply — the nonlinear features from

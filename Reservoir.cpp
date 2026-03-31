@@ -9,14 +9,23 @@
 template <size_t DIM>
 Reservoir<DIM>::Reservoir(const ReservoirConfig& cfg)
     : rng_seed_(cfg.seed),
-      num_inputs_(cfg.block_scaling.size()),
+      num_inputs_(cfg.num_inputs),
       alpha_(cfg.alpha),
       spectral_radius_(cfg.spectral_radius),
       leak_rate_(cfg.leak_rate),
-      block_scaling_(cfg.block_scaling)
+      input_scaling_(cfg.input_scaling)
 {
     if (alpha_ <= 0.0f)
         throw std::invalid_argument("alpha must be positive");
+    if (spectral_radius_ <= 0.0f)
+        throw std::invalid_argument("spectral_radius must be positive");
+    if (leak_rate_ <= 0.0f || leak_rate_ > 1.0f)
+        throw std::invalid_argument("leak_rate must be in (0.0, 1.0]");
+    if (num_inputs_ == 0)
+        throw std::invalid_argument("num_inputs must be >= 1");
+    // Validate here so ESN doesn't need to — Reservoir doesn't use output_fraction itself
+    if (cfg.output_fraction <= 0.0f || cfg.output_fraction > 1.0f)
+        throw std::invalid_argument("output_fraction must be in (0.0, 1.0]");
 
     Initialize();
 }
@@ -46,16 +55,10 @@ void Reservoir<DIM>::Initialize()
             vtx_weight_[i] *= scale;
     }
 
-    // Initialize W_in — one weight per vertex, scaling determined by block assignment
+    // Initialize W_in — one random weight per vertex, uniform scaling
     vtx_input_weight_.resize(N);
-    const size_t block_size = N / num_inputs_;
-    for (size_t k = 0; k < num_inputs_; k++)
-    {
-        const size_t start = k * block_size;
-        const size_t end = (k + 1 == num_inputs_) ? N : start + block_size;
-        for (size_t v = start; v < end; v++)
-            vtx_input_weight_[v] = static_cast<float>(dist(rng)) * block_scaling_[k];
-    }
+    for (size_t v = 0; v < N; ++v)
+        vtx_input_weight_[v] = static_cast<float>(dist(rng)) * input_scaling_;
 }
 
 template <size_t DIM>
@@ -74,13 +77,13 @@ void Reservoir<DIM>::UpdateState(size_t v)
     const float* w = vtx_weight_.data() + v * NUM_CONNECTIONS;
     float s = 0.0f;
 
-    // Recurrent: Hamming shells (1, 3, 7, 15, ...)
-    for (size_t i = 0; i < DIM; i++)
-        s += vtx_output_[v ^ ShellMask(i)] * w[i];
+    // Recurrent: Hamming shells (3, 7, 15, ...) — skip distance-1 and antipodal
+    for (size_t i = 0; i < NUM_SHELL; i++)
+        s += vtx_output_[v ^ ShellMask(i + 1)] * w[i];
 
     // Recurrent: Nearest neighbors (1, 2, 4, 8, ...)
     for (size_t i = 0; i < DIM; i++)
-        s += vtx_output_[v ^ NearestMask(i)] * w[DIM + i];
+        s += vtx_output_[v ^ NearestMask(i)] * w[NUM_SHELL + i];
 
     const float activation = std::tanh(alpha_ * s);
     vtx_state_[v] = (1.0f - leak_rate_) * vtx_output_[v] + leak_rate_ * activation;
@@ -114,10 +117,10 @@ float Reservoir<DIM>::EstimateSpectralRadius() const
             float s = 0.0f;
             const float* w = vtx_weight_.data() + v * NUM_CONNECTIONS;
 
+            for (size_t i = 0; i < NUM_SHELL; i++)
+                s += w[i] * x[v ^ ShellMask(i + 1)];
             for (size_t i = 0; i < DIM; i++)
-                s += w[i] * x[v ^ ShellMask(i)];
-            for (size_t i = 0; i < DIM; i++)
-                s += w[DIM + i] * x[v ^ NearestMask(i)];
+                s += w[NUM_SHELL + i] * x[v ^ NearestMask(i)];
 
             y[v] = s;
         }
@@ -139,16 +142,13 @@ float Reservoir<DIM>::EstimateSpectralRadius() const
 }
 
 template <size_t DIM>
-void Reservoir<DIM>::InjectInput(size_t block, float input)
+void Reservoir<DIM>::InjectInput(size_t channel, float input)
 {
-    assert(block < num_inputs_ && "InjectInput: block index out of range");
+    assert(channel < num_inputs_ && "InjectInput: channel index out of range");
     if (input < -1.0f) input = -1.0f;
     else if (input > 1.0f) input = 1.0f;
 
-    const size_t block_size = N / num_inputs_;
-    const size_t start = block * block_size;
-    const size_t end = (block + 1 == num_inputs_) ? N : start + block_size;
-    for (size_t v = start; v < end; v++)
+    for (size_t v = channel; v < N; v += num_inputs_)
         vtx_output_[v] += vtx_input_weight_[v] * input;
 }
 

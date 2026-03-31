@@ -79,26 +79,10 @@ when they return to normal.
 
 ## What to expect
 
-### Leak rate = 1.0 (full replacement, default)
+### Leak rate = 0.3 (leaky integrator, default)
 
-DIM=8, raw features, Ridge readout, leak_rate=1.0:
-
-```
-Windows  1-5:   Normal         RMSE ~0.008   ratio ~1.0
-Windows  6-8:   Noise spike    RMSE ~0.09    ratio ~12x  ** ANOMALY **
-Window   9:     Normal         RMSE ~0.008   ratio ~1.1  (instant recovery)
-Windows 10-13:  Normal         RMSE ~0.008   ratio ~1.0
-Windows 14-16:  DC drift       RMSE ~0.051   ratio ~6.5  ** ANOMALY **
-Window  17:     Normal         RMSE ~0.020   ratio ~2.6  (1-window washout)
-Windows 18-21:  Normal         RMSE ~0.008   ratio ~1.0
-Windows 22-24:  Freq shift     RMSE ~0.06-0.08  ratio ~8-10x  ** ANOMALY **
-Window  25:     Normal         RMSE ~0.042   ratio ~5.4  (slow washout)
-Windows 26-30:  Normal         RMSE ~0.008   ratio ~1.0
-```
-
-### Leak rate = 0.3 (leaky integrator)
-
-Same configuration with leak_rate=0.3:
+DIM=8, 256 neurons, 50% output (128 vertices), raw features, Ridge readout,
+leak_rate=0.3:
 
 ```
 Windows  1-5:   Normal         RMSE ~0.006   ratio ~1.0
@@ -113,14 +97,31 @@ Window  25:     Normal         RMSE ~0.150   ratio ~23x  ** ANOMALY ** (slow was
 Windows 26-30:  Normal         RMSE ~0.006   ratio ~1.0
 ```
 
+### Leak rate = 1.0 (full replacement)
+
+Same configuration with leak_rate=1.0:
+
+```
+Windows  1-5:   Normal         RMSE ~0.008   ratio ~1.0
+Windows  6-8:   Noise spike    RMSE ~0.09    ratio ~12x  ** ANOMALY **
+Window   9:     Normal         RMSE ~0.008   ratio ~1.1  (instant recovery)
+Windows 10-13:  Normal         RMSE ~0.008   ratio ~1.0
+Windows 14-16:  DC drift       RMSE ~0.051   ratio ~6.5  ** ANOMALY **
+Window  17:     Normal         RMSE ~0.020   ratio ~2.6  (1-window washout)
+Windows 18-21:  Normal         RMSE ~0.008   ratio ~1.0
+Windows 22-24:  Freq shift     RMSE ~0.06-0.08  ratio ~8-10x  ** ANOMALY **
+Window  25:     Normal         RMSE ~0.042   ratio ~5.4  (slow washout)
+Windows 26-30:  Normal         RMSE ~0.008   ratio ~1.0
+```
+
 ### Comparison
 
-| Anomaly | Ratio @ leak=1.0 | Ratio @ leak=0.3 | Change |
+| Anomaly | Ratio @ leak=0.3 | Ratio @ leak=1.0 | Change |
 |---------|-------------------|-------------------|--------|
 | Noise spike | ~12x | ~12x | Same |
-| DC drift | ~6.5x | ~67x | 10x more sensitive |
-| Freq shift | ~8-10x | ~25-35x | 3-4x more sensitive |
-| Baseline RMSE | 0.0078 | 0.0065 | 17% lower |
+| DC drift | ~67x | ~6.5x | 10x more sensitive |
+| Freq shift | ~25-35x | ~8-10x | 3-4x more sensitive |
+| Baseline RMSE | 0.0065 | 0.0078 | 17% lower |
 
 ### Effect of leak rate on anomaly detection
 
@@ -153,16 +154,20 @@ washout time.
 
 ## Things to try
 
-- **Leak rate.** Set `cfg.leak_rate` in the source. Values of 0.2-0.5
-  trade off sensitivity vs recovery speed. The default (1.0) gives fast
-  recovery; lower values give stronger anomaly signals.
+- **Leak rate.** Set `cfg.leak_rate` in the source. The default is 0.3.
+  Try 1.0 for fast recovery with lower sensitivity, or 0.1 for even
+  higher sensitivity with slower washout.
+
+- **Output fraction.** Set `cfg.output_fraction` in the source. The default
+  is 0.5 (128 of 256 vertices). Try 1.0 for full output or lower values
+  to reduce Ridge readout cost.
 
 - **Lower the threshold.** Change `anomaly_threshold` from 5.0 to 2.0.
   You'll catch anomalies sooner but may see false positives during
   washout windows.
 
 - **Translation features.** Pass `translation` as a command-line argument.
-  The 2.5N feature set may change detection sensitivity.
+  The 2.5M feature set may change detection sensitivity.
 
 - **Window size.** Smaller windows (e.g., 50 steps) make detection faster
   but noisier. Larger windows (e.g., 500) smooth the RMSE estimate but
@@ -175,5 +180,5 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ./build/StreamingAnomaly              # default: raw features
 ./build/StreamingAnomaly raw          # explicit raw
-./build/StreamingAnomaly translation  # translation 2.5N features
+./build/StreamingAnomaly translation  # translation 2.5M features
 ```

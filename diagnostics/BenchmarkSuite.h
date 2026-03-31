@@ -17,11 +17,11 @@ struct BenchmarkDIM
         typename NARMA10<DIM>::Result narma;
     };
 
-    static Result Run(const ReservoirConfig* config = nullptr)
+    static Result Run(const ReservoirConfig* config = nullptr, float output_fraction = 1.0f)
     {
-        MemoryCapacity<DIM> mc(50, config);
-        MackeyGlass<DIM> mg(1, ReadoutType::Ridge, config);
-        NARMA10<DIM> narma(ReadoutType::Ridge, config);
+        MemoryCapacity<DIM> mc(50, config, output_fraction);
+        MackeyGlass<DIM> mg(1, ReadoutType::Ridge, config, output_fraction);
+        NARMA10<DIM> narma(ReadoutType::Ridge, config, output_fraction);
         return {mc.Run().mc_total, mg.Run(), narma.Run()};
     }
 
@@ -56,7 +56,7 @@ struct BenchmarkDIM
 /// @brief Full benchmark suite across DIM 5-8. One call does everything.
 struct BenchmarkSuite
 {
-    static void RunAll(const ReservoirConfig* config = nullptr)
+    static void RunAll(float output_fraction = 1.0f, const ReservoirConfig* config = nullptr)
     {
         std::cout << "=== HypercubeRC Benchmark Suite ===\n\n";
         std::cout << "HypercubeRC is a reservoir computer whose N neurons are arranged on\n";
@@ -67,10 +67,11 @@ struct BenchmarkSuite
         std::cout << "The pipeline: drive the reservoir with a scalar input signal, collect\n";
         std::cout << "the N-dimensional state at each step, then train a linear readout to\n";
         std::cout << "map those states to the target. The reservoir's weights are fixed --\n";
-        std::cout << "only the readout is learned. All results below are 3-seed averages.\n\n";
+        std::cout << "only the readout is learned. All results below are 3-seed averages.\n";
+        std::cout << "Output fraction: " << static_cast<int>(output_fraction * 100) << "%\n\n";
         std::cout << "  DIM  -- hypercube dimension; the reservoir has N = 2^DIM neurons\n";
         std::cout << "  raw  -- readout uses N raw reservoir states\n";
-        std::cout << "  full -- readout uses 2.5N features after translation (x, x^2, x*x')\n";
+        std::cout << "  full -- readout uses 2.5M features after translation (x, x^2, x*x')\n";
         std::cout << "          the extra nonlinear terms help the linear readout decode\n";
         std::cout << "          information that tanh folds into the state vector\n\n";
 
@@ -79,20 +80,20 @@ struct BenchmarkSuite
         std::cout << "over lags 1-50. Higher is better. Theoretical max = N.\n\n";
         std::cout << "  DIM |     N |    MC\n";
         std::cout << "  ----+-------+------\n" << std::flush;
-        RunAndPrintMC<5>(config);
-        RunAndPrintMC<6>(config);
-        RunAndPrintMC<7>(config);
-        RunAndPrintMC<8>(config);
+        RunAndPrintMC<5>(output_fraction, config);
+        RunAndPrintMC<6>(output_fraction, config);
+        RunAndPrintMC<7>(output_fraction, config);
+        RunAndPrintMC<8>(output_fraction, config);
 
         std::cout << "\n--- Mackey-Glass h=1 (NRMSE, lower is better) ---\n";
         std::cout << "One-step prediction of a chaotic time series. Tests how well the\n";
         std::cout << "reservoir tracks complex, deterministic dynamics.\n\n";
         std::cout << "  DIM |     N |    raw  |   full translation\n";
         std::cout << "  ----+-------+---------+-----------------\n" << std::flush;
-        RunAndPrintMG<5>(config);
-        RunAndPrintMG<6>(config);
-        RunAndPrintMG<7>(config);
-        RunAndPrintMG<8>(config);
+        RunAndPrintMG<5>(output_fraction, config);
+        RunAndPrintMG<6>(output_fraction, config);
+        RunAndPrintMG<7>(output_fraction, config);
+        RunAndPrintMG<8>(output_fraction, config);
 
         std::cout << "\n--- NARMA-10 (NRMSE, lower is better) ---\n";
         std::cout << "Nonlinear autoregressive benchmark requiring both memory (10-step\n";
@@ -100,33 +101,33 @@ struct BenchmarkSuite
         std::cout << "the translation layer has the biggest impact.\n\n";
         std::cout << "  DIM |     N |    raw  |   full translation\n";
         std::cout << "  ----+-------+---------+-----------------\n" << std::flush;
-        RunAndPrintNARMA<5>(config);
-        RunAndPrintNARMA<6>(config);
-        RunAndPrintNARMA<7>(config);
-        RunAndPrintNARMA<8>(config);
+        RunAndPrintNARMA<5>(output_fraction, config);
+        RunAndPrintNARMA<6>(output_fraction, config);
+        RunAndPrintNARMA<7>(output_fraction, config);
+        RunAndPrintNARMA<8>(output_fraction, config);
     }
 
 private:
     template <size_t DIM>
-    static void RunAndPrintMC(const ReservoirConfig* config)
+    static void RunAndPrintMC(float output_fraction, const ReservoirConfig* config)
     {
-        MemoryCapacity<DIM> mc(50, config);
+        MemoryCapacity<DIM> mc(50, config, output_fraction);
         BenchmarkDIM<DIM>::PrintMCRow(mc.Run().mc_total);
         std::cout << std::flush;
     }
 
     template <size_t DIM>
-    static void RunAndPrintMG(const ReservoirConfig* config)
+    static void RunAndPrintMG(float output_fraction, const ReservoirConfig* config)
     {
-        MackeyGlass<DIM> mg(1, ReadoutType::Ridge, config);
+        MackeyGlass<DIM> mg(1, ReadoutType::Ridge, config, output_fraction);
         BenchmarkDIM<DIM>::PrintMGRow(mg.Run());
         std::cout << std::flush;
     }
 
     template <size_t DIM>
-    static void RunAndPrintNARMA(const ReservoirConfig* config)
+    static void RunAndPrintNARMA(float output_fraction, const ReservoirConfig* config)
     {
-        NARMA10<DIM> narma(ReadoutType::Ridge, config);
+        NARMA10<DIM> narma(ReadoutType::Ridge, config, output_fraction);
         BenchmarkDIM<DIM>::PrintNARMARow(narma.Run());
         std::cout << std::flush;
     }

@@ -16,7 +16,6 @@
 #include <cmath>
 #include <cstring>
 #include "ESN.h"
-#include "ReservoirDefaults.h"
 #include "TranslationLayer.h"
 #include "readout/LinearReadout.h"
 #include "readout/RidgeRegression.h"
@@ -79,8 +78,6 @@ int main(int argc, char* argv[])
     // --- Configuration ---
     constexpr size_t DIM = 7;
     constexpr size_t N = 1ULL << DIM;
-    constexpr size_t FEATURES_TRANS = TranslationFeatureCount<DIM>();
-
     constexpr size_t warmup = 300;
     constexpr size_t block_size = 150;      // Steps per waveform block
     constexpr size_t num_cycles = 20;       // Full rotations through all 4 classes
@@ -88,9 +85,6 @@ int main(int argc, char* argv[])
     constexpr double train_fraction = 0.7;
 
     constexpr uint64_t seed = 42;
-    auto mode = use_translation ? FeatureMode::Translation : FeatureMode::Raw;
-    const size_t num_features = use_translation ? FEATURES_TRANS : N;
-
     std::cout << "=== HypercubeRC: Signal Classification ===\n\n";
     std::cout << "Task: identify which waveform is currently being fed to the reservoir,\n";
     std::cout << "using only the reservoir's internal state -- not the input directly.\n\n";
@@ -121,16 +115,21 @@ int main(int argc, char* argv[])
     }
 
     // --- Step 2: Drive the reservoir ---
-    // Start from per-DIM optimized defaults, then override as needed.
-    auto cfg = ReservoirDefaults<DIM>::MakeConfig(seed, mode);
+    ReservoirConfig cfg;
+    cfg.seed = seed;
     // cfg.alpha            = 1.0f;    // tanh steepness (1.0 is standard)
     // cfg.spectral_radius  = 0.92f;   // edge-of-chaos control (higher = longer memory)
-    cfg.leak_rate        = 0.6f;    // leaky integrator (1.0 = full replacement, <1.0 = slower)
-    // cfg.block_scaling    = {0.05f}; // per-block input weight scaling (size = num_inputs)
+    cfg.leak_rate        = 0.35f;    // leaky integrator (1.0 = full replacement, <1.0 = slower)
+    // cfg.input_scaling    = 0.02f;   // W_in weight scaling (applied to all input channels)
+    cfg.output_fraction  = 0.7f;    // fraction of vertices used as readout features (0.0, 1.0]
     ESN<DIM> esn(cfg, ReadoutType::Ridge);
+    const size_t M = esn.NumOutputVerts();
+    const size_t num_features = use_translation ? TranslationFeatureCountSelected(M) : M;
 
     const char* readout_label = (esn.GetReadoutType() == ReadoutType::Ridge) ? "Ridge" : "Linear";
-    std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
+    std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Outputs=" << M
+              << " (" << static_cast<int>(esn.OutputFraction() * 100) << "%)"
+              << "  Features=" << num_features
               << " (" << (use_translation ? "translation" : "raw") << ")"
               << "  Readout=" << readout_label
               << "  Cycles=" << num_cycles << "  Total=" << collect << " steps\n\n";
@@ -140,15 +139,18 @@ int main(int argc, char* argv[])
 
     // --- Step 3: Get features ---
     const float* features = nullptr;
+    std::vector<float> selected;
     std::vector<float> translated;
     if (use_translation)
     {
-        translated = TranslationTransform<DIM>(esn.States(), collect);
+        translated = TranslationTransformSelected<DIM>(esn.States(), collect,
+                                                        esn.OutputStride(), M);
         features = translated.data();
     }
     else
     {
-        features = esn.States();
+        selected = esn.SelectedStates();
+        features = selected.data();
     }
 
     // --- Step 4: Train one-vs-rest readouts ---

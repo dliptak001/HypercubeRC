@@ -39,8 +39,8 @@ interactions that are invisible in the raw tanh outputs.
 1. Generate a Mackey-Glass time series (Euler integration, dt=1).
 2. Normalize to [-1, +1] and split into warmup + collect.
 3. For each of 3 seeds {42, 1042, 2042}:
-   - Run with raw features (N states, Raw-optimized SR/input scaling).
-   - Run with translation features (2.5N, Translation-optimized defaults).
+   - Run with raw features (N selected states).
+   - Run with translation features (2.5N).
    - Train the selected readout (Ridge or Linear) on 70%, test on 30%.
 4. Report 3-seed average NRMSE for raw and translation, plus % change.
 

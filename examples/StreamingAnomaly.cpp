@@ -16,7 +16,6 @@
 #include <cstring>
 #include <random>
 #include "ESN.h"
-#include "ReservoirDefaults.h"
 #include "TranslationLayer.h"
 #include "readout/LinearReadout.h"
 #include "readout/RidgeRegression.h"
@@ -88,8 +87,6 @@ int main(int argc, char* argv[])
 
     constexpr size_t DIM = 8;
     constexpr size_t N = 1ULL << DIM;
-    constexpr size_t FEATURES_TRANS = TranslationFeatureCount<DIM>();
-
     constexpr size_t warmup = 500;
     constexpr size_t prime_steps = 4000;
     constexpr size_t window = 200;
@@ -98,7 +95,6 @@ int main(int argc, char* argv[])
 
     constexpr uint64_t seed = 42;
     std::mt19937_64 signal_rng(seed + 777);
-    const size_t num_features = use_translation ? FEATURES_TRANS : N;
 
     // Define the monitoring scenario: 30 windows with 3 anomaly events
     // Each event is bracketed by normal operation to show detection + recovery.
@@ -129,17 +125,22 @@ int main(int argc, char* argv[])
     std::cout << "  2. DC drift      -- systematic +0.30 offset (e.g. sensor fouling)\n";
     std::cout << "  3. Freq shift    -- process speed changes to 1.3x (e.g. motor issue)\n\n";
 
-    // Start from per-DIM optimized defaults, then override as needed.
-    auto mode = use_translation ? FeatureMode::Translation : FeatureMode::Raw;
-    auto cfg = ReservoirDefaults<DIM>::MakeConfig(seed, mode);
+    // Configure reservoir, overriding defaults as needed.
+    ReservoirConfig cfg;
+    cfg.seed = seed;
     // cfg.alpha            = 1.0f;    // tanh steepness (1.0 is standard)
     // cfg.spectral_radius  = 0.92f;   // edge-of-chaos control (higher = longer memory)
     cfg.leak_rate        = 0.3f;    // leaky integrator (1.0 = full replacement, <1.0 = slower)
-    // cfg.block_scaling    = {0.05f}; // per-block input weight scaling (size = num_inputs)
+    // cfg.input_scaling    = 0.02f;   // W_in weight scaling (applied to all input channels)
+    cfg.output_fraction  = 0.5f;    // fraction of vertices used as readout features (0.0, 1.0]
     ESN<DIM> esn(cfg, ReadoutType::Ridge);
+    const size_t M = esn.NumOutputVerts();
+    const size_t num_features = use_translation ? TranslationFeatureCountSelected(M) : M;
 
     const char* readout_label = (esn.GetReadoutType() == ReadoutType::Ridge) ? "Ridge" : "Linear";
-    std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Features=" << num_features
+    std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Outputs=" << M
+              << " (" << static_cast<int>(esn.OutputFraction() * 100) << "%)"
+              << "  Features=" << num_features
               << " (" << (use_translation ? "translation" : "raw") << ")"
               << "  Readout=" << readout_label
               << "  Threshold=" << anomaly_threshold << "x baseline\n\n";
@@ -160,15 +161,18 @@ int main(int argc, char* argv[])
 
     // Get features
     const float* prime_feat_ptr = nullptr;
+    std::vector<float> prime_selected;
     std::vector<float> prime_translated;
     if (use_translation)
     {
-        prime_translated = TranslationTransform<DIM>(esn.States(), prime_steps);
+        prime_translated = TranslationTransformSelected<DIM>(esn.States(), prime_steps,
+                                                              esn.OutputStride(), M);
         prime_feat_ptr = prime_translated.data();
     }
     else
     {
-        prime_feat_ptr = esn.States();
+        prime_selected = esn.SelectedStates();
+        prime_feat_ptr = prime_selected.data();
     }
 
     std::vector<float> prime_targets(prime_steps);
@@ -219,15 +223,18 @@ int main(int argc, char* argv[])
 
             // Get features
             const float* feat_ptr = nullptr;
+            std::vector<float> win_selected;
             std::vector<float> win_translated;
             if (use_translation)
             {
-                win_translated = TranslationTransform<DIM>(esn.States(), window);
+                win_translated = TranslationTransformSelected<DIM>(esn.States(), window,
+                                                                    esn.OutputStride(), M);
                 feat_ptr = win_translated.data();
             }
             else
             {
-                feat_ptr = esn.States();
+                win_selected = esn.SelectedStates();
+                feat_ptr = win_selected.data();
             }
 
             std::vector<float> tgt(window);
@@ -265,9 +272,10 @@ int main(int argc, char* argv[])
     std::cout << "During monitoring, prediction error is the anomaly signal:\n\n";
     std::cout << "  Noise spike:  RMSE jumps ~12x -- random disturbance is unpredictable.\n";
     std::cout << "                Recovery is instant (window 9 back to baseline).\n\n";
-    std::cout << "  DC drift:     RMSE rises ~6x -- the model didn't learn this offset.\n";
-    std::cout << "                Takes 1 window to wash out after recovery.\n\n";
-    std::cout << "  Freq shift:   RMSE spikes ~7-9x -- changed dynamics break the pattern.\n";
+    std::cout << "  DC drift:     RMSE rises dramatically -- the model didn't learn this offset.\n";
+    std::cout << "                The leaky integrator compounds the error across steps.\n";
+    std::cout << "                Takes 1-2 windows to wash out after recovery.\n\n";
+    std::cout << "  Freq shift:   RMSE spikes -- changed dynamics break the learned pattern.\n";
     std::cout << "                Slowest recovery: reservoir needs 1-2 extra windows to\n";
     std::cout << "                wash out the altered frequency from its internal state.\n\n";
     std::cout << "Key insight: the frozen model stays valid for normal operation throughout.\n";

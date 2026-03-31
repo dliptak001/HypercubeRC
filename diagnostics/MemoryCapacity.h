@@ -6,7 +6,7 @@
 #include <random>
 #include <cstddef>
 #include "../ESN.h"
-#include "../ReservoirDefaults.h"
+#include "../Reservoir.h"
 #include "../readout/LinearReadout.h"
 
 /// @brief Diagnostic: Total memory capacity (raw features, LinearReadout).
@@ -33,8 +33,9 @@ public:
     };
 
     MemoryCapacity(size_t max_lag = 50,
-                   const ReservoirConfig* config = nullptr)
-        : max_lag_(max_lag), config_(config)
+                   const ReservoirConfig* config = nullptr,
+                   float output_fraction = 1.0f)
+        : max_lag_(max_lag), config_(config), output_fraction_(output_fraction)
     {
     }
 
@@ -54,13 +55,16 @@ public:
             for (size_t i = 0; i < total; ++i)
                 inputs[i] = static_cast<float>(dist(rng));
 
-            auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed);
+            ReservoirConfig cfg = config_ ? *config_ : ReservoirConfig{};
             cfg.seed = seed;
+            if (output_fraction_ != 1.0f)
+                cfg.output_fraction = output_fraction_;
             ESN<DIM> esn(cfg, ReadoutType::Linear);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
 
-            const float* st = esn.States();
+            auto selected = esn.SelectedStates();
+            size_t M = esn.NumOutputVerts();
             double mc = 0.0;
             size_t num_lags = std::min(max_lag_, collect - 1);
 
@@ -72,14 +76,14 @@ public:
                 for (size_t t = 0; t < valid; ++t)
                     tgt[t] = inputs[warmup + t];
 
-                const float* vs = st + lag * N;
+                const float* vs = selected.data() + lag * M;
                 size_t tr = static_cast<size_t>(valid * 0.7);
                 size_t te = valid - tr;
                 if (tr == 0 || te == 0) continue;
 
                 LinearReadout lr;
-                lr.Train(vs, tgt.data(), tr, N);
-                double r2 = lr.R2(vs + tr * N, tgt.data() + tr, te);
+                lr.Train(vs, tgt.data(), tr, M);
+                double r2 = lr.R2(vs + tr * M, tgt.data() + tr, te);
                 if (r2 > 0.0) mc += r2;
             }
             s_mc += mc;
@@ -104,14 +108,24 @@ public:
 private:
     size_t max_lag_;
     const ReservoirConfig* config_;
+    float output_fraction_;
 
-    static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
+    static std::vector<uint64_t> Seeds()
+    {
+        if (single_seed) return {single_seed};
+        return {42, 1042, 2042};
+    }
 
+public:
+    static inline uint64_t single_seed = 0;  // non-zero = use only this seed
+
+private:
     void PrintHeader(size_t warmup, size_t collect) const
     {
-        std::cout << "=== Memory Capacity (LinearReadout, raw features, 3-seed avg) ===\n";
-        std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0"
-                  << " | SR: per-DIM default | Input scaling: per-DIM default\n";
+        std::cout << "=== Memory Capacity (LinearReadout, raw features, "
+                  << Seeds().size() << "-seed avg) ===\n";
+        std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0 | Leak: 1.0"
+                  << " | SR: 0.90 | Input scaling: 0.02\n";
         std::cout << "Warmup: " << warmup << " | Collect: " << collect
                   << " | MC = sum R2 lags 1-" << max_lag_ << "\n\n";
 

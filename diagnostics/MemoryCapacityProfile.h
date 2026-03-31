@@ -6,7 +6,7 @@
 #include <random>
 #include <cstddef>
 #include "../ESN.h"
-#include "../ReservoirDefaults.h"
+#include "../Reservoir.h"
 #include "../TranslationLayer.h"
 #include "../readout/LinearReadout.h"
 #include "../readout/RidgeRegression.h"
@@ -28,13 +28,13 @@ template <size_t DIM>
 class MemoryCapacityProfile
 {
     static constexpr size_t N = 1ULL << DIM;
-    static constexpr size_t FEATURES = TranslationFeatureCount<DIM>();
     static constexpr size_t MAX_LAG = 50;
 
 public:
     MemoryCapacityProfile(ReadoutType readout_type = ReadoutType::Linear,
-                          const ReservoirConfig* config = nullptr)
-        : readout_type_(readout_type), config_(config)
+                          const ReservoirConfig* config = nullptr,
+                          float output_fraction = 1.0f)
+        : readout_type_(readout_type), config_(config), output_fraction_(output_fraction)
     {
     }
 
@@ -58,14 +58,19 @@ public:
             for (size_t i = 0; i < total; ++i)
                 inputs[i] = static_cast<float>(dist(rng));
 
-            auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed, FeatureMode::Translation);
+            ReservoirConfig cfg = config_ ? *config_ : ReservoirConfig{};
             cfg.seed = seed;
+            if (output_fraction_ != 1.0f)
+                cfg.output_fraction = output_fraction_;
             ESN<DIM> esn(cfg, readout_type_);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
 
-            // Apply full translation layer
-            auto translated = TranslationTransform<DIM>(esn.States(), collect);
+            // Apply translation layer to selected outputs
+            size_t M = esn.NumOutputVerts();
+            auto translated = TranslationTransformSelected<DIM>(esn.States(), collect,
+                                                                 esn.OutputStride(), M);
+            size_t nf = TranslationFeatureCountSelected(M);
 
             auto eval_lag = [&](auto& readout, size_t lag)
             {
@@ -78,10 +83,10 @@ public:
                 for (size_t t = 0; t < valid; ++t)
                     targets[t] = inputs[warmup + t];
 
-                const float* lagged = translated.data() + lag * FEATURES;
+                const float* lagged = translated.data() + lag * nf;
 
-                readout.Train(lagged, targets.data(), tr, FEATURES);
-                double r2 = readout.R2(lagged + tr * FEATURES, targets.data() + tr, te);
+                readout.Train(lagged, targets.data(), tr, nf);
+                double r2 = readout.R2(lagged + tr * nf, targets.data() + tr, te);
                 if (r2 > 0.0) r2_sum[lag] += r2;
             };
 
@@ -118,16 +123,29 @@ public:
 private:
     ReadoutType readout_type_;
     const ReservoirConfig* config_;
+    float output_fraction_;
 
-    static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
+    static std::vector<uint64_t> Seeds()
+    {
+        if (single_seed) return {single_seed};
+        return {42, 1042, 2042};
+    }
+
+public:
+    static inline uint64_t single_seed = 0;  // non-zero = use only this seed
+
+private:
 
     void PrintHeader(size_t warmup, size_t collect) const
     {
         const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "Linear";
-        std::cout << "=== Memory Capacity Profile (" << rn << " Readout, full translation, 3-seed avg) ===\n";
+        std::cout << "=== Memory Capacity Profile (" << rn << " Readout, full translation, " << Seeds().size() << "-seed avg) ===\n";
         std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0 | Leak: 1.0"
-                  << " | SR: per-DIM default | Input scaling: per-DIM default\n";
-        std::cout << "DIM=" << DIM << "  N=" << N << "  Features=" << FEATURES
+                  << " | SR: 0.90 | Input scaling: 0.02\n";
+        float frac = output_fraction_;
+        size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * frac)));
+        std::cout << "DIM=" << DIM << "  N=" << N << "  Outputs=" << M
+                  << "  Features=" << TranslationFeatureCountSelected(M)
                   << "  Warmup: " << warmup << " | Collect: " << collect
                   << " | MC=sum R2 lags 1-" << MAX_LAG << "\n\n";
 

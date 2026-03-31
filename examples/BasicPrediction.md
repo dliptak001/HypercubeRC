@@ -27,9 +27,9 @@ next value with near-zero error.
 ## The pipeline
 
 ```
-Input signal ──> Reservoir ──> State features ──> Readout ──> Prediction
-  sin(0.1t)      128 neurons    128 or 320        Ridge       sin(0.1(t+1))
-                  (fixed)        floats/step       (trained)
+Input signal ──> Reservoir ──> Output selection ──> Readout ──> Prediction
+  sin(0.1t)      128 neurons    15 vertices          Ridge       sin(0.1(t+1))
+                  (fixed)        (10% of 128)         (trained)
 ```
 
 **Step by step:**
@@ -44,39 +44,34 @@ Input signal ──> Reservoir ──> State features ──> Readout ──> Pr
 3. **Collect** — Drive for 2000 more steps, recording the N-dimensional state
    at each step. This is the training + test data.
 
-4. **Extract features** — Either use the raw N states, or apply the translation
-   layer to get 2.5N features (x, x², x*x'). Translation is overkill for a
-   sine wave but demonstrates the pipeline.
+4. **Select outputs** — The `output_fraction` parameter (0.1 = 10%) stride-
+   selects 15 of the 128 vertices as readout features. Either use these 15 raw
+   states directly, or apply the translation layer to get 37 features
+   (x, x², x*x'). Translation is overkill for a sine wave but demonstrates
+   the pipeline.
 
-5. **Train readout** — Fit a Ridge or Linear readout on 70% of the data,
+5. **Train readout** — Fit a Ridge readout on 70% of the data,
    mapping state features to the signal value one step in the future.
 
 6. **Evaluate** — Measure R² and NRMSE on the held-out 30% test set.
 
 ## What to expect
 
-### Leak rate = 1.0 (full replacement, default)
+### Leak rate = 0.2 (leaky integrator, default)
 
-DIM=7, 128 neurons, raw features, Ridge readout, leak_rate=1.0:
+DIM=7, 128 neurons, 10% output (15 vertices), raw features, Ridge readout,
+leak_rate=0.2:
 
-| Metric | Value | Meaning |
-|--------|-------|---------|
-| R² | 1.000000 | Effectively perfect fit |
-| NRMSE | 0.000382 | Sub-0.1% error |
+R² will be effectively 1.0 and NRMSE will be in the sub-0.1% range.
+At leak=0.2, neurons retain 80% of their previous state, which smooths
+the state representation and reduces step-to-step jitter.
 
-Errors are in the 4th decimal place. The reservoir encodes enough of the
-sine's history for near-exact one-step prediction.
+### Leak rate = 1.0 (full replacement)
 
-### Leak rate = 0.2 (leaky integrator)
+Same configuration with leak_rate=1.0:
 
-Same configuration with leak_rate=0.2:
-
-| Metric | Value | Meaning |
-|--------|-------|---------|
-| R² | 1.000000 | Effectively perfect fit |
-| NRMSE | 0.000138 | Sub-0.02% error |
-
-Errors drop to the 4th-5th decimal place — a 2.8x reduction in NRMSE.
+Still near-perfect — R² effectively 1.0 — but NRMSE is slightly higher
+than the leaky integrator case.
 
 ### Effect of leak rate on periodic prediction
 
@@ -108,6 +103,11 @@ detection sensitivity and classification accuracy.
   example is 0.2. Try 1.0 (no leak), 0.5 (moderate), or 0.05 (very slow)
   and compare NRMSE.
 
+- **Output fraction.** Set `cfg.output_fraction` in the source. The default
+  is 0.1 (10% of vertices, giving 15 output features). Try 1.0 for all 128
+  vertices, or 0.5 for half. More vertices give the readout more information
+  but increase training cost.
+
 - **Switch readout type.** Change `ReadoutType::Ridge` to `ReadoutType::Linear`
   in the ESN constructor. Ridge gives slightly better results on this easy task;
   the difference is more dramatic on harder benchmarks.
@@ -129,5 +129,5 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ./build/BasicPrediction              # default: raw features, Ridge readout
 ./build/BasicPrediction raw          # explicit raw
-./build/BasicPrediction translation  # translation 2.5N features
+./build/BasicPrediction translation  # translation features (37 vs 15 raw)
 ```

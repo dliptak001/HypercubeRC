@@ -33,32 +33,32 @@ is implicit in the binary representation of the vertex addresses.
 
 | DIM | N (neurons) | Connections/neuron | Total weights |
 |-----|-------------|--------------------|---------------|
-| 5   | 32          | 10                 | 320           |
-| 6   | 64          | 12                 | 768           |
-| 7   | 128         | 14                 | 1,792         |
-| 8   | 256         | 16                 | 4,096         |
-| 9   | 512         | 18                 | 9,216         |
-| 10  | 1024        | 20                 | 20,480        |
+| 5   | 32          | 8                  | 256           |
+| 6   | 64          | 10                 | 640           |
+| 7   | 128         | 12                 | 1,536         |
+| 8   | 256         | 14                 | 3,584         |
+| 9   | 512         | 16                 | 8,192         |
+| 10  | 1024        | 18                 | 18,432        |
 
 DIM is constrained to [4, 10], covering 16 to 1024 neurons — the
 practical range for reservoir computing.
 
 ## Connectivity: two families of connections
 
-Each neuron receives input from 2*DIM neighbors, organized into two
-families of DIM connections each:
+Each neuron receives input from 2*DIM - 2 neighbors, organized into two
+families:
 
-### Shell connections (DIM per vertex)
+### Shell connections (DIM-2 per vertex)
 
 Cumulative-bit masks that reach progressively further across the
-hypercube:
+hypercube. Distance-1 (mask=1, same as nearest-neighbor) and the
+antipodal shell (mask=N-1, all bits set) are skipped:
 
 ```
-Mask for shell i: (1 << (i+1)) - 1
-  i=0: mask=1   (flip bit 0)
-  i=1: mask=3   (flip bits 0-1)
-  i=2: mask=7   (flip bits 0-2)
-  i=3: mask=15  (flip bits 0-3)
+ShellMask(k) = (1 << (k+1)) - 1, for k = 1 to DIM-2
+  k=1: mask=3    (flip bits 0-1)
+  k=2: mask=7    (flip bits 0-2)
+  k=3: mask=15   (flip bits 0-3)
   ...
 ```
 
@@ -83,11 +83,9 @@ These connect each vertex to its DIM Hamming-distance-1 neighbors,
 providing local coupling along every dimension.
 
 Both mask types are computed inline from the loop index — a single XOR
-instruction per neighbor lookup.
-
-**Note:** ShellMask(0) and NearestMask(0) both equal 1, so the first
-connection in each family points to the same neighbor (bit-0 flip).
-All other mask values are distinct.
+instruction per neighbor lookup. All mask values across both families
+are distinct (shells start at mask=3 precisely to avoid overlapping
+with the nearest-neighbor bit-0 flip at mask=1).
 
 ### Why two connection types?
 
@@ -117,13 +115,18 @@ For each vertex v:
 ```
 s = 0
 for each shell connection i:     s += output[v XOR shell_mask(i)] * weight[v][i]
-for each nearest connection i:   s += output[v XOR nearest_mask(i)] * weight[v][DIM+i]
-state[v] = tanh(alpha * s)
+for each nearest connection i:   s += output[v XOR nearest_mask(i)] * weight[v][DIM-2+i]
+activation = tanh(alpha * s)
+state[v] = (1 - leak_rate) * output[v] + leak_rate * activation
 ```
 
 The `alpha` parameter (default 1.0) controls the steepness of the tanh
 activation. Higher alpha amplifies the nonlinearity; lower alpha makes
-the reservoir more linear.
+the reservoir more linear. The `leak_rate` parameter (default 1.0)
+controls how quickly neurons replace their state: at 1.0, the old state
+is fully replaced; at lower values (e.g., 0.3), 70% of the old state
+persists, creating a leaky integrator that smooths dynamics and extends
+temporal memory.
 
 ### Phase 2: Synchronous swap
 
@@ -137,7 +140,7 @@ parallelizable with OpenMP.
 
 ## Input injection
 
-External input is injected via `InjectInput(block, value)` **before**
+External input is injected via `InjectInput(channel, value)` **before**
 each `Step()`. The input value is clamped to [-1, +1] and added to each
 vertex's output via a per-vertex random projection weight (W_in):
 
@@ -147,16 +150,17 @@ output[v] += W_in[v] * clamp(input, -1, +1)
 
 ### Multi-input mode
 
-For K input channels, the N vertices are block-partitioned into K
-contiguous groups. Each input channel drives its own block:
+For K input channels (`num_inputs = K`), each channel drives a
+stride-interleaved subset of the N vertices:
 
-- Block 0 drives vertices [0, N/K)
-- Block 1 drives vertices [N/K, 2*N/K)
-- ...
+- Channel 0 drives vertices 0, K, 2K, 3K, ...
+- Channel 1 drives vertices 1, K+1, 2K+1, 3K+1, ...
+- Channel k drives vertices k, k+K, k+2K, ...
 
-Each block is a subcube of the hypercube. Cross-block mixing happens
-through shell connections and high-bit nearest-neighbor flips that
-cross block boundaries.
+Each channel's vertices are uniformly distributed across the hypercube,
+ensuring every channel has equal coverage of the topology. Cross-channel
+mixing happens naturally through the recurrent connections (shells and
+nearest-neighbor flips span across channels).
 
 ## Spectral radius
 
@@ -170,55 +174,39 @@ The spectral radius controls the reservoir's dynamical regime:
   differences amplify exponentially, destroying useful information.
 
 Recurrent weights are initialized from uniform[-1,1] scaled by
-1/sqrt(2*DIM), then rescaled so the spectral norm (estimated via power
+1/sqrt(2*DIM - 2), then rescaled so the spectral norm (estimated via power
 iteration, up to 100 iterations with convergence check) matches the
 target spectral radius. The spectral norm is the standard proxy for the
 spectral radius in reservoir computing — see the comment in
 `Reservoir.cpp:EstimateSpectralRadius()` for details.
 
-## Per-DIM optimized defaults
+## Scale-invariant defaults
 
-Two sets of defaults are provided in `ReservoirDefaults.h`, jointly
-optimized on MG h=1 + NARMA-10 + MC (3-seed average). Use
-`ReservoirDefaults<DIM>::MakeConfig(seed, mode)` to build a
-`ReservoirConfig` with the appropriate values for a given `FeatureMode`.
+The `ReservoirConfig` struct provides universal defaults that work
+across all DIM values (verified DIM 5-9):
 
-**Raw defaults** (optimized for N-dim raw readout):
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| spectral_radius | 0.90 | Edge-of-chaos optimum |
+| input_scaling | 0.02 | Uniform W_in scaling |
 
-| DIM | N    | SR   | Input scaling |
-|-----|------|------|---------------|
-| 4   | 16   | 0.95 | 0.05          |
-| 5   | 32   | 0.80 | 0.10          |
-| 6   | 64   | 0.90 | 0.05          |
-| 7   | 128  | 0.88 | 0.03          |
-| 8   | 256  | 0.88 | 0.02          |
-| 9   | 512  | 0.88 | 0.02          |
-| 10  | 1024 | 0.88 | 0.02          |
+These defaults are **scale-invariant** — the same values are optimal at
+every DIM. This is a consequence of the hypercube's vertex-transitive
+topology: every vertex has an identical local neighborhood structure
+(same degree, same shell distances, same symmetry), so the dynamics
+that produce good reservoir computing at one scale produce good dynamics
+at every scale.
 
-**Translation defaults** (optimized for 2.5N-dim readout via TranslationLayer):
+No per-DIM lookup tables or factory functions are needed. Just use
+`ReservoirConfig{}` and the defaults are correct. See
+[ScaleInvariance.md](ScaleInvariance.md) for the full sweep data and
+analysis.
 
-| DIM | N    | SR   | Input scaling |
-|-----|------|------|---------------|
-| 4   | 16   | 0.88 | 0.02          |
-| 5   | 32   | 0.80 | 0.04          |
-| 6   | 64   | 0.92 | 0.02          |
-| 7   | 128  | 0.92 | 0.04          |
-| 8   | 256  | 0.95 | 0.02          |
-| 9   | 512  | 0.95 | 0.02          |
-| 10  | 1024 | 0.95 | 0.02          |
-
-**Why are translation defaults different?** Translation features (x²,
-x*x') amplify the reservoir's dynamics, so the reservoir can run at
-higher spectral radius (closer to instability) without losing useful
-information. Input scaling is uniformly low (0.02-0.04) because the
-translation layer provides the needed signal gain.
-
-DIM 9-10 values are extrapolated from DIM 8 and not sweep-verified.
 Use `Tools/StandaloneESNSweep.cpp` to run your own parameter sweeps.
 
 ## Computational properties
 
-- **O(N * DIM) per step** — each vertex sums 2*DIM weighted neighbor
+- **O(N * DIM) per step** — each vertex sums 2*DIM - 2 weighted neighbor
   outputs, vs. O(N²) for a dense ESN
 - **Zero adjacency storage** — neighbors computed by XOR
 - **Trivially parallelizable** — OpenMP over vertices with no write

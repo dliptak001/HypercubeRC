@@ -42,8 +42,8 @@ access to the quadratic interactions that the NARMA-10 recurrence demands.
 2. Scale inputs to [-1, +1] for reservoir injection (raw NARMA inputs
    are in [0, 0.5]).
 3. For each of 3 seeds {42, 1042, 2042}:
-   - Run with raw features (N states, Raw-optimized defaults).
-   - Run with translation features (2.5N, Translation-optimized defaults).
+   - Run with raw features (N selected states).
+   - Run with translation features (2.5N).
    - Train the selected readout on 70%, test on 30%.
 4. Report 3-seed average NRMSE for raw and translation, plus % change.
 

@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <cmath>
 #include "../ESN.h"
-#include "../ReservoirDefaults.h"
+#include "../Reservoir.h"
 
 /// @brief Diagnostic: Analyze effective rank of reservoir state space
 /// and the input-correlated subspace.
@@ -26,8 +26,9 @@ class StateRank
 
 public:
     StateRank(ReadoutType readout_type = ReadoutType::Linear,
-              const ReservoirConfig* config = nullptr)
-        : readout_type_(readout_type), config_(config)
+              const ReservoirConfig* config = nullptr,
+              float output_fraction = 1.0f)
+        : readout_type_(readout_type), config_(config), output_fraction_(output_fraction)
     {
     }
 
@@ -55,36 +56,40 @@ public:
             for (size_t i = 0; i < total; ++i)
                 inputs[i] = static_cast<float>(dist(rng));
 
-            auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed);
+            ReservoirConfig cfg = config_ ? *config_ : ReservoirConfig{};
             cfg.seed = seed;
+            if (output_fraction_ != 1.0f)
+                cfg.output_fraction = output_fraction_;
             ESN<DIM> esn(cfg, readout_type_);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
 
-            const float* states = esn.States();
+            auto selected = esn.SelectedStates();
+            size_t M = esn.NumOutputVerts();
+            const float* states = selected.data();
 
             // Mean-center
-            std::vector<double> mean(N, 0.0);
+            std::vector<double> mean(M, 0.0);
             for (size_t t = 0; t < collect; ++t)
-                for (size_t v = 0; v < N; ++v)
-                    mean[v] += states[t * N + v];
-            for (size_t v = 0; v < N; ++v)
+                for (size_t v = 0; v < M; ++v)
+                    mean[v] += states[t * M + v];
+            for (size_t v = 0; v < M; ++v)
                 mean[v] /= collect;
 
-            std::vector<double> centered(collect * N);
+            std::vector<double> centered(collect * M);
             for (size_t t = 0; t < collect; ++t)
-                for (size_t v = 0; v < N; ++v)
-                    centered[t * N + v] = states[t * N + v] - mean[v];
+                for (size_t v = 0; v < M; ++v)
+                    centered[t * M + v] = states[t * M + v] - mean[v];
 
             // Eigenvalues
-            auto eigenvalues = ComputeEigenvalues(centered, collect, max_components, seed);
+            auto eigenvalues = ComputeEigenvalues(centered, collect, M, max_components, seed);
             ev_count = std::max(ev_count, eigenvalues.size());
             for (size_t i = 0; i < eigenvalues.size(); ++i)
                 ev_sum[i] += eigenvalues[i];
 
             // Input correlation
             auto [mean_r2, min_r2, max_r2, input_pct, high_r2_pct] =
-                ComputeInputCorrelation(states, inputs.data() + warmup, collect);
+                ComputeInputCorrelation(states, inputs.data() + warmup, collect, M);
 
             s_mean_r2 += mean_r2;
             s_min_r2 += min_r2;
@@ -141,8 +146,18 @@ public:
 private:
     ReadoutType readout_type_;
     const ReservoirConfig* config_;
+    float output_fraction_;
 
-    static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
+    static std::vector<uint64_t> Seeds()
+    {
+        if (single_seed) return {single_seed};
+        return {42, 1042, 2042};
+    }
+
+public:
+    static inline uint64_t single_seed = 0;  // non-zero = use only this seed
+
+private:
 
     struct InputCorr
     {
@@ -150,7 +165,7 @@ private:
     };
 
     static InputCorr ComputeInputCorrelation(const float* states, const float* input_ptr,
-                                              size_t collect)
+                                              size_t collect, size_t num_verts)
     {
         constexpr size_t K = 64;
         size_t valid = collect - K;
@@ -164,17 +179,17 @@ private:
         size_t high_r2_count = 0;
         double min_r2 = 1.0, max_r2 = 0.0, sum_r2 = 0.0;
 
-        for (size_t v = 0; v < N; ++v)
+        for (size_t v = 0; v < num_verts; ++v)
         {
             double mean_s = 0.0;
             for (size_t t = 0; t < valid; ++t)
-                mean_s += states[(K + t) * N + v];
+                mean_s += states[(K + t) * num_verts + v];
             mean_s /= valid;
 
             double var_s = 0.0;
             for (size_t t = 0; t < valid; ++t)
             {
-                double s = states[(K + t) * N + v] - mean_s;
+                double s = states[(K + t) * num_verts + v] - mean_s;
                 var_s += s * s;
             }
             var_s /= valid;
@@ -191,7 +206,7 @@ private:
                 double cov = 0.0, var_i = 0.0;
                 for (size_t t = 0; t < valid; ++t)
                 {
-                    double s = states[(K + t) * N + v] - mean_s;
+                    double s = states[(K + t) * num_verts + v] - mean_s;
                     double i = lagged[t * K + k] - mean_i;
                     cov += s * i;
                     var_i += i * i;
@@ -211,65 +226,65 @@ private:
             if (r2 > 0.5) ++high_r2_count;
         }
 
-        return {sum_r2 / N, min_r2, max_r2,
+        return {sum_r2 / num_verts, min_r2, max_r2,
                 total_var > 0 ? input_var / total_var * 100.0 : 0.0,
-                high_r2_count * 100.0 / N};
+                high_r2_count * 100.0 / num_verts};
     }
 
     static std::vector<double> ComputeEigenvalues(const std::vector<double>& centered,
-                                                   size_t collect, size_t max_components,
-                                                   uint64_t seed)
+                                                   size_t collect, size_t num_verts,
+                                                   size_t max_components, uint64_t seed)
     {
         std::vector<double> eigenvalues;
         std::vector<std::vector<double>> eigenvectors;
 
-        for (size_t comp = 0; comp < max_components && comp < N; ++comp)
+        for (size_t comp = 0; comp < max_components && comp < num_verts; ++comp)
         {
-            std::vector<double> q(N);
+            std::vector<double> q(num_verts);
             std::mt19937_64 rng(seed + 99999 + comp);
             std::uniform_real_distribution<double> dist(-1.0, 1.0);
             double norm = 0.0;
-            for (size_t v = 0; v < N; ++v)
+            for (size_t v = 0; v < num_verts; ++v)
             {
                 q[v] = dist(rng);
                 norm += q[v] * q[v];
             }
             norm = std::sqrt(norm);
-            for (size_t v = 0; v < N; ++v) q[v] /= norm;
+            for (size_t v = 0; v < num_verts; ++v) q[v] /= norm;
 
             double eigenvalue = 0.0;
             for (int iter = 0; iter < 100; ++iter)
             {
                 std::vector<double> y(collect, 0.0);
                 for (size_t t = 0; t < collect; ++t)
-                    for (size_t v = 0; v < N; ++v)
-                        y[t] += centered[t * N + v] * q[v];
+                    for (size_t v = 0; v < num_verts; ++v)
+                        y[t] += centered[t * num_verts + v] * q[v];
 
-                std::vector<double> z(N, 0.0);
+                std::vector<double> z(num_verts, 0.0);
                 for (size_t t = 0; t < collect; ++t)
-                    for (size_t v = 0; v < N; ++v)
-                        z[v] += centered[t * N + v] * y[t];
+                    for (size_t v = 0; v < num_verts; ++v)
+                        z[v] += centered[t * num_verts + v] * y[t];
 
-                for (size_t v = 0; v < N; ++v)
+                for (size_t v = 0; v < num_verts; ++v)
                     z[v] /= collect;
 
                 // Deflate
                 for (size_t p = 0; p < eigenvectors.size(); ++p)
                 {
                     double dot = 0.0;
-                    for (size_t v = 0; v < N; ++v)
+                    for (size_t v = 0; v < num_verts; ++v)
                         dot += z[v] * eigenvectors[p][v];
-                    for (size_t v = 0; v < N; ++v)
+                    for (size_t v = 0; v < num_verts; ++v)
                         z[v] -= dot * eigenvectors[p][v];
                 }
 
                 norm = 0.0;
-                for (size_t v = 0; v < N; ++v) norm += z[v] * z[v];
+                for (size_t v = 0; v < num_verts; ++v) norm += z[v] * z[v];
                 norm = std::sqrt(norm);
                 eigenvalue = norm;
 
                 if (norm > 1e-15)
-                    for (size_t v = 0; v < N; ++v) q[v] = z[v] / norm;
+                    for (size_t v = 0; v < num_verts; ++v) q[v] = z[v] / norm;
                 else
                     break;
             }
@@ -285,9 +300,9 @@ private:
     void PrintHeader(size_t warmup, size_t collect, size_t max_components) const
     {
         const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "Linear";
-        std::cout << "=== State Rank Analysis (" << rn << " Readout, raw features, 3-seed avg) ===\n";
+        std::cout << "=== State Rank Analysis (" << rn << " Readout, raw features, " << Seeds().size() << "-seed avg) ===\n";
         std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0 | Leak: 1.0"
-                  << " | SR: per-DIM default | Input scaling: per-DIM default\n";
+                  << " | SR: 0.90 | Input scaling: 0.02\n";
         std::cout << "DIM=" << DIM << "  N=" << N
                   << "  Warmup: " << warmup << " | Collect: " << collect
                   << " | Max components: " << max_components << "\n\n";

@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <cmath>
 #include "../ESN.h"
-#include "../ReservoirDefaults.h"
+#include "../Reservoir.h"
 #include "../TranslationLayer.h"
 #include "../SignalGenerators.h"
 #include "../readout/LinearReadout.h"
@@ -24,7 +24,6 @@ template <size_t DIM>
 class MackeyGlass
 {
     static constexpr size_t N = 1ULL << DIM;
-    static constexpr size_t FEATURES = TranslationFeatureCount<DIM>();
 
 public:
     struct Result
@@ -35,9 +34,9 @@ public:
     };
 
     MackeyGlass(size_t prediction_horizon = 1, ReadoutType readout_type = ReadoutType::Linear,
-                const ReservoirConfig* config = nullptr)
+                const ReservoirConfig* config = nullptr, float output_fraction = 1.0f)
         : prediction_horizon_(prediction_horizon), readout_type_(readout_type),
-          config_(config)
+          config_(config), output_fraction_(output_fraction)
     {
     }
 
@@ -71,29 +70,38 @@ public:
 
             // Raw features
             {
-                auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed);
+                ReservoirConfig cfg = config_ ? *config_ : ReservoirConfig{};
                 cfg.seed = seed;
+                if (output_fraction_ != 1.0f)
+                    cfg.output_fraction = output_fraction_;
                 ESN<DIM> esn(cfg, readout_type_);
                 esn.Warmup(series.data(), warmup);
                 esn.Run(series.data() + warmup, collect);
+                auto selected = esn.SelectedStates();
+                size_t M = esn.NumOutputVerts();
                 if (readout_type_ == ReadoutType::Ridge)
-                { RidgeRegression r; s_nrmse_raw += eval(r, esn.States(), targets.data(), tr, te, N); }
+                { RidgeRegression r; s_nrmse_raw += eval(r, selected.data(), targets.data(), tr, te, M); }
                 else
-                { LinearReadout r; s_nrmse_raw += eval(r, esn.States(), targets.data(), tr, te, N); }
+                { LinearReadout r; s_nrmse_raw += eval(r, selected.data(), targets.data(), tr, te, M); }
             }
 
             // Full translation
             {
-                auto cfg = config_ ? *config_ : ReservoirDefaults<DIM>::MakeConfig(seed, FeatureMode::Translation);
+                ReservoirConfig cfg = config_ ? *config_ : ReservoirConfig{};
                 cfg.seed = seed;
+                if (output_fraction_ != 1.0f)
+                    cfg.output_fraction = output_fraction_;
                 ESN<DIM> esn(cfg, readout_type_);
                 esn.Warmup(series.data(), warmup);
                 esn.Run(series.data() + warmup, collect);
-                auto translated = TranslationTransform<DIM>(esn.States(), collect);
+                size_t M = esn.NumOutputVerts();
+                auto translated = TranslationTransformSelected<DIM>(esn.States(), collect,
+                                                                     esn.OutputStride(), M);
+                size_t nf = TranslationFeatureCountSelected(M);
                 if (readout_type_ == ReadoutType::Ridge)
-                { RidgeRegression r; s_nrmse_full += eval(r, translated.data(), targets.data(), tr, te, FEATURES); }
+                { RidgeRegression r; s_nrmse_full += eval(r, translated.data(), targets.data(), tr, te, nf); }
                 else
-                { LinearReadout r; s_nrmse_full += eval(r, translated.data(), targets.data(), tr, te, FEATURES); }
+                { LinearReadout r; s_nrmse_full += eval(r, translated.data(), targets.data(), tr, te, nf); }
             }
         }
 
@@ -126,18 +134,30 @@ private:
     size_t prediction_horizon_;
     ReadoutType readout_type_;
     const ReservoirConfig* config_;
+    float output_fraction_;
 
-    static std::vector<uint64_t> Seeds() { return {42, 1042, 2042}; }
+    static std::vector<uint64_t> Seeds()
+    {
+        if (single_seed) return {single_seed};
+        return {42, 1042, 2042};
+    }
 
+public:
+    static inline uint64_t single_seed = 0;  // non-zero = use only this seed
+
+private:
     void PrintHeader(size_t warmup, size_t collect) const
     {
         const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "Linear";
         std::cout << "=== Mackey-Glass h=" << prediction_horizon_
-                  << " (" << rn << " Readout, 3-seed avg, raw vs full translation) ===\n";
+                  << " (" << rn << " Readout, " << Seeds().size() << "-seed avg, raw vs full translation) ===\n";
         std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0 | Leak: 1.0"
-                  << " | SR: per-DIM default | Input scaling: per-DIM default\n";
+                  << " | SR: 0.90 | Input scaling: 0.02\n";
+        float frac = output_fraction_;
+        size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * frac)));
         std::cout << "Warmup: " << warmup << " | Collect: " << collect
-                  << " | Features: " << N << " raw, " << FEATURES << " translated\n\n";
+                  << " | Outputs: " << M << "/" << N
+                  << " | Features: " << M << " raw, " << TranslationFeatureCountSelected(M) << " translated\n\n";
 
         std::cout << "  DIM |     N |    raw  |   full\n";
         std::cout << "  ----+-------+---------+-----------------\n";

@@ -166,12 +166,16 @@ the readout. This is a standard batch `Train()` call with at least
 18*N samples (the project standard).
 
 ```cpp
-auto cfg = ReservoirDefaults<8>::MakeConfig(seed, FeatureMode::Translation);
+ReservoirConfig cfg;
+cfg.seed = seed;
 ESN<8> esn(cfg, ReadoutType::Ridge);
 esn.Warmup(historical_data, 500);
 esn.Run(historical_data + 500, prime_steps);
 
-auto features = TranslationTransform<8>(esn.States(), prime_steps);
+size_t M = esn.NumOutputVerts();
+auto features = TranslationTransformSelected<8>(esn.States(), prime_steps,
+                                                 esn.OutputStride(), M);
+size_t nf = TranslationFeatureCountSelected(M);
 RidgeRegression readout;
 readout.Train(features.data(), targets, prime_steps, nf);
 ```
@@ -186,7 +190,8 @@ anomaly signal.
 // Process a window of live data
 esn.ClearStates();
 esn.Run(live_window, window_size);
-auto features = TranslationTransform<8>(esn.States(), window_size);
+auto features = TranslationTransformSelected<8>(esn.States(), window_size,
+                                                 esn.OutputStride(), M);
 
 for (size_t t = 0; t < window_size; ++t) {
     float predicted = readout.PredictRaw(features.data() + t * nf);

@@ -18,14 +18,14 @@ neighbors are chosen:
 | Property | Hypercube (`Reservoir<DIM>`) | Random (`RandomESN<DIM>`) |
 |----------|---------------------------|--------------------------|
 | Vertices | N = 2^DIM | N = 2^DIM |
-| Degree | 2*DIM per vertex | 2*DIM per vertex |
-| Weight init | uniform[-1,1] / sqrt(2*DIM) | same |
-| SR | per-DIM optimized default | same |
-| Input scaling | per-DIM optimized default | same |
+| Degree | 2*DIM - 2 per vertex | 2*DIM - 2 per vertex |
+| Weight init | uniform[-1,1] / sqrt(2*DIM - 2) | same |
+| SR | 0.90 (scale-invariant) | same |
+| Input scaling | 0.02 (scale-invariant) | same |
 | Activation | tanh(alpha * sum), alpha=1.0 | same |
 | W_in | random projection, same RNG | same |
-| **Neighbors** | **XOR masks (shells + nearest)** | **2*DIM random distinct** |
-| Adjacency storage | **none** (computed inline) | **N * 2*DIM array** |
+| **Neighbors** | **XOR masks (shells + nearest)** | **2*DIM - 2 random distinct** |
+| Adjacency storage | **none** (computed inline) | **N * (2*DIM - 2) array** |
 
 The `RandomESN<DIM>` was a temporary class built for this experiment and
 has since been removed from the codebase — the experiment answered its
@@ -105,7 +105,7 @@ adjacency lookup. In practice at DIM 5-10:
   access lets the prefetcher stay ahead.
 
 - **The bottleneck is computation, not addressing.** Each step performs
-  N * 2*DIM multiply-accumulates plus N tanh evaluations. The XOR vs.
+  N * (2*DIM - 2) multiply-accumulates plus N tanh evaluations. The XOR vs.
   array-index for neighbor lookup is a negligible fraction of total work.
 
 - **Both scale as O(N * DIM).** Neither is dense (O(N²)). The constant
