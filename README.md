@@ -255,6 +255,18 @@ features. HypercubeRC's benchmark advantage comes primarily from the translation
 layer and feature standardization, which are topology-independent enhancements
 (see [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md)).*
 
+## Related Work
+
+Katori (2019) "[Reservoir Computing Based on Dynamics of Pseudo-Billiard System
+in Hypercube](https://ieeexplore.ieee.org/document/8852329/)" (IJCNN 2019, Best
+Paper Award) also applies hypercube structure to reservoir computing. Katori's
+approach uses pseudo-billiard chaotic dynamics within a hypercube state space,
+where units interact through binary states via a Chaotic Boltzmann Machine.
+HypercubeRC takes a different approach: the hypercube defines the connectivity
+graph of an echo-state network, with XOR-addressed wiring between tanh neurons.
+The two architectures share the hypercube as a structural primitive but differ in
+dynamics, activation model, and the role the hypercube plays.
+
 ## Building and Running
 
 **Requirements:** C++23 compiler (GCC 13+, Clang 16+, MSVC 19.36+), CMake 3.20+.
