@@ -321,4 +321,57 @@ public:
         }
         std::cout << "\n";
     }
+
+    /// Run the same seed population at multiple input scaling values and compute
+    /// pairwise Spearman rank correlation.
+    static void RunCorrelationIS(
+        int seed_count,
+        float spectral_radius,
+        const std::vector<float>& is_values,
+        Diagnostic diagnostic,
+        float output_fraction = 1.0f)
+    {
+        const bool lower_is_better = (diagnostic != Diagnostic::Memory_Capacity);
+
+        // Run survey at each IS
+        std::vector<Result> results;
+        results.reserve(is_values.size());
+        for (float isc : is_values)
+        {
+            SeedSurvey<DIM> survey(seed_count, spectral_radius, isc, diagnostic, output_fraction);
+            results.push_back(survey.Run());
+            std::cout << "\n";
+        }
+
+        // Compute ranks for each IS
+        std::vector<std::map<uint64_t, double>> all_ranks;
+        all_ranks.reserve(is_values.size());
+        for (const auto& r : results)
+            all_ranks.push_back(ComputeRanks(r.seed_results, lower_is_better));
+
+        // Print correlation matrix
+        size_t k = is_values.size();
+        std::cout << "=== Spearman Rank Correlation Matrix ===\n";
+        std::cout << "  " << seed_count << " seeds, SR=" << std::fixed << std::setprecision(2)
+                  << spectral_radius << "\n\n";
+
+        // Column headers
+        std::cout << "          ";
+        for (float isc : is_values)
+            std::cout << "  IS=" << std::fixed << std::setprecision(3) << isc;
+        std::cout << "\n";
+
+        // Rows
+        for (size_t i = 0; i < k; ++i)
+        {
+            std::cout << "  IS=" << std::fixed << std::setprecision(3) << is_values[i];
+            for (size_t j = 0; j < k; ++j)
+            {
+                double rho = (i == j) ? 1.0 : ComputeSpearman(all_ranks[i], all_ranks[j]);
+                std::cout << "  " << std::fixed << std::setprecision(3) << std::setw(6) << rho;
+            }
+            std::cout << "\n";
+        }
+        std::cout << "\n";
+    }
 };
