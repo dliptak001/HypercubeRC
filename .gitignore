@@ -1,6 +1,7 @@
 # Build artifacts
 cmake-build-*/
 build/
+install-test/
 *.exe
 *.obj
 *.o
