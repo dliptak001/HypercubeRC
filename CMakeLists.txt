@@ -5,25 +5,29 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)  # Prefer -std=c++23 over GNU extensions
 
-# Source collection via GLOB — new .cpp files in project root and readout/ are picked up automatically
-file(GLOB SOURCES
-        ${PROJECT_SOURCE_DIR}/*.cpp
-        ${PROJECT_SOURCE_DIR}/readout/*.cpp
+# ——— Static library: core pipeline (Reservoir, ESN, TranslationLayer, readouts) ———
+file(GLOB READOUT_SOURCES ${PROJECT_SOURCE_DIR}/readout/*.cpp)
+add_library(HypercubeRCCore STATIC
+    ${PROJECT_SOURCE_DIR}/Reservoir.cpp
+    ${PROJECT_SOURCE_DIR}/ESN.cpp
+    ${PROJECT_SOURCE_DIR}/TranslationLayer.cpp
+    ${READOUT_SOURCES}
 )
 
-add_executable(HypercubeRC ${SOURCES})
+# ——— Executables link against the static library ———
+add_executable(HypercubeRC main.cpp)
+add_executable(BasicPrediction examples/BasicPrediction.cpp)
+add_executable(SignalClassification examples/SignalClassification.cpp)
+add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp)
+add_executable(StandaloneESNSweep diagnostics/StandaloneESNSweep.cpp)
+add_executable(SeedSurvey diagnostics/SeedSurvey.cpp)
 
-# ——— All targets ———
-file(GLOB READOUT_SOURCES ${PROJECT_SOURCE_DIR}/readout/*.cpp)
-set(CORE_SOURCES ${PROJECT_SOURCE_DIR}/Reservoir.cpp ${READOUT_SOURCES})
+set(ALL_TARGETS HypercubeRCCore HypercubeRC BasicPrediction SignalClassification StreamingAnomaly StandaloneESNSweep SeedSurvey)
+set(EXE_TARGETS HypercubeRC BasicPrediction SignalClassification StreamingAnomaly StandaloneESNSweep SeedSurvey)
 
-add_executable(BasicPrediction examples/BasicPrediction.cpp ${CORE_SOURCES})
-add_executable(SignalClassification examples/SignalClassification.cpp ${CORE_SOURCES})
-add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp ${CORE_SOURCES})
-add_executable(StandaloneESNSweep diagnostics/StandaloneESNSweep.cpp ${CORE_SOURCES})
-add_executable(SeedSurvey diagnostics/SeedSurvey.cpp ${CORE_SOURCES})
-
-set(ALL_TARGETS HypercubeRC BasicPrediction SignalClassification StreamingAnomaly StandaloneESNSweep SeedSurvey)
+foreach(tgt IN LISTS EXE_TARGETS)
+    target_link_libraries(${tgt} PRIVATE HypercubeRCCore)
+endforeach()
 
 foreach(tgt IN LISTS ALL_TARGETS)
     target_include_directories(${tgt} PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/readout)
