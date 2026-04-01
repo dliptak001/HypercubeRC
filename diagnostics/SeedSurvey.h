@@ -165,14 +165,9 @@ private:
         std::cout << "=== Seed Survey: " << DiagnosticName()
                   << " (DIM=" << DIM << ", N=" << N << ") ===\n";
         std::cout << "SR: " << std::fixed << std::setprecision(2) << spectral_radius_
-                  << " | Input scaling: " << std::setprecision(2) << input_scaling_
+                  << " | Input scaling: " << std::setprecision(3) << input_scaling_
                   << " | " << seed_count_ << " seeds"
                   << " | " << ReadoutName() << " readout\n\n";
-
-        /*std::cout << "  " << std::setw(20) << "Seed"
-                  << " | " << metric_name << "\n";
-        std::cout << "  " << std::string(20, '-')
-                  << "-+-" << std::string(14, '-') << "\n";*/
     }
 
     double RunSingleSeed(uint64_t seed)

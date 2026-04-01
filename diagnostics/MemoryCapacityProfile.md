@@ -47,7 +47,9 @@ problems.
    - Train the selected readout on 70%, compute R² on 30%.
    - If R² > 0, add it to the MC sum.
 4. Report per-lag R² at selected display lags plus total MC.
-5. Average across 3 seeds {42, 1042, 2042}.
+
+Uses a single per-DIM seed selected by 500-seed survey
+(see [docs/SeedSurvey.md](../docs/SeedSurvey.md)).
 
 **Note:** This diagnostic uses full translation features (2.5N), which
 differs from the main benchmark's MC (raw N features). The main.cpp
@@ -55,7 +57,7 @@ benchmark reports raw MC for comparability with published results.
 
 ## Sample results
 
-Run with Linear Readout, full translation, 3-seed average, DIM=8:
+Run with Linear Readout, full translation, DIM=8:
 
 | Lag | R² |
 |-----|----|

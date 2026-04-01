@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
     constexpr size_t horizon = 1;            // Predict 1 step ahead
     constexpr double train_fraction = 0.7;   // 70% train, 30% test
 
-    constexpr uint64_t seed = 42;            // Reservoir random seed (deterministic)
+    constexpr uint64_t seed = 6437149480297576047ULL;  // NARMA-10 best seed for DIM 7
 
     std::cout << "=== HypercubeRC: Basic Sine Wave Prediction ===\n\n";
     std::cout << "Task: predict the next value of sin(0.1t) from the reservoir's\n";

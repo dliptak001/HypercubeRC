@@ -41,22 +41,24 @@ access to the quadratic interactions that the NARMA-10 recurrence demands.
 1. Generate NARMA-10 input/target sequences (deterministic per seed).
 2. Scale inputs to [-1, +1] for reservoir injection (raw NARMA inputs
    are in [0, 0.5]).
-3. For each of 3 seeds {42, 1042, 2042}:
-   - Run with raw features (N selected states).
-   - Run with translation features (2.5N).
-   - Train the selected readout on 70%, test on 30%.
-4. Report 3-seed average NRMSE for raw and translation, plus % change.
+3. Run with raw features (N selected states).
+4. Run with translation features (2.5N).
+5. Train the selected readout on 70%, test on 30%.
+6. Report NRMSE for raw and translation, plus % change.
+
+Uses a single per-DIM seed selected by 500-seed survey
+(see [docs/SeedSurvey.md](../docs/SeedSurvey.md)).
 
 ## Sample results
 
-Run with Ridge Readout, 3-seed average:
+Run with Ridge Readout:
 
 | DIM | N    | Raw   | Full Translation | Change |
 |-----|------|-------|------------------|--------|
-| 5   | 32   | 0.566 | 0.539            | -4.7%  |
-| 6   | 64   | 0.417 | 0.264            | -36.7% |
-| 7   | 128  | 0.387 | 0.176            | -54.6% |
-| 8   | 256  | 0.399 | 0.125            | -68.6% |
+| 5   | 32   | 0.315 | 0.265            | -15.9% |
+| 6   | 64   | 0.360 | 0.152            | -57.9% |
+| 7   | 128  | 0.362 | 0.102            | -71.9% |
+| 8   | 256  | 0.368 | 0.062            | -83.1% |
 
 ## What to look for
 

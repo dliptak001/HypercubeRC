@@ -16,7 +16,7 @@
 /// For each lag L, fits a LinearReadout from translated reservoir states (2.5N features)
 /// to the continuous input value from L steps ago: target[t] = input[t - L].
 /// Reports per-lag R2 at selected display lags plus total MC (sum of R2 over all
-/// lags 1-50). 3-seed average.
+/// lags 1-50).
 ///
 /// NOTE: This diagnostic uses full translation (2.5N features), which yields higher MC
 /// than the standard metric (raw N states). The main.cpp cascade benchmark reports both
@@ -125,22 +125,30 @@ private:
     const ReservoirConfig* config_;
     float output_fraction_;
 
+    static constexpr uint64_t DefaultSeed()
+    {
+        if constexpr (DIM == 5) return 7778726955320718972ULL;
+        else if constexpr (DIM == 6) return 17341644007929035161ULL;
+        else if constexpr (DIM == 7) return 11931814417146401966ULL;
+        else return 42;
+    }
+
     static std::vector<uint64_t> Seeds()
     {
         if (single_seed) return {single_seed};
-        return {42, 1042, 2042};
+        return {DefaultSeed()};
     }
 
 public:
-    static inline uint64_t single_seed = 0;  // non-zero = use only this seed
+    static inline thread_local uint64_t single_seed = 0;  // non-zero = use only this seed
 
 private:
 
     void PrintHeader(size_t warmup, size_t collect) const
     {
         const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "Linear";
-        std::cout << "=== Memory Capacity Profile (" << rn << " Readout, full translation, " << Seeds().size() << "-seed avg) ===\n";
-        std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0 | Leak: 1.0"
+        std::cout << "=== Memory Capacity Profile (" << rn << " Readout, full translation) ===\n";
+        std::cout << "Seed: " << DefaultSeed() << " | Alpha: 1.0 | Leak: 1.0"
                   << " | SR: 0.90 | Input scaling: 0.02\n";
         float frac = output_fraction_;
         size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * frac)));

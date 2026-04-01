@@ -2,12 +2,12 @@
 
 ## The finding
 
-The optimal spectral radius and input scaling for HypercubeRC are
+The general-purpose spectral radius and input scaling for HypercubeRC are
 **independent of reservoir size**. Across five dimensions tested
 (DIM 5-9, N = 32 to 512), the same configuration wins every time:
 
-| Parameter | Optimal value | Tested range |
-|-----------|--------------|--------------|
+| Parameter | General-purpose value | Tested range |
+|-----------|----------------------|--------------|
 | Spectral radius | **0.90** | 0.70 - 0.99 |
 | Input scaling | **0.02** | 0.01 - 0.40 |
 
@@ -33,7 +33,7 @@ Three-pass grid sweeps (coarse, normal, fine) were run for each DIM
 using the `StandaloneESNSweep` tool. Ridge readout, 3-seed average,
 jointly optimizing MG h=1 + NARMA-10 + MC.
 
-### Summary at optimal SR = 0.90, input = 0.02
+### Summary at SR = 0.90, input = 0.02
 
 | DIM | N   | MG raw  | MG trans | NAR raw | NAR trans | MC    |
 |-----|-----|---------|----------|---------|-----------|-------|
@@ -81,6 +81,31 @@ In contrast, random sparse ESNs have heterogeneous degree
 distributions — some neurons are hubs, some are peripheral. This
 heterogeneity interacts with SR differently at each N, forcing
 per-size retuning.
+
+## Empirical validation: 500-seed survey
+
+A 500-seed survey ([SeedSurvey.md](SeedSurvey.md)) tested the stability
+of SR=0.90 as a general-purpose default across all three benchmarks
+(DIM 5-8). The survey measured Spearman rank correlation of seed
+performance across SR values {0.80, 0.85, 0.90, 0.95, 1.00} and IS
+values {0.010, 0.015, 0.020, 0.025, 0.030}.
+
+Key findings supporting SR=0.90 as the general-purpose default:
+
+- **MG** mean NRMSE reaches minimum at or near 0.90 at every DIM.
+- **MC** mean MC increases toward 0.95, but the gain from 0.90→0.95
+  comes with doubled variance across all tasks.
+- **NARMA** mean NRMSE hits minimum at 0.90-0.95, then rises at 1.00.
+- **Rank correlation** in the 0.85-0.90 corridor exceeds 0.82 for all
+  three benchmarks at all DIM values — seeds screened at SR=0.90
+  transfer reliably to adjacent configurations.
+- **SR=1.00** is a qualitatively different regime: correlation with
+  0.90 collapses below 0.45, and NARMA even goes negative at DIM 7.
+
+SR=0.90 is not necessarily the single best SR for any one task — MC
+would prefer 0.95, and individual seeds may peak elsewhere — but it
+is the best compromise across tasks, with the lowest variance and
+strongest rank correlation in the operating range.
 
 ## Practical implication
 

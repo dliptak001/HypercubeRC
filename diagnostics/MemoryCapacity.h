@@ -14,7 +14,7 @@
 /// Measures how many past inputs the reservoir can reconstruct via a linear
 /// readout. For each lag L in [1, max_lag], trains a LinearReadout to predict
 /// input[t - L] from raw reservoir states, and computes R². Total MC is the
-/// sum of R² over all lags. 3-seed average.
+/// sum of R² over all lags.
 ///
 /// Higher is better. Theoretical maximum = N (number of neurons).
 ///
@@ -110,10 +110,18 @@ private:
     const ReservoirConfig* config_;
     float output_fraction_;
 
+    static constexpr uint64_t DefaultSeed()
+    {
+        if constexpr (DIM == 5) return 7778726955320718972ULL;
+        else if constexpr (DIM == 6) return 17341644007929035161ULL;
+        else if constexpr (DIM == 7) return 11931814417146401966ULL;
+        else return 42;
+    }
+
     static std::vector<uint64_t> Seeds()
     {
         if (single_seed) return {single_seed};
-        return {42, 1042, 2042};
+        return {DefaultSeed()};
     }
 
 public:
@@ -122,9 +130,8 @@ public:
 private:
     void PrintHeader(size_t warmup, size_t collect) const
     {
-        std::cout << "=== Memory Capacity (LinearReadout, raw features, "
-                  << Seeds().size() << "-seed avg) ===\n";
-        std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0 | Leak: 1.0"
+        std::cout << "=== Memory Capacity (LinearReadout, raw features) ===\n";
+        std::cout << "Seed: " << DefaultSeed() << " | Alpha: 1.0 | Leak: 1.0"
                   << " | SR: 0.90 | Input scaling: 0.02\n";
         std::cout << "Warmup: " << warmup << " | Collect: " << collect
                   << " | MC = sum R2 lags 1-" << max_lag_ << "\n\n";

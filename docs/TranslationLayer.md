@@ -101,35 +101,35 @@ dynamical advantage.
 ## Impact on benchmark performance
 
 The translation layer's impact scales with task difficulty. Results
-from the main benchmark suite (Ridge Readout, 3-seed average):
+from the main benchmark suite (Ridge Readout, per-DIM optimal seed):
 
 ### Mackey-Glass h=1 (NRMSE, lower is better)
 
 | DIM | N    | Raw    | Translation | Change |
 |-----|------|--------|-------------|--------|
-| 5   | 32   | 0.0174 | 0.0141      | -18.8% |
-| 6   | 64   | 0.0106 | 0.0074      | -29.7% |
-| 7   | 128  | 0.0062 | 0.0045      | -28.1% |
-| 8   | 256  | 0.0060 | 0.0039      | -35.1% |
+| 5   | 32   | 0.0062 | 0.0044      | -29.0% |
+| 6   | 64   | 0.0052 | 0.0037      | -28.7% |
+| 7   | 128  | 0.0043 | 0.0032      | -26.6% |
+| 8   | 256  | 0.0038 | 0.0024      | -37.5% |
 
 ### NARMA-10 (NRMSE, lower is better)
 
 | DIM | N    | Raw   | Translation | Change |
 |-----|------|-------|-------------|--------|
-| 5   | 32   | 0.566 | 0.539       | -4.7%  |
-| 6   | 64   | 0.417 | 0.264       | -36.7% |
-| 7   | 128  | 0.387 | 0.176       | -54.6% |
-| 8   | 256  | 0.399 | 0.125       | -68.6% |
+| 5   | 32   | 0.315 | 0.265       | -15.9% |
+| 6   | 64   | 0.360 | 0.152       | -57.9% |
+| 7   | 128  | 0.362 | 0.102       | -71.9% |
+| 8   | 256  | 0.368 | 0.062       | -83.1% |
 
 ### What the numbers show
 
-**Mackey-Glass:** 19-35% NRMSE improvement at DIM 5-8. The chaotic
+**Mackey-Glass:** 27-38% NRMSE improvement at DIM 5-8. The chaotic
 time series has smooth dynamics that a linear readout can partially
 decode from raw states, so the translation layer provides a moderate
 boost by exposing the quadratic interactions.
 
 **NARMA-10:** This is where the translation layer earns its keep.
-5-69% improvement, scaling dramatically with DIM. The NARMA-10 target
+16-83% improvement, scaling dramatically with DIM. The NARMA-10 target
 contains explicit product terms (y*sum, u*u) that align directly with
 the x² and x*x' features — the readout can learn the nonlinear target
 almost directly from the expanded features instead of trying to

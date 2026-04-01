@@ -84,7 +84,7 @@ int main(int argc, char* argv[])
     constexpr size_t collect = block_size * NUM_CLASSES * num_cycles;  // 12000 timesteps
     constexpr double train_fraction = 0.7;
 
-    constexpr uint64_t seed = 42;
+    constexpr uint64_t seed = 6437149480297576047ULL;  // NARMA-10 best seed for DIM 7
     std::cout << "=== HypercubeRC: Signal Classification ===\n\n";
     std::cout << "Task: identify which waveform is currently being fed to the reservoir,\n";
     std::cout << "using only the reservoir's internal state -- not the input directly.\n\n";

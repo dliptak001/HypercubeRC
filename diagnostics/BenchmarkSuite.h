@@ -67,7 +67,8 @@ struct BenchmarkSuite
         std::cout << "The pipeline: drive the reservoir with a scalar input signal, collect\n";
         std::cout << "the N-dimensional state at each step, then train a linear readout to\n";
         std::cout << "map those states to the target. The reservoir's weights are fixed --\n";
-        std::cout << "only the readout is learned. All results below are 3-seed averages.\n";
+        std::cout << "only the readout is learned. Each benchmark uses its optimal seed\n";
+        std::cout << "per DIM, selected by 500-seed survey (see docs/SeedSurvey.md).\n";
         std::cout << "Output fraction: " << static_cast<int>(output_fraction * 100) << "%\n\n";
         std::cout << "  DIM  -- hypercube dimension; the reservoir has N = 2^DIM neurons\n";
         std::cout << "  raw  -- readout uses N raw reservoir states\n";

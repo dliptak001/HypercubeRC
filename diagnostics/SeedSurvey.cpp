@@ -20,10 +20,10 @@
 static constexpr size_t DIM = 5;           // used only when SWEEP_ALL_DIMS = false
 static constexpr int SEED_COUNT = 500;
 static constexpr float OUTPUT_FRACTION = 1.0f;
-static constexpr int DIAGNOSTIC_ID = 1;    // 0=MC, 1=MG, 2=NARMA
+static constexpr int DIAGNOSTIC_ID = 2;    // 0=MC, 1=MG, 2=NARMA
 
 enum class SweepMode { SINGLE, SWEEP_SR, SWEEP_IS };
-static constexpr SweepMode MODE = SweepMode::SWEEP_IS;
+static constexpr SweepMode MODE = SweepMode::SWEEP_SR;
 static constexpr bool SWEEP_ALL_DIMS = true;
 
 // Single mode
