@@ -68,7 +68,7 @@ struct ReservoirConfig
 template <size_t DIM>
 class Reservoir
 {
-    static_assert(DIM >= 4 && DIM <= 10, "DIM must be in 4 <= DIM <= 10");
+    static_assert(DIM >= 5 && DIM <= 8, "DIM must be in 4 <= DIM <= 8");
 
     static constexpr size_t N = 1ULL << DIM;
     static constexpr size_t NUM_SHELL = DIM - 2;          // shells 3, 7, ..., 2^(DIM-1)-1

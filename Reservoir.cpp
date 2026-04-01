@@ -153,10 +153,7 @@ void Reservoir<DIM>::InjectInput(size_t channel, float input)
 }
 
 // Explicit template instantiations (DIM 4-10)
-template class Reservoir<4>;
 template class Reservoir<5>;
 template class Reservoir<6>;
 template class Reservoir<7>;
 template class Reservoir<8>;
-template class Reservoir<9>;
-template class Reservoir<10>;
