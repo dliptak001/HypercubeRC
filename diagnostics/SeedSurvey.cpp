@@ -17,14 +17,14 @@
 // =====================================================================
 // Configuration — change these and rebuild
 // =====================================================================
-static constexpr size_t DIM = 5;           // used only when SWEEP_ALL_DIMS = false
+static constexpr size_t DIM = 8;           // used only when SWEEP_ALL_DIMS = false
 static constexpr int SEED_COUNT = 500;
 static constexpr float OUTPUT_FRACTION = 1.0f;
-static constexpr int DIAGNOSTIC_ID = 2;    // 0=MC, 1=MG, 2=NARMA
+static constexpr int DIAGNOSTIC_ID = 0;    // 0=MC, 1=MG, 2=NARMA
 
 enum class SweepMode { SINGLE, SWEEP_SR, SWEEP_IS };
-static constexpr SweepMode MODE = SweepMode::SWEEP_SR;
-static constexpr bool SWEEP_ALL_DIMS = true;
+static constexpr SweepMode MODE = SweepMode::SINGLE;
+static constexpr bool SWEEP_ALL_DIMS = false;
 
 // Single mode
 static constexpr float SPECTRAL_RADIUS = 0.90f;

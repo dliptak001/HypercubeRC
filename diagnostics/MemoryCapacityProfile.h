@@ -130,6 +130,7 @@ private:
         if constexpr (DIM == 5) return 7778726955320718972ULL;
         else if constexpr (DIM == 6) return 17341644007929035161ULL;
         else if constexpr (DIM == 7) return 11931814417146401966ULL;
+        else if constexpr (DIM == 8) return 14376161041117039141ULL;
         else return 42;
     }
 

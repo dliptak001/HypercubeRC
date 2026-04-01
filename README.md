@@ -254,8 +254,7 @@ and streaming mode.
 All results: per-DIM optimal seed (selected by 500-seed survey, see
 [docs/SeedSurvey.md](docs/SeedSurvey.md)), Ridge readout, full translation layer
 (2.5N features), general-purpose defaults (SR=0.90, input_scaling=0.02). MC uses
-Linear readout with raw features (the standard metric). DIM 9-10 use legacy seeds
-(not yet surveyed).
+Linear readout with raw features (the standard metric).
 
 ### Mackey-Glass h=1 (chaotic time series, NRMSE, lower is better)
 
@@ -265,19 +264,15 @@ Linear readout with raw features (the standard metric). DIM 9-10 use legacy seed
 | 6   | 64   | 0.0052 | 0.0037      | 3-14x better                 |
 | 7   | 128  | 0.0043 | 0.0032      | 3-16x better                 |
 | 8   | 256  | 0.0038 | 0.0024      | 4-21x better                 |
-| 9   | 512  | 0.0037 | 0.0022      | 5-23x better                 |
-| 10  | 1024 | 0.0028 | 0.0015      | 7-33x better                 |
 
 ### NARMA-10 (nonlinear memory, NRMSE, lower is better)
 
 | DIM | N    | Raw   | Translation | vs standard ESN (0.2-0.4) |
 |-----|------|-------|-------------|---------------------------|
-| 5   | 32   | 0.315 | 0.265       | Beats range                |
-| 6   | 64   | 0.360 | 0.152       | Decisively beats range     |
+| 5   | 32   | 0.315 | 0.265       | Within range               |
+| 6   | 64   | 0.360 | 0.152       | Beats range                |
 | 7   | 128  | 0.362 | 0.102       | 2-4x better                |
 | 8   | 256  | 0.368 | 0.062       | 3-6x better                |
-| 9   | 512  | 0.377 | 0.072       | 3-6x better                |
-| 10  | 1024 | 0.373 | 0.065       | 3-6x better                |
 
 ### Memory Capacity (sum of R², lags 1-50, Linear readout, raw features)
 
@@ -286,13 +281,7 @@ Linear readout with raw features (the standard metric). DIM 9-10 use legacy seed
 | 5   | 32   | 18.9  |
 | 6   | 64   | 27.5  |
 | 7   | 128  | 34.1  |
-| 8   | 256  | 22.2* |
-| 9   | 512  | 33.6  |
-| 10  | 1024 | 33.0  |
-
-\*DIM 8 MC uses a fallback seed (not surveyed for MC). The MC seed survey
-covered DIM 5-7 only; DIM 8 runtime was prohibitive. The anomalous drop
-from DIM 7→8 is a seed quality artifact, not a property of the architecture.
+| 8   | 256  | 43.4  |
 
 Full results with per-lag profiles in [diagnostics/](diagnostics/).
 
