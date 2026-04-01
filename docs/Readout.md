@@ -168,33 +168,26 @@ the readout. This is a standard batch `Train()` call with at least
 ```cpp
 ReservoirConfig cfg;
 cfg.seed = seed;
-ESN<8> esn(cfg, ReadoutType::Ridge);
+ESN<8> esn(cfg, ReadoutType::Ridge, FeatureMode::Translated);
 esn.Warmup(historical_data, 500);
 esn.Run(historical_data + 500, prime_steps);
-
-size_t M = esn.NumOutputVerts();
-auto features = TranslationTransformSelected<8>(esn.States(), prime_steps,
-                                                 esn.OutputStride(), M);
-size_t nf = TranslationFeatureCountSelected(M);
-RidgeRegression readout;
-readout.Train(features.data(), targets, prime_steps, nf);
+esn.Train(targets, train_size);
 ```
 
 **Phase 2 — Monitor** (predict and detect):
 
 Drive the reservoir with live data in windows. For each window, predict
 the expected output and compare to reality. The prediction error is the
-anomaly signal.
+anomaly signal. `ClearStates()` resets collected states but preserves the
+trained readout weights.
 
 ```cpp
 // Process a window of live data
 esn.ClearStates();
 esn.Run(live_window, window_size);
-auto features = TranslationTransformSelected<8>(esn.States(), window_size,
-                                                 esn.OutputStride(), M);
 
 for (size_t t = 0; t < window_size; ++t) {
-    float predicted = readout.PredictRaw(features.data() + t * nf);
+    float predicted = esn.PredictRaw(t);
     float error = actual[t] - predicted;
     // error is the anomaly signal
 }
@@ -208,11 +201,11 @@ When conditions drift gradually, periodically collect recent data and
 blend it into the model:
 
 ```cpp
-LinearReadout lr;
-lr.Train(initial_features, initial_targets, n_init, nf);
+ESN<8> esn(cfg, ReadoutType::Linear, FeatureMode::Translated);
+// ... warmup, run, initial train ...
 
 // Later, when drift is detected:
-lr.TrainIncremental(recent_features, recent_targets, n_recent, nf, 0.1f);
+esn.TrainIncremental(recent_targets, recent_size, /*blend=*/0.1f);
 ```
 
 **How often to adapt:**

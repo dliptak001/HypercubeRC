@@ -53,7 +53,7 @@ analysis showing how quickly the reservoir locks on after a waveform switch.
 ```
 === HypercubeRC: Signal Classification ===
 
-Config: DIM=7  N=128  Outputs=128 (60%)  Features=320 (translation)  Readout=Ridge
+Config: DIM=7  N=128  Outputs=90 (70%)  Features=225 (translation)  Readout=Ridge
 
 Overall accuracy: ~96.8%
 

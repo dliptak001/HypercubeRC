@@ -9,7 +9,7 @@
 ///   SWEEP_SR — fixed IS, sweep SR values, Spearman correlation matrix
 ///   SWEEP_IS — fixed SR, sweep IS values, Spearman correlation matrix
 ///
-/// Set SWEEP_ALL_DIMS = true to run the active sweep across DIM 5-8.
+/// Set SWEEP_ALL_DIMS = true to run the active sweep across DIM 5-8 (library supports 5-12).
 /// Set false to run only the single DIM specified above.
 
 #include "SeedSurvey.h"

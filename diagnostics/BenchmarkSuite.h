@@ -53,7 +53,7 @@ struct BenchmarkDIM
     }
 };
 
-/// @brief Full benchmark suite across DIM 5-8. One call does everything.
+/// @brief Full benchmark suite across DIM 5-8 (library supports 5-12). One call does everything.
 struct BenchmarkSuite
 {
     static void RunAll(float output_fraction = 1.0f, const ReservoirConfig* config = nullptr)

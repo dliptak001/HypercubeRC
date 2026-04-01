@@ -3,7 +3,7 @@
 A reservoir computer whose neurons live on a Boolean hypercube — a
 DIM-dimensional graph where each vertex is addressed by a DIM-bit binary
 index, with all connectivity defined by XOR operations on vertex indices.
-No adjacency list is stored. N = 2^DIM neurons, DIM 5-10.
+No adjacency list is stored. N = 2^DIM neurons, DIM 5-12.
 
 Licensed under the [Apache License 2.0](LICENSE).
 
@@ -37,7 +37,7 @@ families — cumulative-bit Hamming shells for long-range mixing and single-bit
 nearest-neighbor flips for local coupling. All neighbor addresses are computed by
 XOR on vertex indices; no adjacency list is stored.
 
-The system targets DIM 5-10 (32 to 1024 neurons), the practical range for
+The system targets DIM 5-12 (32 to 4096 neurons), the practical range for
 reservoir computing applications.
 
 ## Scale-Invariant Hyperparameters
@@ -90,7 +90,7 @@ analysis.
 ## Seed Quality is Topology-Invariant
 
 A 500-seed survey across Mackey-Glass, NARMA-10, and Memory Capacity
-benchmarks (DIM 5-8) shows that the rank ordering of seeds by performance
+benchmarks (DIM 5-8, with library support through DIM 12) shows that the rank ordering of seeds by performance
 is stable across hyperparameter configurations. Seeds screened at one
 (SR, input_scaling) pair rank similarly at any other pair within the
 operating range.
@@ -127,7 +127,7 @@ Spearman matrices, distribution tables, and cross-benchmark analysis.
 A controlled head-to-head experiment
 ([docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md)) showed that a random
 sparse ESN with identical parameters produces equivalent benchmark performance
-and equivalent speed at DIM 5-10. The hypercube does not compute better than a
+and equivalent speed at DIM 5-12. The hypercube does not compute better than a
 random graph — but it computes more elegantly, and its vertex-transitive symmetry
 produces the scale-invariant hyperparameters described above.
 
@@ -163,14 +163,14 @@ operating range (Spearman rho >= 0.82 within the SR corridor, rho >= 0.949 acros
 input scaling). Screen once, reuse everywhere — no per-configuration seed search.
 
 None of the storage or addressing advantages produce a measurable speed
-difference in a software benchmark at DIM 5-10 on a modern CPU with deep cache
+difference in a software benchmark at DIM 5-12 on a modern CPU with deep cache
 hierarchies. They become relevant at scale or in constrained environments.
 
 ## Architecture Summary
 
 | Property | Detail |
 |----------|--------|
-| Neurons | N = 2^DIM, DIM 5-10 (32 to 1024) |
+| Neurons | N = 2^DIM, DIM 5-12 (32 to 4096) |
 | Connections per neuron | 2*DIM - 2 (DIM-2 shells + DIM nearest-neighbor) |
 | Addressing | XOR on vertex indices — O(1) per lookup, zero storage |
 | Step cost | O(N * DIM) per timestep — sparse, not O(N²) |
@@ -229,7 +229,7 @@ expands M selected states into 2.5M features:
 This is a fixed algebraic transform with no learned parameters. Antipodal
 partners (vertex v XOR N-1) are looked up from the full N-state vector, not from
 the selected subset — every cross-product spans the full diameter of the
-hypercube. NRMSE improvement: 27-38% on Mackey-Glass, 16-83% on NARMA-10 at DIM 5-8.
+hypercube. NRMSE improvement: 27-38% on Mackey-Glass, 16-83% on NARMA-10 at DIM 5-8 (benchmarked range).
 
 See [docs/TranslationLayer.md](docs/TranslationLayer.md) for design rationale
 and feature details.
@@ -307,7 +307,7 @@ dynamics, activation model, and the role the hypercube plays.
 
 ## Building and Running
 
-**Requirements:** C++23 compiler (GCC 13+, Clang 16+, MSVC 19.36+), CMake 3.20+.
+**Requirements:** C++23 compiler (GCC 13+, Clang 17+, MSVC 19.36+), CMake 4.1+.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -319,7 +319,7 @@ The build produces six executables:
 
 | Target | Purpose |
 |--------|---------|
-| `HypercubeRC` | Full benchmark suite (MC, Mackey-Glass, NARMA-10, DIM 5-8) |
+| `HypercubeRC` | Full benchmark suite (MC, Mackey-Glass, NARMA-10, DIM 5-8; library supports 5-12) |
 | `BasicPrediction` | Minimal example: sine wave prediction |
 | `SignalClassification` | Multi-class waveform recognition with confusion matrix |
 | `StreamingAnomaly` | Streaming anomaly detection with recovery dynamics |
@@ -337,9 +337,10 @@ GCC/Clang, and MSVC automatically.
 ```
 HypercubeRC/
   Reservoir.h/cpp        Hypercube reservoir (N = 2^DIM vertices)
-  ESN.h                  Pipeline wrapper: warmup, run, collect, output selection
-  TranslationLayer.h     Feature expansion: x + x² + x*x' (2.5M features)
+  ESN.h/cpp              Unified pipeline: warmup, run, train, predict (owns readout + translation)
+  TranslationLayer.h/cpp Feature expansion: x + x² + x*x' (2.5M features)
   main.cpp               Benchmark suite entry point (DIM 5-8)
+  SDK.md                 Consumer documentation for the static library
 
   readout/
     LinearReadout.h/cpp   SGD readout with L2 decay and streaming mode
@@ -380,6 +381,7 @@ HypercubeRC/
 | [docs/ScaleInvariance.md](docs/ScaleInvariance.md) | Why SR=0.90 and input_scaling=0.02 work at every DIM — sweep data and vertex-transitivity analysis |
 | [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) | Hypercube vs random ESN: equivalent performance, different architectural tradeoffs |
 | [docs/SeedSurvey.md](docs/SeedSurvey.md) | Seed quality survey: Spearman rank correlation across SR, IS, and benchmarks (DIM 5-8) |
+| [SDK.md](SDK.md) | Static library: build, install, find_package usage, API reference |
 
 Diagnostic `.md` files in `diagnostics/` provide educational introductions to
 each benchmark with sample results and interpretation guidance.
