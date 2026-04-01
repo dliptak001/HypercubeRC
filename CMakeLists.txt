@@ -47,18 +47,29 @@ foreach(tgt IN LISTS EXE_TARGETS)
     target_link_libraries(${tgt} PRIVATE HypercubeRCCore)
 endforeach()
 
-# ——— OpenMP (compile PRIVATE, link PUBLIC — library uses OpenMP internally,
-#     consumers don't need <omp.h> but must link the OpenMP runtime) ———
+# ——— OpenMP ———
+# Library: compile PRIVATE (internal use), link PUBLIC (consumers inherit runtime).
+# Executables: compile PRIVATE (diagnostic headers have #pragma omp).
+# External SDK consumers do NOT need -fopenmp to compile against the headers.
 if(MINGW)
     target_compile_options(HypercubeRCCore PRIVATE -fopenmp)
     target_link_options(HypercubeRCCore PUBLIC -fopenmp)
+    foreach(tgt IN LISTS EXE_TARGETS)
+        target_compile_options(${tgt} PRIVATE -fopenmp)
+    endforeach()
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU" AND NOT MINGW)
     find_package(OpenMP QUIET)
     if(OpenMP_CXX_FOUND)
         target_link_libraries(HypercubeRCCore PUBLIC OpenMP::OpenMP_CXX)
+        foreach(tgt IN LISTS EXE_TARGETS)
+            target_compile_options(${tgt} PRIVATE ${OpenMP_CXX_FLAGS})
+        endforeach()
     endif()
 elseif(MSVC)
     target_compile_options(HypercubeRCCore PRIVATE /openmp)
+    foreach(tgt IN LISTS EXE_TARGETS)
+        target_compile_options(${tgt} PRIVATE /openmp)
+    endforeach()
 endif()
 
 foreach(tgt IN LISTS ALL_TARGETS)
