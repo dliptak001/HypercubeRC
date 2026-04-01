@@ -6,8 +6,6 @@
 #include <random>
 #include <cstddef>
 #include "../ESN.h"
-#include "../Reservoir.h"
-#include "../readout/LinearReadout.h"
 
 /// @brief Diagnostic: Total memory capacity (raw features, LinearReadout).
 ///
@@ -21,6 +19,10 @@
 /// This is the lightweight version — raw N features, LinearReadout only.
 /// See MemoryCapacityProfile for the full translation-layer version with
 /// per-lag breakdown.
+///
+/// NOTE: Per-lag readouts are created externally because MC trains 50
+/// independent readouts (one per lag), which doesn't fit the single-readout
+/// ESN pipeline.
 template <size_t DIM>
 class MemoryCapacity
 {
@@ -59,12 +61,13 @@ public:
             cfg.seed = seed;
             if (output_fraction_ != 1.0f)
                 cfg.output_fraction = output_fraction_;
-            ESN<DIM> esn(cfg, ReadoutType::Linear);
+            ESN<DIM> esn(cfg, ReadoutType::Linear, FeatureMode::Raw);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
+            esn.EnsureFeatures();
 
-            auto selected = esn.SelectedStates();
-            size_t M = esn.NumOutputVerts();
+            size_t M = esn.NumFeatures();
+            const float* features = esn.Features();
             double mc = 0.0;
             size_t num_lags = std::min(max_lag_, collect - 1);
 
@@ -76,7 +79,7 @@ public:
                 for (size_t t = 0; t < valid; ++t)
                     tgt[t] = inputs[warmup + t];
 
-                const float* vs = selected.data() + lag * M;
+                const float* vs = features + lag * M;
                 size_t tr = static_cast<size_t>(valid * 0.7);
                 size_t te = valid - tr;
                 if (tr == 0 || te == 0) continue;

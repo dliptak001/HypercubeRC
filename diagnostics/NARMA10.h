@@ -6,11 +6,7 @@
 #include <cstddef>
 #include <cmath>
 #include "../ESN.h"
-#include "../Reservoir.h"
-#include "../TranslationLayer.h"
 #include "SignalGenerators.h"
-#include "../readout/LinearReadout.h"
-#include "../readout/RidgeRegression.h"
 
 /// @brief Diagnostic: NARMA-10 nonlinear benchmark.
 ///
@@ -49,13 +45,6 @@ public:
 
         double s_nrmse_raw = 0.0, s_nrmse_full = 0.0;
 
-        auto eval = [](auto& readout, const float* features, const float* targets,
-                       size_t tr, size_t te, size_t nf)
-        {
-            readout.Train(features, targets, tr, nf);
-            return ComputeNRMSE(readout, features + tr * nf, targets + tr, te, nf);
-        };
-
         for (uint64_t seed : Seeds())
         {
             auto [u, y] = GenerateNARMA10(seed + 99, warmup + collect);
@@ -72,40 +61,27 @@ public:
             size_t tr = static_cast<size_t>(collect * 0.7);
             size_t te = collect - tr;
 
+            ReservoirConfig cfg = config_ ? *config_ : ReservoirConfig{};
+            cfg.seed = seed;
+            if (output_fraction_ != 1.0f)
+                cfg.output_fraction = output_fraction_;
+
             // Raw features
             {
-                ReservoirConfig cfg = config_ ? *config_ : ReservoirConfig{};
-                cfg.seed = seed;
-                if (output_fraction_ != 1.0f)
-                    cfg.output_fraction = output_fraction_;
-                ESN<DIM> esn(cfg, readout_type_);
+                ESN<DIM> esn(cfg, readout_type_, FeatureMode::Raw);
                 esn.Warmup(ri.data(), warmup);
                 esn.Run(ri.data() + warmup, collect);
-                auto selected = esn.SelectedStates();
-                size_t M = esn.NumOutputVerts();
-                if (readout_type_ == ReadoutType::Ridge)
-                { RidgeRegression r; s_nrmse_raw += eval(r, selected.data(), targets.data(), tr, te, M); }
-                else
-                { LinearReadout r; s_nrmse_raw += eval(r, selected.data(), targets.data(), tr, te, M); }
+                esn.Train(targets.data(), tr);
+                s_nrmse_raw += esn.NRMSE(targets.data(), tr, te);
             }
 
             // Full translation
             {
-                ReservoirConfig cfg = config_ ? *config_ : ReservoirConfig{};
-                cfg.seed = seed;
-                if (output_fraction_ != 1.0f)
-                    cfg.output_fraction = output_fraction_;
-                ESN<DIM> esn(cfg, readout_type_);
+                ESN<DIM> esn(cfg, readout_type_, FeatureMode::Translated);
                 esn.Warmup(ri.data(), warmup);
                 esn.Run(ri.data() + warmup, collect);
-                size_t M = esn.NumOutputVerts();
-                auto translated = TranslationTransformSelected<DIM>(esn.States(), collect,
-                                                                     esn.OutputStride(), M);
-                size_t nf = TranslationFeatureCountSelected(M);
-                if (readout_type_ == ReadoutType::Ridge)
-                { RidgeRegression r; s_nrmse_full += eval(r, translated.data(), targets.data(), tr, te, nf); }
-                else
-                { LinearReadout r; s_nrmse_full += eval(r, translated.data(), targets.data(), tr, te, nf); }
+                esn.Train(targets.data(), tr);
+                s_nrmse_full += esn.NRMSE(targets.data(), tr, te);
             }
         }
 

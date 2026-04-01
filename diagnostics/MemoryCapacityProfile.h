@@ -6,14 +6,10 @@
 #include <random>
 #include <cstddef>
 #include "../ESN.h"
-#include "../Reservoir.h"
-#include "../TranslationLayer.h"
-#include "../readout/LinearReadout.h"
-#include "../readout/RidgeRegression.h"
 
 /// @brief Diagnostic: Memory capacity profile across lags 1-50.
 ///
-/// For each lag L, fits a LinearReadout from translated reservoir states (2.5N features)
+/// For each lag L, fits a readout from translated reservoir states (2.5N features)
 /// to the continuous input value from L steps ago: target[t] = input[t - L].
 /// Reports per-lag R2 at selected display lags plus total MC (sum of R2 over all
 /// lags 1-50).
@@ -22,8 +18,9 @@
 /// than the standard metric (raw N states). The main.cpp cascade benchmark reports both
 /// raw and full translation side by side.
 ///
-/// This is the standard ESN memory capacity metric from Jaeger (2001), extended
-/// with the full translation layer.
+/// NOTE: Per-lag readouts are created externally because MC trains 50
+/// independent readouts (one per lag), which doesn't fit the single-readout
+/// ESN pipeline.
 template <size_t DIM>
 class MemoryCapacityProfile
 {
@@ -62,15 +59,13 @@ public:
             cfg.seed = seed;
             if (output_fraction_ != 1.0f)
                 cfg.output_fraction = output_fraction_;
-            ESN<DIM> esn(cfg, readout_type_);
+            ESN<DIM> esn(cfg, readout_type_, FeatureMode::Translated);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
+            esn.EnsureFeatures();
 
-            // Apply translation layer to selected outputs
-            size_t M = esn.NumOutputVerts();
-            auto translated = TranslationTransformSelected<DIM>(esn.States(), collect,
-                                                                 esn.OutputStride(), M);
-            size_t nf = TranslationFeatureCountSelected(M);
+            size_t nf = esn.NumFeatures();
+            const float* features = esn.Features();
 
             auto eval_lag = [&](auto& readout, size_t lag)
             {
@@ -83,7 +78,7 @@ public:
                 for (size_t t = 0; t < valid; ++t)
                     targets[t] = inputs[warmup + t];
 
-                const float* lagged = translated.data() + lag * nf;
+                const float* lagged = features + lag * nf;
 
                 readout.Train(lagged, targets.data(), tr, nf);
                 double r2 = readout.R2(lagged + tr * nf, targets.data() + tr, te);
