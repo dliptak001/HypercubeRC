@@ -1,5 +1,6 @@
 @PACKAGE_INIT@
 
+# OpenMP runtime is needed at link time (library uses OpenMP internally)
 include(CMakeFindDependencyMacro)
 find_dependency(OpenMP)
 
