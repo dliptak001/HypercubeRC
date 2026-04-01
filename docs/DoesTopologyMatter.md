@@ -98,7 +98,7 @@ All within measurement noise. No measurable speed difference at these sizes.
 ### Why no speed difference?
 
 The hypercube's theoretical advantage is O(1) XOR addressing vs. stored
-adjacency lookup. In practice at DIM 5-10:
+adjacency lookup. In practice at DIM 5-12:
 
 - **Adjacency fits in cache.** At DIM=10 the adjacency array is
   1024 * 20 * 4B = 80KB — comfortably in L2. Sequential vertex-by-vertex
@@ -151,7 +151,7 @@ The hypercube does not compute better — but it computes more elegantly:
   addressing maps to gates directly — no routing table, no memory
   controller for adjacency lookup.
 
-None of these advantages appear in a software benchmark at DIM 5-10 on a
+None of these advantages appear in a software benchmark at DIM 5-12 on a
 modern CPU with deep cache hierarchies. They become relevant at scale or
 in constrained environments.
 

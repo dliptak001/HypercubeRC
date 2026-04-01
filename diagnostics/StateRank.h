@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <cmath>
 #include "../ESN.h"
-#include "../Reservoir.h"
 
 /// @brief Diagnostic: Analyze effective rank of reservoir state space
 /// and the input-correlated subspace.
@@ -25,10 +24,9 @@ class StateRank
     static constexpr size_t N = 1ULL << DIM;
 
 public:
-    StateRank(ReadoutType readout_type = ReadoutType::Linear,
-              const ReservoirConfig* config = nullptr,
+    StateRank(const ReservoirConfig* config = nullptr,
               float output_fraction = 1.0f)
-        : readout_type_(readout_type), config_(config), output_fraction_(output_fraction)
+        : config_(config), output_fraction_(output_fraction)
     {
     }
 
@@ -60,13 +58,13 @@ public:
             cfg.seed = seed;
             if (output_fraction_ != 1.0f)
                 cfg.output_fraction = output_fraction_;
-            ESN<DIM> esn(cfg, readout_type_);
+            ESN<DIM> esn(cfg, ReadoutType::Linear, FeatureMode::Raw);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
+            esn.EnsureFeatures();
 
-            auto selected = esn.SelectedStates();
-            size_t M = esn.NumOutputVerts();
-            const float* states = selected.data();
+            size_t M = esn.NumFeatures();
+            const float* states = esn.Features();
 
             // Mean-center
             std::vector<double> mean(M, 0.0);
@@ -144,7 +142,6 @@ public:
     }
 
 private:
-    ReadoutType readout_type_;
     const ReservoirConfig* config_;
     float output_fraction_;
 
@@ -155,7 +152,7 @@ private:
     }
 
 public:
-    static inline uint64_t single_seed = 0;  // non-zero = use only this seed
+    static inline thread_local uint64_t single_seed = 0;  // non-zero = use only this seed
 
 private:
 
@@ -299,8 +296,7 @@ private:
 
     void PrintHeader(size_t warmup, size_t collect, size_t max_components) const
     {
-        const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "Linear";
-        std::cout << "=== State Rank Analysis (" << rn << " Readout, raw features, " << Seeds().size() << "-seed avg) ===\n";
+        std::cout << "=== State Rank Analysis (raw features, " << Seeds().size() << "-seed avg) ===\n";
         std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0 | Leak: 1.0"
                   << " | SR: 0.90 | Input scaling: 0.02\n";
         std::cout << "DIM=" << DIM << "  N=" << N

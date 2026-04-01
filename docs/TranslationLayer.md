@@ -177,4 +177,4 @@ output_fraction=1.0, stride=1 and M=N, so both variants produce
 identical results.
 
 All are header-only templates, instantiated at compile time for the
-DIM values used in the project (4-10).
+DIM values supported by the library (5-12).

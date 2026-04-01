@@ -1,69 +1,42 @@
 #pragma once
 
-#include <algorithm>
-#include <cmath>
 #include <cstddef>
 #include <cstring>
 #include <memory>
+#include <variant>
 #include <vector>
 #include "Reservoir.h"
+#include "TranslationLayer.h"
+#include "LinearReadout.h"
+#include "RidgeRegression.h"
 
 enum class ReadoutType { Linear, Ridge };
+enum class FeatureMode { Raw, Translated };
 
-/// @brief Echo-state network wrapper implementing the three-stage pipeline:
-///        Reservoir -> [Output Selection] -> Translation -> Readout.
+/// @brief Echo-state network implementing the full pipeline:
+///        Reservoir -> [Output Selection] -> [Translation] -> Readout.
 ///
-/// The reservoir (Reservoir) produces N-dimensional state vectors per timestep. These
-/// raw states are collected by Run() and exposed via States(). A **translation layer**
-/// (see TranslationLayer.h) transforms states into 2.5M features (x, x², x*x_anti')
-/// before the linear readout, breaking through the tanh nonlinear encoding bottleneck.
+/// ESN owns all stages of the pipeline. Construct with a ReservoirConfig,
+/// a ReadoutType, and a FeatureMode, then drive, train, and predict:
 ///
-/// The translation layer is external to this class. Callers access raw states via
-/// States(), apply TranslationTransformSelected(), and pass the expanded features to
-/// the readout. Readouts (LinearReadout, RidgeRegression) are instantiated externally;
-/// ESN stores the ReadoutType for callers to query via GetReadoutType().
+///     ESN<6> esn(cfg, ReadoutType::Ridge, FeatureMode::Translated);
+///     esn.Warmup(inputs, 200);
+///     esn.Run(inputs + 200, total);
+///     esn.Train(targets, train_size);
+///     double r2 = esn.R2(targets, train_size, test_size);
 ///
-/// **Pipeline:**
+/// **Feature modes.**
+///   - Raw: M stride-selected vertex states (M features per timestep).
+///   - Translated: M selected -> 2.5M features via [x | x² | x*x_antipodal].
 ///
-///   Reservoir (N states) -> M selected -> TranslationLayer (2.5M features) -> Readout
+/// **Training.** Train() uses sensible defaults for both readout types.
+/// Power users can call the Ridge overload with a custom lambda, or the
+/// Linear overload with custom SGD parameters (lr, epochs).
 ///
-/// **Output selection.** The `output_fraction` parameter (from ReservoirConfig)
-/// controls how many of the N vertices are used as readout features. M vertices
-/// are selected by stride: 0, stride, 2*stride, ... where stride = N/M. At the
-/// default output_fraction=1.0, M=N and all vertices are used. At 0.5, half are
-/// used, cutting Ridge readout cost by ~4x (quadratic in feature count).
-/// SelectedStates() extracts the M-vertex subset; TranslationTransformSelected()
-/// builds 2.5M features from it (using the full N-state buffer for antipodal lookups).
+/// **State access.** States(), SelectedStates(), and Features() remain
+/// available for direct access (diagnostics, analysis, custom readouts).
 ///
-/// **Workflow:**
-///
-/// 1. **Construct** — Creates the reservoir from a ReservoirConfig with concrete
-///    parameter values. ReservoirConfig's defaults (SR=0.90, input=0.02)
-///    are scale-invariant and work across all DIMs.
-///
-/// 2. **Warmup** — Drive the reservoir to wash out initial conditions (200-500 steps).
-///
-///        esn.Warmup(inputs, 200);
-///
-/// 3. **Run** — Drive and record N-dimensional states per step.
-///
-///        esn.Run(inputs + 200, 1000);
-///
-/// 4. **Extract features** — For raw readout, use SelectedStates() (M features).
-///    For translation readout, use TranslationTransformSelected() with States(),
-///    OutputStride(), and NumOutputVerts() (2.5M features).
-///
-/// 5. **ClearStates** — Reset state buffer between independent evaluations.
-///
-/// **Design notes:**
-///   - Inputs are clamped to [-1, +1] by InjectInput.
-///   - States are tanh outputs in [-1, +1].
-///   - Targets and predictions are continuous (unbounded for regression).
-///   - The reservoir produces N = 2^DIM state features per step.
-///   - States() exposes the raw flat buffer (all N vertices, needed by translation).
-///   - SelectedStates() returns only the M stride-selected vertices.
-///
-/// @tparam DIM Hypercube dimension (4-10). Vertex count is 2^DIM.
+/// @tparam DIM Hypercube dimension (5-12). Vertex count is 2^DIM.
 template <size_t DIM>
 class ESN
 {
@@ -71,85 +44,101 @@ class ESN
 
 public:
     explicit ESN(const ReservoirConfig& cfg,
-                 ReadoutType readout_type = ReadoutType::Linear)
-        : reservoir_(Reservoir<DIM>::Create(cfg)),
-          readout_type_(readout_type)
-    {
-        output_fraction_ = cfg.output_fraction;
-        size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * output_fraction_)));
-        output_stride_ = std::max<size_t>(1, N / M);
-        // Actual count from the stride loop
-        num_output_verts_ = (N + output_stride_ - 1) / output_stride_;
-    }
+                 ReadoutType readout_type = ReadoutType::Ridge,
+                 FeatureMode feature_mode = FeatureMode::Translated);
+
+    // ---------------------------------------------------------------
+    //  Reservoir driving
+    // ---------------------------------------------------------------
 
     /// @brief Drive the reservoir without recording.
-    /// @param inputs Array of num_steps scalars (single-input mode).
-    void Warmup(const float* inputs, size_t num_steps)
-    {
-        for (size_t s = 0; s < num_steps; ++s)
-        {
-            reservoir_->InjectInput(0, inputs[s]);
-            reservoir_->Step();
-        }
-    }
+    void Warmup(const float* inputs, size_t num_steps);
 
     /// @brief Drive the reservoir and collect state snapshots.
-    /// @param inputs Array of num_steps scalars (single-input mode).
-    void Run(const float* inputs, size_t num_steps)
-    {
-        states_.resize((num_collected_ + num_steps) * N);
-        for (size_t s = 0; s < num_steps; ++s)
-        {
-            reservoir_->InjectInput(0, inputs[s]);
-            reservoir_->Step();
+    void Run(const float* inputs, size_t num_steps);
 
-            const float* out = reservoir_->Outputs();
-            memcpy(states_.data() + (num_collected_ + s) * N, out, N * sizeof(float));
-        }
-        num_collected_ += num_steps;
-    }
+    /// @brief Clear collected states and cached features.
+    void ClearStates();
 
-    /// @brief Clear collected states. Call between independent evaluations.
-    void ClearStates()
-    {
-        states_.clear();
-        num_collected_ = 0;
-    }
+    // ---------------------------------------------------------------
+    //  Training
+    // ---------------------------------------------------------------
+
+    /// @brief Train on the first train_size collected states with default parameters.
+    void Train(const float* targets, size_t train_size);
+
+    /// @brief Train Ridge readout with custom lambda.
+    void Train(const float* targets, size_t train_size, double lambda);
+
+    /// @brief Train Linear readout with custom SGD parameters.
+    void Train(const float* targets, size_t train_size,
+               float lr, size_t epochs,
+               float weight_decay = 1e-4f, float lr_decay = 0.01f);
+
+    /// @brief Incremental training for streaming (Linear readout only).
+    void TrainIncremental(const float* targets, size_t train_size,
+                          float blend = 0.1f,
+                          float lr = 0.0f, size_t epochs = 200,
+                          float weight_decay = 1e-4f, float lr_decay = 0.01f);
+
+    // ---------------------------------------------------------------
+    //  Prediction & evaluation
+    // ---------------------------------------------------------------
+
+    /// @brief Predict from collected state at a given timestep index.
+    [[nodiscard]] float PredictRaw(size_t timestep) const;
+
+    /// @brief R² on a slice of collected states [start, start+count).
+    /// Both features and targets are indexed from `start`.
+    [[nodiscard]] double R2(const float* targets, size_t start, size_t count) const;
+
+    /// @brief NRMSE on a slice of collected states [start, start+count).
+    /// Both features and targets are indexed from `start`.
+    [[nodiscard]] double NRMSE(const float* targets, size_t start, size_t count) const;
+
+    /// @brief Classification accuracy on a slice of collected states.
+    /// Both features and labels are indexed from `start`.
+    [[nodiscard]] double Accuracy(const float* labels, size_t start, size_t count) const;
+
+    // ---------------------------------------------------------------
+    //  State & feature access
+    // ---------------------------------------------------------------
 
     /// @brief Extract stride-selected vertices from collected states.
-    /// Returns a flat buffer of num_collected * num_output_verts floats.
-    /// At output_fraction=1.0 (stride=1), this is identical to States().
-    [[nodiscard]] std::vector<float> SelectedStates() const
-    {
-        std::vector<float> selected(num_collected_ * num_output_verts_);
-        for (size_t s = 0; s < num_collected_; ++s)
-        {
-            const float* src = states_.data() + s * N;
-            float* dst = selected.data() + s * num_output_verts_;
-            size_t j = 0;
-            for (size_t v = 0; v < N; v += output_stride_)
-                dst[j++] = src[v];
-        }
-        return selected;
-    }
+    [[nodiscard]] std::vector<float> SelectedStates() const;
+
+    /// @brief Build and cache features from collected states (incremental).
+    /// Only computes features for states added since the last call.
+    void EnsureFeatures() const;
+
+    /// @brief Number of features per timestep (M for Raw, 2.5M for Translated).
+    [[nodiscard]] size_t NumFeatures() const;
 
     // --- Accessors ---
     [[nodiscard]] size_t NumCollected() const { return num_collected_; }
     [[nodiscard]] const float* States() const { return states_.data(); }
+    [[nodiscard]] const float* Features() const { return features_.data(); }
     [[nodiscard]] float OutputFraction() const { return output_fraction_; }
     [[nodiscard]] size_t OutputStride() const { return output_stride_; }
     [[nodiscard]] size_t NumOutputVerts() const { return num_output_verts_; }
     [[nodiscard]] ReadoutType GetReadoutType() const { return readout_type_; }
+    [[nodiscard]] FeatureMode GetFeatureMode() const { return feature_mode_; }
     [[nodiscard]] const Reservoir<DIM>& GetReservoir() const { return *reservoir_; }
     [[nodiscard]] float GetAlpha() const { return reservoir_->GetAlpha(); }
 
 private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
     ReadoutType readout_type_;
+    FeatureMode feature_mode_;
+    std::variant<LinearReadout, RidgeRegression> readout_;
+
     float output_fraction_ = 1.0f;
     size_t output_stride_ = 1;
     size_t num_output_verts_ = N;
 
-    std::vector<float> states_; // flat: num_collected_ * N floats
+    std::vector<float> states_;      // flat: num_collected_ * N floats
     size_t num_collected_ = 0;
+
+    mutable std::vector<float> features_;    // flat: num_collected_ * NumFeatures() floats
+    mutable size_t features_computed_ = 0;   // incremental: features valid for [0, features_computed_)
 };

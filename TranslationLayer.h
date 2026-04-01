@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstring>
 #include <vector>
-#include <omp.h>
 
 /// @brief Translation layer: expand reservoir states into richer features
 ///        that help a linear readout decode information trapped inside tanh.

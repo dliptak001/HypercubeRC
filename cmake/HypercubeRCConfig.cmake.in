@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+
+# OpenMP runtime is needed at link time (library uses OpenMP internally)
+include(CMakeFindDependencyMacro)
+find_dependency(OpenMP)
+
+include("${CMAKE_CURRENT_LIST_DIR}/HypercubeRCTargets.cmake")
+
+check_required_components(HypercubeRC)

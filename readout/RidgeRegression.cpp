@@ -1,6 +1,5 @@
 #include "RidgeRegression.h"
 #include <algorithm>
-#include <omp.h>
 
 void RidgeRegression::Train(const float* features, const float* labels,
                              size_t num_samples, size_t num_features, double lambda)
