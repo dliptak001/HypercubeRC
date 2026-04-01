@@ -77,7 +77,7 @@ int main(int argc, char* argv[])
     constexpr float normal_noise = 0.01f;
     constexpr float anomaly_threshold = 5.0f;
 
-    constexpr uint64_t seed = 6437149480297576047ULL;
+    constexpr uint64_t seed = 6437149480297576047ULL;  // NARMA-10 best seed for DIM 7
     std::mt19937_64 signal_rng(seed + 777);
 
     //                         label              noise  drift  freq

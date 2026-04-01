@@ -307,7 +307,7 @@ dynamics, activation model, and the role the hypercube plays.
 
 ## Building and Running
 
-**Requirements:** C++23 compiler (GCC 13+, Clang 17+, MSVC 19.36+), CMake 4.1+.
+**Requirements:** C++23 compiler (GCC 13+, Clang 17+, MSVC 2022+), CMake 4.1+.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release

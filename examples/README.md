@@ -11,7 +11,7 @@ This is the place to start if you want to understand how the pieces fit together
 **What it shows:**
 - ESN construction with a single DIM template parameter
 - Warmup (wash out initial transients) and Run (collect states)
-- Output selection via `output_fraction` (10% of vertices by default)
+- Output selection via `output_fraction` (10% of vertices in this example)
 - Raw vs translation feature extraction (command-line selectable)
 - Ridge readout training and evaluation (R², NRMSE)
 - Sample-by-sample prediction output
@@ -32,7 +32,7 @@ Config: DIM=7  N=128  Outputs=15 (10%)  Features=15 (raw)  Readout=Ridge  Horizo
    ...
 ```
 
-**Make it yours:** Replace the sine wave generation (lines 58-60) with your own time
+**Make it yours:** Replace the sine wave generation (lines 52-54) with your own time
 series data. Keep values in [-1, 1] (the reservoir clamps out-of-range inputs silently).
 Adjust `DIM` to control reservoir size, and `warmup`/`collect` to match your data volume.
 
@@ -53,7 +53,7 @@ analysis showing how quickly the reservoir locks on after a waveform switch.
 ```
 === HypercubeRC: Signal Classification ===
 
-Config: DIM=7  N=128  Outputs=90 (70%)  Features=225 (translation)  Readout=Ridge
+Config: DIM=7  N=128  Outputs=128 (70%)  Features=320 (translation)  Readout=Ridge
 
 Overall accuracy: ~96.8%
 

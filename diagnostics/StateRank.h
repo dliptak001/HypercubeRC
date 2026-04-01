@@ -152,7 +152,7 @@ private:
     }
 
 public:
-    static inline uint64_t single_seed = 0;  // non-zero = use only this seed
+    static inline thread_local uint64_t single_seed = 0;  // non-zero = use only this seed
 
 private:
 

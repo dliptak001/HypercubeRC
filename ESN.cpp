@@ -124,6 +124,7 @@ double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
 {
     EnsureFeatures();
     assert(start + count <= num_collected_);
+    if (count == 0) return 0.0;
 
     const float* tgt = targets + start;
     double mean = 0.0;
