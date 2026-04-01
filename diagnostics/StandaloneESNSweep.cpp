@@ -1,4 +1,4 @@
-/// @file Tools/StandaloneESNSweep.cpp
+/// @file diagnostics/StandaloneESNSweep.cpp
 /// @brief Grid sweep: SR x input_scaling for standalone ESN.
 ///
 /// Configure DIM, sweep ranges, and output_fraction below, rebuild, and run.
@@ -8,9 +8,9 @@
 #include <iomanip>
 #include <iostream>
 #include <vector>
-#include "../diagnostics/MemoryCapacity.h"
-#include "../diagnostics/MackeyGlass.h"
-#include "../diagnostics/NARMA10.h"
+#include "MemoryCapacity.h"
+#include "MackeyGlass.h"
+#include "NARMA10.h"
 
 // =====================================================================
 // Configuration — change these and rebuild

@@ -62,6 +62,6 @@ in the header files are written for an educational audience:
 | `ESN.h` | `ESN<DIM>` — the pipeline wrapper (warmup, run, collect states) |
 | `Reservoir.h` | `Reservoir<DIM>` — the hypercube reservoir core |
 | `TranslationLayer.h` | `TranslationTransform<DIM>()`, `TranslationTransformSelected<DIM>()` — feature expansion |
-| `SignalGenerators.h` | `GenerateMackeyGlass()`, `GenerateNARMA10()`, `ComputeNRMSE()` |
+| `diagnostics/SignalGenerators.h` | `GenerateMackeyGlass()`, `GenerateNARMA10()`, `ComputeNRMSE()` |
 | `readout/LinearReadout.h` | `LinearReadout` — SGD readout with streaming support |
 | `readout/RidgeRegression.h` | `RidgeRegression` — closed-form optimal readout |

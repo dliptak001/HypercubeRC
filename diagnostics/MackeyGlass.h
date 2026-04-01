@@ -8,7 +8,7 @@
 #include "../ESN.h"
 #include "../Reservoir.h"
 #include "../TranslationLayer.h"
-#include "../SignalGenerators.h"
+#include "SignalGenerators.h"
 #include "../readout/LinearReadout.h"
 #include "../readout/RidgeRegression.h"
 

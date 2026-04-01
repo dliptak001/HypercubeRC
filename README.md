@@ -300,7 +300,6 @@ HypercubeRC/
   Reservoir.h/cpp        Hypercube reservoir (N = 2^DIM vertices)
   ESN.h                  Pipeline wrapper: warmup, run, collect, output selection
   TranslationLayer.h     Feature expansion: x + x² + x*x' (2.5M features)
-  SignalGenerators.h     Benchmark signal generators and NRMSE utility
   main.cpp               Benchmark suite entry point (DIM 5-8)
 
   readout/
@@ -318,9 +317,8 @@ HypercubeRC/
     NARMA10.h/md          Nonlinear memory benchmark
     MemoryCapacity.h      Total memory capacity (raw features)
     MemoryCapacityProfile.h/md  Per-lag memory profile (translation features)
+    SignalGenerators.h    Benchmark signal generators and NRMSE utility
     StateRank.h/md        Reservoir dimensionality and input correlation
-
-  Tools/
     StandaloneESNSweep.cpp  Grid sweep: SR x input_scaling
 
   docs/
