@@ -286,6 +286,7 @@ The build produces five executables:
 | `SignalClassification` | Multi-class waveform recognition with confusion matrix |
 | `StreamingAnomaly` | Streaming anomaly detection with recovery dynamics |
 | `StandaloneESNSweep` | Parameter sweep tool for SR and input_scaling |
+| `SeedSurvey` | Seed quality survey: per-seed benchmark with distribution stats |
 
 Start with `BasicPrediction` to see the pipeline end-to-end. Each example has a
 companion `.md` file with a detailed walkthrough.
@@ -319,6 +320,7 @@ HypercubeRC/
     MemoryCapacityProfile.h/md  Per-lag memory profile (translation features)
     SignalGenerators.h    Benchmark signal generators and NRMSE utility
     StateRank.h/md        Reservoir dimensionality and input correlation
+    SeedSurvey.h/cpp      Seed quality survey: per-seed benchmark statistics
     StandaloneESNSweep.cpp  Grid sweep: SR x input_scaling
 
   docs/

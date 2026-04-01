@@ -21,8 +21,9 @@ add_executable(BasicPrediction examples/BasicPrediction.cpp ${CORE_SOURCES})
 add_executable(SignalClassification examples/SignalClassification.cpp ${CORE_SOURCES})
 add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp ${CORE_SOURCES})
 add_executable(StandaloneESNSweep diagnostics/StandaloneESNSweep.cpp ${CORE_SOURCES})
+add_executable(SeedSurvey diagnostics/SeedSurvey.cpp ${CORE_SOURCES})
 
-set(ALL_TARGETS HypercubeRC BasicPrediction SignalClassification StreamingAnomaly StandaloneESNSweep)
+set(ALL_TARGETS HypercubeRC BasicPrediction SignalClassification StreamingAnomaly StandaloneESNSweep SeedSurvey)
 
 foreach(tgt IN LISTS ALL_TARGETS)
     target_include_directories(${tgt} PRIVATE ${PROJECT_SOURCE_DIR} ${PROJECT_SOURCE_DIR}/readout)
