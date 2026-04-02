@@ -52,9 +52,13 @@ public:
     // ---------------------------------------------------------------
 
     /// @brief Drive the reservoir without recording.
+    /// @param inputs  Pointer to num_steps * num_inputs floats, row-major
+    ///                (num_inputs values per timestep).  When num_inputs == 1,
+    ///                this is simply num_steps scalars — fully backwards compatible.
     void Warmup(const float* inputs, size_t num_steps);
 
     /// @brief Drive the reservoir and collect state snapshots.
+    /// @param inputs  Pointer to num_steps * num_inputs floats, row-major.
     void Run(const float* inputs, size_t num_steps);
 
     /// @brief Clear collected states and cached features.
@@ -123,7 +127,6 @@ public:
     [[nodiscard]] size_t NumOutputVerts() const { return num_output_verts_; }
     [[nodiscard]] ReadoutType GetReadoutType() const { return readout_type_; }
     [[nodiscard]] FeatureMode GetFeatureMode() const { return feature_mode_; }
-    [[nodiscard]] const Reservoir<DIM>& GetReservoir() const { return *reservoir_; }
     [[nodiscard]] float GetAlpha() const { return reservoir_->GetAlpha(); }
 
 private:
@@ -132,6 +135,7 @@ private:
     FeatureMode feature_mode_;
     std::variant<LinearReadout, RidgeRegression> readout_;
 
+    size_t num_inputs_ = 1;
     float output_fraction_ = 1.0f;
     size_t output_stride_ = 1;
     size_t num_output_verts_ = N;

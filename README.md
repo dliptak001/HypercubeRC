@@ -340,7 +340,7 @@ HypercubeRC/
   ESN.h/cpp              Unified pipeline: warmup, run, train, predict (owns readout + translation)
   TranslationLayer.h/cpp Feature expansion: x + x² + x*x' (2.5M features)
   main.cpp               Benchmark suite entry point (DIM 5-8)
-  SDK.md                 Consumer documentation for the static library
+  docs/CPP_SDK.md        C++ consumer documentation for the static library
 
   readout/
     LinearReadout.h/cpp   SGD readout with L2 decay and streaming mode
@@ -381,7 +381,7 @@ HypercubeRC/
 | [docs/ScaleInvariance.md](docs/ScaleInvariance.md) | Why SR=0.90 and input_scaling=0.02 work at every DIM — sweep data and vertex-transitivity analysis |
 | [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) | Hypercube vs random ESN: equivalent performance, different architectural tradeoffs |
 | [docs/SeedSurvey.md](docs/SeedSurvey.md) | Seed quality survey: Spearman rank correlation across SR, IS, and benchmarks (DIM 5-8) |
-| [SDK.md](SDK.md) | Static library: build, install, find_package usage, API reference |
+| [docs/CPP_SDK.md](docs/CPP_SDK.md) | C++ static library: build, install, find_package usage, API reference |
 
 Diagnostic `.md` files in `diagnostics/` provide educational introductions to
 each benchmark with sample results and interpretation guidance.

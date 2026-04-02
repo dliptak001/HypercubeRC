@@ -10,7 +10,9 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
       readout_type_(readout_type),
       feature_mode_(feature_mode)
 {
+    num_inputs_ = cfg.num_inputs;
     output_fraction_ = cfg.output_fraction;
+    assert(output_fraction_ > 0.0f && output_fraction_ <= 1.0f);
     size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * output_fraction_)));
     output_stride_ = std::max<size_t>(1, N / M);
     num_output_verts_ = (N + output_stride_ - 1) / output_stride_;
@@ -24,9 +26,11 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
 template <size_t DIM>
 void ESN<DIM>::Warmup(const float* inputs, size_t num_steps)
 {
+    const size_t K = num_inputs_;
     for (size_t s = 0; s < num_steps; ++s)
     {
-        reservoir_->InjectInput(0, inputs[s]);
+        for (size_t ch = 0; ch < K; ++ch)
+            reservoir_->InjectInput(ch, inputs[s * K + ch]);
         reservoir_->Step();
     }
 }
@@ -34,10 +38,12 @@ void ESN<DIM>::Warmup(const float* inputs, size_t num_steps)
 template <size_t DIM>
 void ESN<DIM>::Run(const float* inputs, size_t num_steps)
 {
+    const size_t K = num_inputs_;
     states_.resize((num_collected_ + num_steps) * N);
     for (size_t s = 0; s < num_steps; ++s)
     {
-        reservoir_->InjectInput(0, inputs[s]);
+        for (size_t ch = 0; ch < K; ++ch)
+            reservoir_->InjectInput(ch, inputs[s * K + ch]);
         reservoir_->Step();
 
         const float* out = reservoir_->Outputs();
