@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-13, macos-14]
+        os: [ubuntu-latest, windows-latest, macos-14]
 
     steps:
       - uses: actions/checkout@v4
@@ -34,9 +34,6 @@ jobs:
         with:
           package-dir: python
           output-dir: wheelhouse
-        env:
-          # macOS-13 (Intel) builds x86_64 only; macOS-14 (Apple Silicon) builds arm64 only
-          CIBW_ARCHS_MACOS: ${{ matrix.os == 'macos-13' && 'x86_64' || 'arm64' }}
 
       - uses: actions/upload-artifact@v4
         with:
