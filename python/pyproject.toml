@@ -1,0 +1,17 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.13"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "hypercube-rc"
+version = "0.1.0"
+description = "Python bindings for HypercubeRC: reservoir computing on Boolean hypercube graphs"
+requires-python = ">=3.9"
+dependencies = ["numpy>=1.21"]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+wheel.packages = ["hypercube_rc"]

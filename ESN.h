@@ -128,6 +128,7 @@ public:
     [[nodiscard]] ReadoutType GetReadoutType() const { return readout_type_; }
     [[nodiscard]] FeatureMode GetFeatureMode() const { return feature_mode_; }
     [[nodiscard]] float GetAlpha() const { return reservoir_->GetAlpha(); }
+    [[nodiscard]] size_t NumInputs() const { return num_inputs_; }
 
 private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
