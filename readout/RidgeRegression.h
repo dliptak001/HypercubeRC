@@ -28,8 +28,8 @@
 /// column of 1.0s. X'X is accumulated in double precision for numerical
 /// stability, then solved via Gaussian elimination with partial pivoting.
 /// The bias weight is NOT regularized — it should be free to shift the
-/// output without penalty. X'X computation is OpenMP-parallelized; each
-/// thread owns a row of the upper triangle, which is mirrored afterward.
+/// output without penalty. X'X fills the upper triangle, which is
+/// mirrored afterward.
 ///
 /// **Feature standardization.** All features are standardized (zero mean,
 /// unit variance) before solving. This ensures the lambda*I penalty treats

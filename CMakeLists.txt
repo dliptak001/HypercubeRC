@@ -40,34 +40,32 @@ add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp)
 add_executable(StandaloneESNSweep diagnostics/StandaloneESNSweep.cpp)
 add_executable(SeedSurvey diagnostics/SeedSurvey.cpp)
 
-set(ALL_TARGETS HypercubeRCCore HypercubeRC BasicPrediction SignalClassification StreamingAnomaly StandaloneESNSweep SeedSurvey)
-set(EXE_TARGETS HypercubeRC BasicPrediction SignalClassification StreamingAnomaly StandaloneESNSweep SeedSurvey)
+set(DIAGNOSTIC_TARGETS HypercubeRC StandaloneESNSweep SeedSurvey)
+set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly)
+set(EXE_TARGETS ${DIAGNOSTIC_TARGETS} ${EXAMPLE_TARGETS})
+set(ALL_TARGETS HypercubeRCCore ${EXE_TARGETS})
 
 foreach(tgt IN LISTS EXE_TARGETS)
     target_link_libraries(${tgt} PRIVATE HypercubeRCCore)
 endforeach()
 
-# ——— OpenMP ———
-# Library: compile PRIVATE (internal use), link PUBLIC (consumers inherit runtime).
-# Executables: compile PRIVATE (diagnostic headers have #pragma omp).
-# External SDK consumers do NOT need -fopenmp to compile against the headers.
+# ——— OpenMP (diagnostics only) ———
+# Core library does NOT use OpenMP.  Diagnostic executables use it for
+# parallel seed sweeps and memory-capacity computation.
 if(MINGW)
-    target_compile_options(HypercubeRCCore PRIVATE -fopenmp)
-    target_link_options(HypercubeRCCore PUBLIC -fopenmp)
-    foreach(tgt IN LISTS EXE_TARGETS)
+    foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
         target_compile_options(${tgt} PRIVATE -fopenmp)
+        target_link_options(${tgt} PRIVATE -fopenmp)
     endforeach()
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU" AND NOT MINGW)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     find_package(OpenMP QUIET)
     if(OpenMP_CXX_FOUND)
-        target_link_libraries(HypercubeRCCore PUBLIC OpenMP::OpenMP_CXX)
-        foreach(tgt IN LISTS EXE_TARGETS)
-            target_compile_options(${tgt} PRIVATE ${OpenMP_CXX_FLAGS})
+        foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
+            target_link_libraries(${tgt} PRIVATE OpenMP::OpenMP_CXX)
         endforeach()
     endif()
 elseif(MSVC)
-    target_compile_options(HypercubeRCCore PRIVATE /openmp)
-    foreach(tgt IN LISTS EXE_TARGETS)
+    foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
         target_compile_options(${tgt} PRIVATE /openmp)
     endforeach()
 endif()

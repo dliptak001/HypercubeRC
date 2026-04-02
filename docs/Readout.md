@@ -78,8 +78,7 @@ Gaussian elimination with partial pivoting in double precision.
 
 **Cost:** O(num_features² * num_samples) for G, O(num_features³) for
 the solve. Memory is O(num_features²) for the Gram matrix. The G
-computation is OpenMP-parallelized (each thread owns a row of the upper
-triangle, mirrored afterward — no write contention).
+computation fills the upper triangle, mirrored afterward.
 
 **When to use:** DIM >= 8 (640+ translated features). The closed-form
 global optimum consistently outperforms SGD at larger feature counts.

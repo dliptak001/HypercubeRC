@@ -64,7 +64,6 @@ void Reservoir<DIM>::Initialize()
 template <size_t DIM>
 void Reservoir<DIM>::Step()
 {
-    #pragma omp parallel for schedule(static) if(N >= 256)
     for (size_t v = 0; v < N; v++)
         UpdateState(v);
 

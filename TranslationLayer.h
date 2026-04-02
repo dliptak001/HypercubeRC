@@ -53,7 +53,6 @@ std::vector<float> TranslationTransform(const float* states, size_t num_samples)
 
     std::vector<float> out(num_samples * OUT);
 
-    #pragma omp parallel for schedule(static) if(num_samples >= 256)
     for (size_t s = 0; s < num_samples; ++s)
     {
         const float* src = states + s * N;
@@ -111,7 +110,6 @@ std::vector<float> TranslationTransformSelected(const float* full_states,
 
     std::vector<float> out(num_samples * OUT);
 
-    #pragma omp parallel for schedule(static) if(num_samples >= 256)
     for (size_t s = 0; s < num_samples; ++s)
     {
         const float* src = full_states + s * N;

@@ -38,7 +38,7 @@ Consumers include `<HypercubeRC/ESN.h>` and link against `HypercubeRC::Hypercube
 
 ## Building from source
 
-Requirements: C++23 compiler with OpenMP support (GCC 13+, Clang 17+, MSVC 2022+), CMake 4.1+.
+Requirements: C++23 compiler (GCC 13+, Clang 17+, MSVC 2022+), CMake 4.1+.
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -582,6 +582,4 @@ restored.SetReadoutState(state);
 
 ## Dependencies
 
-The library uses OpenMP internally for parallelization. Consumers do not need OpenMP to compile against the headers -- the OpenMP runtime is linked automatically via CMake's target dependency system.
-
-No other external dependencies. Standard C++ library only.
+No external dependencies beyond the C++ standard library.

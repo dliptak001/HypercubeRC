@@ -143,7 +143,7 @@ is implicit in the binary representation of vertex indices.
 
 **Trivial parallelization.** XOR-based neighbor computation has no data
 dependencies beyond the read-only output array. The update loop is trivially
-SIMD-able and OpenMP-parallelizable with zero synchronization overhead.
+SIMD-able with zero synchronization overhead.
 
 **Direct hardware mapping.** In FPGA or neuromorphic implementations, XOR
 addressing maps to gates directly — no routing table, no memory controller for
@@ -329,8 +329,8 @@ The build produces six executables:
 Start with `BasicPrediction` to see the pipeline end-to-end. Each example has a
 companion `.md` file with a detailed walkthrough.
 
-OpenMP is used for parallelism where beneficial. The build system detects MinGW,
-GCC/Clang, and MSVC automatically.
+OpenMP is used in diagnostic executables (SeedSurvey, BenchmarkSuite) for
+parallel seed sweeps. The core library has no OpenMP dependency.
 
 ## Project Structure
 

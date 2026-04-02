@@ -15,7 +15,7 @@ Python bindings for reservoir computing on Boolean hypercube graphs.
 
 ## Installation
 
-Requirements: Python 3.9+, a C++23 compiler with OpenMP support (GCC 13+, Clang 17+), CMake 3.20+, Ninja.
+Requirements: Python 3.9+, a C++23 compiler (GCC 13+, Clang 17+, MSVC 2022+), CMake 3.20+, Ninja.
 
 ### Linux / macOS
 
@@ -26,7 +26,7 @@ pip install .
 
 ### Windows (MinGW)
 
-The build requires GCC (MinGW) — not MSVC — because the project uses OpenMP features that MSVC does not support. Set the compiler and generator environment variables before building:
+Set the compiler and generator environment variables before building:
 
 ```powershell
 $env:PATH = "C:\path\to\mingw\bin;" + $env:PATH
@@ -39,7 +39,7 @@ cd python
 pip install . --no-build-isolation
 ```
 
-The resulting `.pyd` statically links all MinGW runtime libraries (libgomp, libstdc++, libgcc) so no MinGW DLLs are needed at runtime.
+The resulting `.pyd` statically links MinGW runtime libraries (libstdc++, libgcc) so no MinGW DLLs are needed at runtime.
 
 ### Development install
 
@@ -552,6 +552,6 @@ restored = pickle.loads(data)
 
 **Runtime:** NumPy >= 1.21
 
-**Build time:** scikit-build-core >= 0.10, pybind11 >= 2.13, C++23 compiler with OpenMP, CMake 3.20+
+**Build time:** scikit-build-core >= 0.10, pybind11 >= 2.13, C++23 compiler (GCC 13+, Clang 17+, MSVC 2022+), CMake 3.20+
 
-The library uses OpenMP internally for parallelization. No other external dependencies.
+No external dependencies beyond the C++ standard library and NumPy.

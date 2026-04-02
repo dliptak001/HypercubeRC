@@ -10,13 +10,11 @@ find_package(pybind11 CONFIG REQUIRED)
 
 # ── Optimization flags (match main project) ──
 if(NOT MSVC)
-    add_compile_options(-O3 -ffast-math -fopenmp)
+    add_compile_options(-O3 -ffast-math)
     if(NOT CMAKE_CROSSCOMPILING)
         add_compile_options(-march=native -mtune=native)
     endif()
     add_compile_options(-Wall -Wextra -Wno-unknown-pragmas)
-elseif(MSVC)
-    add_compile_options(/openmp)
 endif()
 
 # ── Core sources compiled directly into the module (PIC required) ──
@@ -35,15 +33,9 @@ target_include_directories(_core PRIVATE ${CORE_DIR} ${CORE_DIR}/readout)
 
 # ── Linking ──
 if(MINGW)
-    # Statically link ALL MinGW runtime DLLs so the .pyd is self-contained.
-    # -fopenmp in compile flags enables OpenMP pragmas; we link gomp statically.
+    # Statically link MinGW runtime DLLs so the .pyd is self-contained.
     target_link_options(_core PRIVATE -static-libgcc -static-libstdc++)
-    target_link_libraries(_core PRIVATE -Wl,-Bstatic gomp pthread winpthread -Wl,-Bdynamic)
-elseif(NOT MSVC)
-    find_package(OpenMP)
-    if(OpenMP_CXX_FOUND)
-        target_link_libraries(_core PRIVATE OpenMP::OpenMP_CXX)
-    endif()
+    target_link_libraries(_core PRIVATE -Wl,-Bstatic winpthread -Wl,-Bdynamic)
 endif()
 
 # ── Install into the hypercube_rc package directory ──

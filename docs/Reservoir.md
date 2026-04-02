@@ -135,8 +135,7 @@ memcpy(output, state, N * sizeof(float))
 ```
 
 All vertices update simultaneously. The output array is read-only
-during Phase 1, so there are no race conditions — this is trivially
-parallelizable with OpenMP.
+during Phase 1, so there are no race conditions.
 
 ## Input injection
 
@@ -209,9 +208,8 @@ Use `diagnostics/StandaloneESNSweep.cpp` to run your own parameter sweeps.
 - **O(N * DIM) per step** — each vertex sums 2*DIM - 2 weighted neighbor
   outputs, vs. O(N²) for a dense ESN
 - **Zero adjacency storage** — neighbors computed by XOR
-- **Trivially parallelizable** — OpenMP over vertices with no write
-  contention (all reads from the output array, all writes to the state
-  array)
+- **Trivially parallelizable** — no write contention (all reads from
+  the output array, all writes to the state array)
 - **Cache-friendly** — XOR addressing produces structured, predictable
   access patterns
 

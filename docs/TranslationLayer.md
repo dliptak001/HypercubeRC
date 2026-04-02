@@ -146,8 +146,7 @@ monotonically.
 The translation is **O(N) per timestep** — three passes over the N
 states (copy, square, multiply). This is negligible compared to the
 reservoir step cost of O(N * DIM) for the weighted sum + tanh.
-The transform is OpenMP-parallelized for large sample counts
-(threshold: 256 samples).
+The transform runs in a single pass over collected timesteps.
 
 **Memory cost:** 2.5N floats per collected timestep. For DIM=10
 (N=1024), that's 2560 features * 18432 samples * 4 bytes ~ 180 MB

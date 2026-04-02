@@ -55,7 +55,6 @@ void RidgeRegression::Train(const float* features, const float* labels,
     // Compute X'X + lambda*I on standardized features
     std::vector<double> XtX(aug * aug, 0.0);
 
-    #pragma omp parallel for schedule(static)
     for (size_t i = 0; i < num_features; ++i)
         for (size_t k = i; k < num_features; ++k)
         {
@@ -88,7 +87,6 @@ void RidgeRegression::Train(const float* features, const float* labels,
     // Compute X'y on standardized features
     std::vector<double> Xty(aug, 0.0);
 
-    #pragma omp parallel for schedule(static)
     for (size_t i = 0; i < num_features; ++i)
         for (size_t s = 0; s < num_samples; ++s)
             Xty[i] += static_cast<double>(sf[s * num_features + i])
@@ -125,7 +123,6 @@ void RidgeRegression::Train(const float* features, const float* labels,
         if (std::abs(pivot) < 1e-12) continue;
 
         // Forward elimination
-        #pragma omp parallel for schedule(static)
         for (size_t row = col + 1; row < aug; ++row)
         {
             double factor = A[row * cols + col] / pivot;
