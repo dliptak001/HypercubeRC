@@ -1,5 +1,8 @@
 # HypercubeRC
 
+[![Build wheels](https://github.com/dliptak001/HypercubeRC/actions/workflows/wheels.yml/badge.svg)](https://github.com/dliptak001/HypercubeRC/actions/workflows/wheels.yml)
+[![PyPI](https://img.shields.io/pypi/v/hypercube-rc)](https://pypi.org/project/hypercube-rc/)
+
 A reservoir computer whose neurons live on a Boolean hypercube — a
 DIM-dimensional graph where each vertex is addressed by a DIM-bit binary
 index, with all connectivity defined by XOR operations on vertex indices.
@@ -305,7 +308,29 @@ graph of an echo-state network, with XOR-addressed wiring between tanh neurons.
 The two architectures share the hypercube as a structural primitive but differ in
 dynamics, activation model, and the role the hypercube plays.
 
-## Building and Running
+## Python SDK
+
+Pre-built wheels are available on [PyPI](https://pypi.org/project/hypercube-rc/)
+for Python 3.10-3.13 on Windows (x64), Linux (x86_64, aarch64), and macOS
+(x86_64, arm64). No compiler required.
+
+```bash
+pip install hypercube-rc
+```
+
+```python
+import numpy as np
+import hypercube_rc as hrc
+
+signal = np.sin(np.linspace(0, 20 * np.pi, 2000)).astype(np.float32)
+esn = hrc.ESN(dim=7, seed=42)
+esn.fit(signal, warmup=200)
+print(f"R2 = {esn.r2():.6f}")
+```
+
+See [docs/Python_SDK.md](docs/Python_SDK.md) for the full API reference.
+
+## Building and Running (C++)
 
 **Requirements:** C++23 compiler (GCC 13+, Clang 17+, MSVC 2022+), CMake 4.1+.
 
@@ -383,6 +408,7 @@ HypercubeRC/
 | [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) | Hypercube vs random ESN: equivalent performance, different architectural tradeoffs |
 | [docs/SeedSurvey.md](docs/SeedSurvey.md) | Seed quality survey: Spearman rank correlation across SR, IS, and benchmarks (DIM 5-8) |
 | [docs/Tuning.md](docs/Tuning.md) | Practical tuning guide: parameter-by-parameter advice, common scenarios, workflow |
+| [docs/Python_SDK.md](docs/Python_SDK.md) | Python SDK: pip install, fit/predict API, streaming, persistence |
 | [docs/CPP_SDK.md](docs/CPP_SDK.md) | C++ static library: build, install, find_package usage, API reference |
 
 Diagnostic `.md` files in `diagnostics/` provide educational introductions to
