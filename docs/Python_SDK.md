@@ -15,36 +15,36 @@ Python bindings for reservoir computing on Boolean hypercube graphs.
 
 ## Installation
 
-Requirements: Python 3.9+, a C++23 compiler (GCC 13+, Clang 17+, MSVC 2022+), CMake 3.20+, Ninja.
+### From PyPI (recommended)
 
-### Linux / macOS
+Pre-built wheels are available for Python 3.10-3.13 on Windows (x64),
+Linux (x86_64, aarch64), and macOS (x86_64, arm64):
 
 ```bash
-cd python
+pip install hypercube-rc
+```
+
+### From source
+
+Requirements: Python 3.10+, a C++23 compiler (GCC 13+, Clang 17+, MSVC 2022+), CMake 3.20+.
+
+```bash
+git clone https://github.com/dliptak001/HypercubeRC.git
+cd HypercubeRC/python
 pip install .
 ```
 
-### Windows (MinGW)
-
-Set the compiler and generator environment variables before building:
+On Windows with MinGW, install build dependencies and set compiler environment
+variables before building:
 
 ```powershell
+pip install scikit-build-core pybind11 numpy
 $env:PATH = "C:\path\to\mingw\bin;" + $env:PATH
 $env:CMAKE_GENERATOR = "Ninja"
 $env:CMAKE_MAKE_PROGRAM = "C:\path\to\ninja.exe"
 $env:CC = "C:\path\to\mingw\bin\gcc.exe"
 $env:CXX = "C:\path\to\mingw\bin\g++.exe"
-pip install scikit-build-core pybind11 numpy cmake
-cd python
 pip install . --no-build-isolation
-```
-
-The resulting `.pyd` statically links MinGW runtime libraries (libstdc++, libgcc) so no MinGW DLLs are needed at runtime.
-
-### Development install
-
-```bash
-pip install -e .
 ```
 
 ### Running tests

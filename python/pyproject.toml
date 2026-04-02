@@ -6,8 +6,28 @@ build-backend = "scikit_build_core.build"
 name = "hypercube-rc"
 version = "0.1.0"
 description = "Python bindings for HypercubeRC: reservoir computing on Boolean hypercube graphs"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = ["numpy>=1.21"]
+license = "Apache-2.0"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: C++",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+]
+
+[project.urls]
+Homepage = "https://github.com/dliptak001/HypercubeRC"
+Repository = "https://github.com/dliptak001/HypercubeRC"
+Documentation = "https://github.com/dliptak001/HypercubeRC/blob/master/docs/Python_SDK.md"
 
 [project.optional-dependencies]
 test = ["pytest>=7.0"]
@@ -19,3 +39,33 @@ wheel.packages = ["hypercube_rc"]
 [tool.pytest.ini_options]
 # importlib mode avoids source-dir shadowing the installed _core.pyd
 import-mode = "importlib"
+
+# ── cibuildwheel ──
+
+[tool.cibuildwheel]
+build = "cp310-* cp311-* cp312-* cp313-*"
+skip = ["*-win32", "*-manylinux_i686", "*-musllinux*", "pp*"]
+test-requires = ["pytest>=7.0", "numpy>=1.21"]
+test-command = "pytest {project}/tests -v --tb=short --import-mode=importlib"
+
+[tool.cibuildwheel.linux]
+manylinux-x86_64-image = "manylinux_2_28"
+manylinux-aarch64-image = "manylinux_2_28"
+before-all = "yum install -y gcc-toolset-13-gcc-c++"
+environment = { PATH="/opt/rh/gcc-toolset-13/root/usr/bin:$PATH", CC="gcc", CXX="g++", SKBUILD_CMAKE_ARGS="-DHYPERCUBE_ARCH=x86-64-v2" }
+
+[[tool.cibuildwheel.overrides]]
+select = "*-manylinux_aarch64"
+environment = { PATH="/opt/rh/gcc-toolset-13/root/usr/bin:$PATH", CC="gcc", CXX="g++", SKBUILD_CMAKE_ARGS="-DHYPERCUBE_ARCH=none" }
+
+[tool.cibuildwheel.macos]
+archs = ["x86_64", "arm64"]
+environment = { SKBUILD_CMAKE_ARGS="-DHYPERCUBE_ARCH=x86-64-v2", MACOSX_DEPLOYMENT_TARGET="13.0" }
+
+[[tool.cibuildwheel.overrides]]
+select = "*-macosx_arm64"
+environment = { SKBUILD_CMAKE_ARGS="-DHYPERCUBE_ARCH=none", MACOSX_DEPLOYMENT_TARGET="13.0" }
+
+[tool.cibuildwheel.windows]
+archs = ["AMD64"]
+environment = { SKBUILD_CMAKE_ARGS="-DHYPERCUBE_ARCH=none" }
