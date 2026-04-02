@@ -233,3 +233,14 @@ size_t LinearReadout::CountCorrect(const float* features, const float* labels,
     }
     return correct;
 }
+
+void LinearReadout::SetState(std::vector<float> weights, float bias,
+                              std::vector<float> feature_mean,
+                              std::vector<float> feature_scale)
+{
+    num_features_ = weights.size();
+    weights_ = std::move(weights);
+    bias_ = bias;
+    feature_mean_ = std::move(feature_mean);
+    feature_scale_ = std::move(feature_scale);
+}

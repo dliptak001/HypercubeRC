@@ -197,3 +197,14 @@ double RidgeRegression::R2(const float* features, const float* targets,
     if (ss_tot < 1e-12) return 0.0;
     return 1.0 - ss_res / ss_tot;
 }
+
+void RidgeRegression::SetState(std::vector<double> weights, double bias,
+                                std::vector<float> feature_mean,
+                                std::vector<float> feature_scale)
+{
+    num_features_ = weights.size();
+    weights_ = std::move(weights);
+    bias_ = bias;
+    feature_mean_ = std::move(feature_mean);
+    feature_scale_ = std::move(feature_scale);
+}

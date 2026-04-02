@@ -56,31 +56,38 @@ pytest python/tests/
 
 ## Quick Start
 
+### Simple (recommended)
+
 ```python
 import numpy as np
 import hypercube_rc as hrc
 
-# Generate a sine wave
 signal = np.sin(np.linspace(0, 20 * np.pi, 2000)).astype(np.float32)
 
-# Create an ESN with 2^7 = 128 neurons
 esn = hrc.ESN(dim=7, seed=42)
+esn.fit(signal, warmup=200)       # warmup, run, train in one call
 
-# Drive the reservoir
-esn.warmup(signal[:200])          # wash out initial transient
-esn.run(signal[200:-1])           # record states
+print(f"R² = {esn.r2():.6f}")     # test R² (~1.0000)
+print(f"NRMSE = {esn.nrmse():.6f}")  # test NRMSE (~0.001)
+```
 
-# Train on next-step prediction
+### Explicit (full control)
+
+```python
+import numpy as np
+import hypercube_rc as hrc
+
+signal = np.sin(np.linspace(0, 20 * np.pi, 2000)).astype(np.float32)
+
+esn = hrc.ESN(dim=7, seed=42)
+esn.warmup(signal[:200])
+esn.run(signal[200:-1])
+
 targets = signal[201:]
-train_size = 1400
-test_size = esn.num_collected - train_size
+esn.train(targets[:1400])
 
-esn.train(targets[:train_size])
-
-# Evaluate
-r2 = esn.r2(targets, train_size, test_size)
-nrmse = esn.nrmse(targets, train_size, test_size)
-print(f"R² = {r2:.6f}, NRMSE = {nrmse:.6f}")  # ~1.0000, ~0.001
+r2 = esn.r2(targets, start=1400)  # count defaults to all remaining
+print(f"R² = {r2:.6f}")
 ```
 
 ---
@@ -133,26 +140,30 @@ esn = hrc.ESN(dim=7)                                                    # defaul
 esn = hrc.ESN(dim=7, readout_type=hrc.ReadoutType.Linear,
               feature_mode=hrc.FeatureMode.Raw)                          # explicit
 
-# Reservoir driving
+# High-level pipeline (recommended)
+esn.fit(signal, warmup=200)                     # warmup + run + train
+esn.fit(inputs, targets=labels, warmup=200)     # explicit targets (multi-input)
+esn.r2()                                        # test R² (no args after fit)
+esn.nrmse()                                     # test NRMSE
+
+# Low-level pipeline (full control)
 esn.warmup(inputs)                # drive without recording
 esn.run(inputs)                   # drive and collect states
 esn.clear_states()                # clear collected data (keeps readout)
-
-# Training
 esn.train(targets)                # default parameters
-esn.train(targets, lambda_=0.1)   # Ridge: custom regularization
+esn.train(targets, reg=0.1)   # Ridge: custom regularization
 esn.train(targets, lr=0.01, epochs=300)  # Linear: custom SGD
 esn.train_incremental(targets, blend=0.1)  # Linear: streaming update
 
 # Prediction & evaluation
-esn.predict_raw(timestep)         # single continuous prediction
-esn.predictions()                 # all predictions as ndarray
-esn.r2(targets, start, count)     # R-squared
-esn.nrmse(targets, start, count)  # normalized RMSE
+esn.predict_raw(timestep)           # single continuous prediction
+esn.predictions()                   # all predictions as ndarray
+esn.r2(targets, start=1400)         # R² from index 1400 to end
+esn.nrmse(targets, start, count)    # normalized RMSE
 esn.accuracy(labels, start, count)  # classification accuracy
 
 # State access
-esn.selected_states()             # stride-selected states as ndarray
+esn.selected_states()               # stride-selected states as ndarray
 ```
 
 ---
@@ -172,9 +183,9 @@ Creates the reservoir, initializes the selected readout type, and computes outpu
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `dim` | `int` | — | Hypercube dimension (5-12). N = 2^dim neurons. |
-| `seed` | `int` | `0` | RNG seed for weight initialization. Every seed produces a valid topology. |
-| `spectral_radius` | `float` | `0.9` | Target spectral radius. Scale-invariant across all dim values. |
-| `input_scaling` | `float` | `0.02` | Input weight magnitude, U(-input_scaling, +input_scaling). Scale-invariant. |
+| `seed` | `int` | `0` | RNG seed for weight initialization. Every seed (including 0) produces a valid weight topology; different seeds yield measurably different performance. Use the C++ SeedSurvey diagnostic to find optimal seeds for your task. |
+| `spectral_radius` | `float` | `0.9` | Target spectral radius. Scale-invariant across all dim values (vertex-transitive topology property). No per-size re-tuning needed. |
+| `input_scaling` | `float` | `0.02` | Input weight magnitude, U(-input_scaling, +input_scaling). Scale-invariant across all dim values. |
 | `leak_rate` | `float` | `1.0` | Leaky integrator coefficient. 1.0 = full replacement. < 1.0 adds smoothing. |
 | `alpha` | `float` | `1.0` | Gain inside tanh: `tanh(alpha * sum)`. > 1.0 sharpens nonlinearity. |
 | `num_inputs` | `int` | `1` | Number of input channels. Channel k drives every K-th vertex starting at offset k. |
@@ -184,7 +195,58 @@ Creates the reservoir, initializes the selected readout type, and computes outpu
 
 ---
 
-#### Reservoir Driving
+#### High-Level Pipeline
+
+##### `fit(inputs, targets=None, *, warmup=200, train_size=None, train_frac=None, horizon=1) → ESN`
+
+One-call pipeline that performs warmup, run, train, and stores targets for zero-argument evaluation. Returns `self` for method chaining.
+
+**Two modes:**
+
+**Auto-target** (`targets=None`, single-input only): generates next-step prediction targets from the input signal, shifted by `horizon` steps.
+
+```python
+esn.fit(signal, warmup=200)                   # next-step, 70% train
+esn.fit(signal, warmup=200, train_size=1400)  # next-step, explicit split
+esn.fit(signal, warmup=200, horizon=5)        # 5-step-ahead prediction
+```
+
+**Explicit-target** (any `num_inputs`): uses the provided targets array directly. Required for multi-input ESN and classification tasks. `horizon` is ignored.
+
+```python
+# Multi-input: predict channel 0
+esn.fit(inputs, targets=ch0[201:], warmup=200)
+
+# Classification
+esn.fit(signal, targets=labels, warmup=200)
+```
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `inputs` | `ndarray` | — | Input signal. Shape `(steps,)` or `(steps, num_inputs)`. |
+| `targets` | `ndarray` | `None` | One target per collected state. Required for multi-input. |
+| `warmup` | `int` | `200` | Timesteps for transient washout. |
+| `train_size` | `int` | `None` | Training samples. Mutually exclusive with `train_frac`. |
+| `train_frac` | `float` | `None` | Training fraction. Default 0.7 when neither is given. |
+| `horizon` | `int` | `1` | Auto-target prediction horizon. Ignored with explicit targets. |
+
+**After `fit()`**, call `r2()`, `nrmse()`, or `accuracy()` with no arguments to evaluate the held-out test portion:
+
+```python
+esn.fit(signal, warmup=200)
+print(esn.r2())       # test R²
+print(esn.nrmse())    # test NRMSE
+print(esn.train_size) # number of training samples
+print(esn.test_size)  # number of test samples
+```
+
+---
+
+#### Low-Level Pipeline
+
+The methods below give full control over each step. Use these for multi-step workflows, streaming, or when `fit()` doesn't match your use case.
 
 ##### `warmup(inputs)`
 
@@ -222,13 +284,13 @@ Use this between independent sequences: clear the collected data, then `warmup()
 
 #### Training
 
-##### `train(targets, *, lambda_=None, lr=None, epochs=None, weight_decay=1e-4, lr_decay=0.01)`
+##### `train(targets, *, reg=None, lr=None, epochs=None, weight_decay=1e-4, lr_decay=0.01)`
 
-Train the readout on the first `len(targets)` collected states.
+Train the readout using `len(targets)` training samples from the start of the collected states. The targets array must have at most `num_collected` elements.
 
 **Dispatch rules:**
 - No optional args → default parameters for the selected readout type
-- `lambda_` → Ridge with custom regularization (asserts Ridge readout)
+- `reg` → Ridge with custom regularization (asserts Ridge readout)
 - `lr` → Linear SGD with custom parameters (asserts Linear readout)
 
 **Parameters:**
@@ -236,7 +298,7 @@ Train the readout on the first `len(targets)` collected states.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `targets` | `ndarray` | — | Target values, shape `(train_size,)`. Regression: continuous. Classification: {-1, +1}. |
-| `lambda_` | `float` | `None` | Ridge regularization strength. Typical range: 0.01-100. |
+| `reg` | `float` | `None` | Ridge regularization strength. Typical range: 0.01-100. |
 | `lr` | `float` | `None` | Learning rate. 0.0 = auto (1/num_features). |
 | `epochs` | `int` | `None` | Number of SGD epochs. Default: 200 when using Linear. |
 | `weight_decay` | `float` | `1e-4` | L2 regularization for SGD. |
@@ -244,6 +306,9 @@ Train the readout on the first `len(targets)` collected states.
 
 **Notes:**
 - Triggers feature computation if not already done.
+- `weight_decay` and `lr_decay` are only used when `lr` is provided (Linear SGD path). They are ignored for Ridge.
+- Raises `ValueError` if `reg` is passed to a Linear ESN, or `lr` to a Ridge ESN.
+- Raises `ValueError` if `len(targets) > num_collected`.
 - For Ridge, calling `train()` again replaces the previous solution entirely.
 - For Linear, calling `train()` again retrains from scratch (use `train_incremental()` for streaming).
 
@@ -295,7 +360,7 @@ Return predictions for all collected timesteps as a 1D float32 array of shape `(
 
 ---
 
-##### `r2(targets, start, count) → float`
+##### `r2(targets=None, start=None, count=None) → float`
 
 Compute R-squared (coefficient of determination) on a slice of collected states.
 
@@ -303,23 +368,32 @@ Compute R-squared (coefficient of determination) on a slice of collected states.
 R² = 1 - SS_res / SS_tot
 ```
 
+**Calling conventions:**
+
+```python
+esn.r2()                       # after fit(): test R² (uses stored targets)
+esn.r2(targets)                # all collected states
+esn.r2(targets, start=1400)    # from index 1400 to end
+esn.r2(targets, start=0, count=1400)  # first 1400 states only
+```
+
 **Parameters:**
-- `targets` — Target array. The slice `targets[start:start+count]` is used.
-- `start` — First timestep index.
-- `count` — Number of timesteps to evaluate.
+- `targets` — Target array, index-aligned with collected states (`targets[i]` is the target for collected state `i`). If omitted, uses targets stored by `fit()`.
+- `start` — First timestep index. Default: 0, or `train_size` after `fit()`.
+- `count` — Number of timesteps to evaluate. Default: all remaining from `start`.
 
 **Returns:** R² value. 1.0 = perfect. 0.0 = predicts the mean. Can be negative.
 
-**Typical usage (train/test split):**
-
-```python
-esn.train(targets[:train_size])
-test_r2 = esn.r2(targets, train_size, test_size)
-```
+> **Warning:** Do not slice the targets array before passing. The `start` parameter indexes into **both** the internal feature buffer and the target array simultaneously. Slicing targets shifts the alignment and produces wrong results silently. Use the `start` parameter instead.
+>
+> ```python
+> esn.r2(targets, start=1400)      # CORRECT
+> esn.r2(targets[1400:])           # WRONG — evaluates training features against test targets
+> ```
 
 ---
 
-##### `nrmse(targets, start, count) → float`
+##### `nrmse(targets=None, start=None, count=None) → float`
 
 Compute Normalized Root Mean Squared Error on a slice of collected states.
 
@@ -327,23 +401,17 @@ Compute Normalized Root Mean Squared Error on a slice of collected states.
 NRMSE = sqrt(MSE) / sqrt(Var(targets))
 ```
 
-**Parameters:**
-- `targets` — Target array. Slice `targets[start:start+count]` is used.
-- `start` — First timestep index.
-- `count` — Number of timesteps to evaluate.
+**Parameters:** Same conventions as `r2()`.
 
 **Returns:** NRMSE value. 0.0 = perfect. 1.0 = as bad as predicting the mean.
 
 ---
 
-##### `accuracy(labels, start, count) → float`
+##### `accuracy(labels=None, start=None, count=None) → float`
 
 Compute classification accuracy on a slice of collected states. Predictions are thresholded at 0.0.
 
-**Parameters:**
-- `labels` — Label array with values {-1.0, +1.0}.
-- `start` — First timestep index.
-- `count` — Number of timesteps to evaluate.
+**Parameters:** Same conventions as `r2()`. Pass labels with values {-1.0, +1.0}.
 
 **Returns:** Fraction correct in [0.0, 1.0].
 
@@ -374,6 +442,12 @@ Extract stride-selected vertices from all collected states.
 | `readout_type` | `ReadoutType` | Readout type selected at construction. |
 | `feature_mode` | `FeatureMode` | Feature mode selected at construction. |
 | `alpha` | `float` | Tanh gain parameter. |
+| `seed` | `int` | RNG seed used to initialize reservoir weights. |
+| `spectral_radius` | `float` | Target spectral radius. |
+| `leak_rate` | `float` | Leaky integrator coefficient. |
+| `input_scaling` | `float` | Input weight magnitude. |
+| `train_size` | `int \| None` | Training samples from `fit()`, or None. |
+| `test_size` | `int \| None` | Test samples from `fit()`, or None. |
 
 ---
 
@@ -394,6 +468,83 @@ inputs = np.column_stack([ch1, ch2, ch3])  # shape (num_steps, 3)
 Each row contains one value per channel. The array is flattened internally to match the C++ convention: `[step0_ch0, step0_ch1, ..., step1_ch0, ...]`.
 
 Arrays of any numeric dtype are automatically converted to C-contiguous float32.
+
+---
+
+## Data Types
+
+The C++ reservoir operates entirely in **float32** — weights, states, features, and readout. This is by design: the tanh nonlinearity squashes values to [-1, 1], weights are random, and the topology's inherent noise far exceeds float32 rounding error. Float64 would produce identical results.
+
+All input arrays (signals, targets, labels) are automatically converted to C-contiguous float32 before being passed to C++. NumPy defaults to float64, so this conversion happens silently on most calls. No precision is lost in practice.
+
+If you want to avoid the conversion overhead on hot paths, pre-cast your arrays:
+
+```python
+signal = np.sin(np.linspace(0, 20 * np.pi, 2000)).astype(np.float32)
+```
+
+---
+
+## Error Handling
+
+The Python bindings validate arguments at the boundary and raise clear exceptions:
+
+- **`ValueError`** — invalid `dim` (not 5-12), `train_size > num_collected`, input array size not divisible by `num_inputs`, or readout type mismatch (e.g., passing `reg` to a Linear ESN, or `lr` to a Ridge ESN).
+- **`IndexError`** — `predict_raw(timestep)` with `timestep >= num_collected`, or `r2`/`nrmse`/`accuracy` with `start + count > num_collected`.
+
+These checks happen before calling into C++, so you get a Python traceback instead of a crash.
+
+---
+
+## Model Persistence
+
+Trained ESN models can be saved to disk and restored without retraining. The reservoir weights are deterministic from the seed, so only the config and trained readout are persisted. Files are compact (typically < 1 MB).
+
+#### `esn.save(path)`
+
+Save the trained ESN to a file (standard Python pickle).
+
+```python
+esn = hrc.ESN(dim=7, seed=42)
+esn.fit(signal, warmup=200)
+esn.save("model.pkl")
+```
+
+#### `ESN.load(path) -> ESN`
+
+Load a saved ESN. Returns a new ESN with the trained readout intact and zero collected states.
+
+```python
+loaded = hrc.ESN.load("model.pkl")
+loaded.warmup(new_signal[:200])
+loaded.run(new_signal[200:])
+preds = loaded.predictions()
+```
+
+#### Pickle support
+
+ESN objects support `pickle.dumps()` / `pickle.loads()` directly:
+
+```python
+import pickle
+data = pickle.dumps(esn)
+restored = pickle.loads(data)
+```
+
+#### What is and isn't saved
+
+| Saved | Not saved |
+|-------|-----------|
+| All constructor parameters (dim, seed, spectral_radius, etc.) | Collected states (regenerate with `warmup()` + `run()`) |
+| Trained readout weights, bias, and standardization stats | Cached features |
+| Readout type and feature mode | `fit()` targets and train/test split |
+
+---
+
+## Limitations
+
+- **No scikit-learn compatibility.** The ESN is a temporal pipeline (input order matters, warmup required, states accumulate sequentially), not a static feature→label model. The sklearn estimator protocol assumes i.i.d. samples and row-shuffled cross-validation, which would destroy the temporal structure.
+- **No raw buffer access.** The C++ SDK exposes `States()` and `Features()` raw pointers for diagnostics. The Python bindings do not expose these — use `selected_states()` and `predictions()` instead.
 
 ---
 

@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cmath>
 #include <limits>
+#include <type_traits>
 
 template <size_t DIM>
 ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode feature_mode)
@@ -212,6 +213,52 @@ size_t ESN<DIM>::NumFeatures() const
     if (feature_mode_ == FeatureMode::Translated)
         return TranslationFeatureCountSelected(num_output_verts_);
     return num_output_verts_;
+}
+
+template <size_t DIM>
+ReservoirConfig ESN<DIM>::GetConfig() const
+{
+    ReservoirConfig cfg;
+    cfg.seed            = reservoir_->GetSeed();
+    cfg.alpha           = reservoir_->GetAlpha();
+    cfg.spectral_radius = reservoir_->GetSpectralRadius();
+    cfg.leak_rate       = reservoir_->GetLeakRate();
+    cfg.input_scaling   = reservoir_->GetInputScaling();
+    cfg.num_inputs      = num_inputs_;
+    cfg.output_fraction = output_fraction_;
+    return cfg;
+}
+
+template <size_t DIM>
+typename ESN<DIM>::ReadoutState ESN<DIM>::GetReadoutState() const
+{
+    ReadoutState s;
+    std::visit([&](const auto& r) {
+        s.is_trained = r.NumFeatures() > 0;
+        s.bias = static_cast<double>(r.Bias());
+        s.feature_mean = r.FeatureMean();
+        s.feature_scale = r.FeatureScale();
+        const auto& w = r.Weights();
+        s.weights.assign(w.begin(), w.end());
+    }, readout_);
+    return s;
+}
+
+template <size_t DIM>
+void ESN<DIM>::SetReadoutState(const ReadoutState& state)
+{
+    if (!state.is_trained) return;
+    std::visit([&](auto& r) {
+        using R = std::decay_t<decltype(r)>;
+        if constexpr (std::is_same_v<R, RidgeRegression>) {
+            r.SetState(state.weights, state.bias,
+                       state.feature_mean, state.feature_scale);
+        } else {
+            std::vector<float> fw(state.weights.begin(), state.weights.end());
+            r.SetState(std::move(fw), static_cast<float>(state.bias),
+                       state.feature_mean, state.feature_scale);
+        }
+    }, readout_);
 }
 
 // Explicit template instantiations (DIM 5-12)

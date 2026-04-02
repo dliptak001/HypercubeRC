@@ -92,6 +92,16 @@ public:
     /// @brief Number of features this model was trained on.
     [[nodiscard]] size_t NumFeatures() const { return num_features_; }
 
+    /// @brief Per-feature mean used for standardization during training.
+    [[nodiscard]] const std::vector<float>& FeatureMean() const { return feature_mean_; }
+
+    /// @brief Per-feature inverse std used for standardization during training.
+    [[nodiscard]] const std::vector<float>& FeatureScale() const { return feature_scale_; }
+
+    /// @brief Restore a previously trained state (for deserialization).
+    void SetState(std::vector<float> weights, float bias,
+                  std::vector<float> feature_mean, std::vector<float> feature_scale);
+
 private:
     std::vector<float> weights_;
     float bias_ = 0.0f;

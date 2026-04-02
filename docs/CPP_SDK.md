@@ -537,6 +537,46 @@ Returns the number of features per timestep.
 | `GetReadoutType()` | `ReadoutType` | Readout type selected at construction. |
 | `GetFeatureMode()` | `FeatureMode` | Feature mode selected at construction. |
 | `GetAlpha()` | `float` | The tanh gain alpha from the reservoir config. |
+| `NumInputs()` | `size_t` | Number of input channels from config. |
+| `GetConfig()` | `ReservoirConfig` | Full config used to construct this ESN (for serialization). |
+
+---
+
+##### Readout State Access
+
+The ESN exposes its trained readout state for serialization. The reservoir weights are deterministic from the seed, so only the config and readout state need to be saved.
+
+**`ReadoutState` struct** (nested in `ESN<DIM>`):
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `weights` | `std::vector<double>` | Weight vector (double for both readout types). |
+| `bias` | `double` | Bias term. |
+| `feature_mean` | `std::vector<float>` | Per-feature mean from training standardization. |
+| `feature_scale` | `std::vector<float>` | Per-feature 1/std from training standardization. |
+| `is_trained` | `bool` | True if the readout has been trained. |
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `GetReadoutState()` | `ReadoutState` | Extract trained readout for serialization. |
+| `SetReadoutState(state)` | `void` | Restore a previously saved readout state. |
+
+**Example: save and restore a trained model**
+
+```cpp
+// Save
+auto cfg = esn.GetConfig();
+auto state = esn.GetReadoutState();
+// ... serialize cfg, state.weights, state.bias, state.feature_mean,
+//     state.feature_scale, readout_type, feature_mode, DIM
+//     using your preferred format (JSON, protobuf, binary, etc.)
+
+// Restore
+ESN<6> restored(cfg, readout_type, feature_mode);
+restored.SetReadoutState(state);
+// Ready to predict — no retraining needed.
+// Call Warmup() + Run() on new data, then PredictRaw().
+```
 
 ---
 

@@ -101,6 +101,10 @@ public:
 
     [[nodiscard]] const float* Outputs() const { return vtx_output_; }
     [[nodiscard]] float GetAlpha() const { return alpha_; }
+    [[nodiscard]] uint64_t GetSeed() const { return rng_seed_; }
+    [[nodiscard]] float GetSpectralRadius() const { return spectral_radius_; }
+    [[nodiscard]] float GetLeakRate() const { return leak_rate_; }
+    [[nodiscard]] float GetInputScaling() const { return input_scaling_; }
 
 private:
     explicit Reservoir(const ReservoirConfig& cfg);

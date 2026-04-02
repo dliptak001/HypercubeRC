@@ -130,6 +130,26 @@ public:
     [[nodiscard]] float GetAlpha() const { return reservoir_->GetAlpha(); }
     [[nodiscard]] size_t NumInputs() const { return num_inputs_; }
 
+    // --- Config & persistence ---
+
+    /// @brief Reconstruct the full ReservoirConfig used to create this ESN.
+    [[nodiscard]] ReservoirConfig GetConfig() const;
+
+    /// @brief Trained readout state — everything needed to serialize/restore predictions.
+    struct ReadoutState {
+        std::vector<double> weights;     ///< Weight vector (double for both readout types).
+        double bias = 0.0;               ///< Bias term.
+        std::vector<float> feature_mean; ///< Per-feature mean from training standardization.
+        std::vector<float> feature_scale;///< Per-feature 1/std from training standardization.
+        bool is_trained = false;         ///< True if the readout has been trained.
+    };
+
+    /// @brief Extract the trained readout state for serialization.
+    [[nodiscard]] ReadoutState GetReadoutState() const;
+
+    /// @brief Restore a previously trained readout state (from deserialization).
+    void SetReadoutState(const ReadoutState& state);
+
 private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
     ReadoutType readout_type_;
