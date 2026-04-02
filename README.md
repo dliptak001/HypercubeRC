@@ -369,6 +369,7 @@ HypercubeRC/
     Readout.md            Readout algorithms, streaming mode, selection policy
     ScaleInvariance.md    Scale-invariant hyperparameters: evidence and analysis
     DoesTopologyMatter.md Hypercube vs random sparse ESN experiment
+    Tuning.md             Practical tuning guide: parameters, scenarios, workflow
 ```
 
 ## Documentation
@@ -381,6 +382,7 @@ HypercubeRC/
 | [docs/ScaleInvariance.md](docs/ScaleInvariance.md) | Why SR=0.90 and input_scaling=0.02 work at every DIM — sweep data and vertex-transitivity analysis |
 | [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) | Hypercube vs random ESN: equivalent performance, different architectural tradeoffs |
 | [docs/SeedSurvey.md](docs/SeedSurvey.md) | Seed quality survey: Spearman rank correlation across SR, IS, and benchmarks (DIM 5-8) |
+| [docs/Tuning.md](docs/Tuning.md) | Practical tuning guide: parameter-by-parameter advice, common scenarios, workflow |
 | [docs/CPP_SDK.md](docs/CPP_SDK.md) | C++ static library: build, install, find_package usage, API reference |
 
 Diagnostic `.md` files in `diagnostics/` provide educational introductions to

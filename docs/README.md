@@ -50,6 +50,7 @@ with educational `.md` documentation:
 | Document | What it covers |
 |----------|---------------|
 | [ScaleInvariance.md](ScaleInvariance.md) | Why SR=0.90 and input_scaling=0.02 are optimal at every DIM — the hypercube's vertex-transitive topology |
+| [Tuning.md](Tuning.md) | Practical tuning guide — parameter-by-parameter advice, common scenarios, decision tree |
 | [DoesTopologyMatter.md](DoesTopologyMatter.md) | Head-to-head experiment: hypercube vs. random sparse ESN — same performance, different tradeoffs |
 
 ## Key source files
