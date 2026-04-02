@@ -157,12 +157,12 @@ void test_clear_states()
 
     // Clear and re-run
     esn.ClearStates();
-    check(esn.NumCollected() == 0, (label + " — count reset").c_str());
+    check(esn.NumCollected() == 0, (label + " - count reset").c_str());
 
     esn.Run(signal.data() + 200, 1799);
     double r2 = esn.R2(signal.data() + 201, 0, esn.NumCollected());
     printf("         R2 after clear+re-run=%.6f\n", r2);
-    check(r2 > 0.99, (label + " — readout intact").c_str());
+    check(r2 > 0.99, (label + " - readout intact").c_str());
 }
 
 // ── Test: TrainIncremental (streaming, Linear readout only) ──
