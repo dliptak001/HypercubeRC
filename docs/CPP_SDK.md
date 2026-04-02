@@ -7,6 +7,8 @@ Static C++ library for reservoir computing on Boolean hypercube graphs.
 - [What's in the SDK](#whats-in-the-sdk)
 - [Building from source](#building-from-source)
 - [Using the SDK](#using-the-sdk)
+  - [CMake FetchContent (recommended)](#cmake-fetchcontent-recommended)
+  - [Installed SDK (find_package)](#installed-sdk-find_package)
 - [API Reference](#api-reference)
   - [Template parameter: DIM](#template-parameter-dim)
   - [Enums](#enums)
@@ -48,7 +50,48 @@ cmake --install build --prefix /path/to/sdk
 
 ## Using the SDK
 
-### CMakeLists.txt
+### CMake FetchContent (recommended)
+
+The simplest way to use HypercubeRC in a CMake project. No installation, no
+manual downloads -- CMake pulls the source from GitHub and builds it alongside
+your project.
+
+```cmake
+cmake_minimum_required(VERSION 3.20)
+project(MyApp)
+
+set(CMAKE_CXX_STANDARD 23)
+
+include(FetchContent)
+FetchContent_Declare(
+    HypercubeRC
+    GIT_REPOSITORY https://github.com/dliptak001/HypercubeRC.git
+    GIT_TAG        v0.1.1
+)
+FetchContent_MakeAvailable(HypercubeRC)
+
+add_executable(my_app main.cpp)
+target_link_libraries(my_app PRIVATE HypercubeRCCore)
+```
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+```
+
+Pin `GIT_TAG` to a release tag (e.g., `v0.1.1`) for reproducible builds.
+Include paths are set automatically -- just `#include "ESN.h"`.
+
+### Installed SDK (find_package)
+
+If you prefer to install the library once and link against it:
+
+```bash
+# Build and install
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+cmake --install build --prefix /path/to/sdk
+```
 
 ```cmake
 cmake_minimum_required(VERSION 4.1)
