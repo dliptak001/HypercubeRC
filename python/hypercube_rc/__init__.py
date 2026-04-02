@@ -25,7 +25,7 @@ from ._core import (
     _ESN5, _ESN6, _ESN7, _ESN8, _ESN9, _ESN10, _ESN11, _ESN12,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = ["ESN", "ReadoutType", "FeatureMode"]
 
 _ESN_CLASSES = {
