@@ -39,10 +39,12 @@ add_executable(SignalClassification examples/SignalClassification.cpp)
 add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp)
 add_executable(StandaloneESNSweep diagnostics/StandaloneESNSweep.cpp)
 add_executable(SeedSurvey diagnostics/SeedSurvey.cpp)
+add_executable(CoreSmokeTest tests/CoreSmokeTest.cpp)
 
 set(DIAGNOSTIC_TARGETS HypercubeRC StandaloneESNSweep SeedSurvey)
 set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly)
-set(EXE_TARGETS ${DIAGNOSTIC_TARGETS} ${EXAMPLE_TARGETS})
+set(TEST_TARGETS CoreSmokeTest)
+set(EXE_TARGETS ${DIAGNOSTIC_TARGETS} ${EXAMPLE_TARGETS} ${TEST_TARGETS})
 set(ALL_TARGETS HypercubeRCCore ${EXE_TARGETS})
 
 foreach(tgt IN LISTS EXE_TARGETS)
