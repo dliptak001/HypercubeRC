@@ -61,6 +61,28 @@ master RNG seed 12345. SR values: {0.80, 0.85, 0.90, 0.95, 1.00}.
   SR=1.00   0.201   0.303   0.384   0.598   1.000
 ```
 
+#### DIM 9 (N=512, OUTPUT_FRACTION=0.5)
+
+```
+          SR=0.80  SR=0.85  SR=0.90  SR=0.95  SR=1.00
+  SR=0.80   1.000   0.930   0.761   0.573   0.172
+  SR=0.85   0.930   1.000   0.895   0.669   0.212
+  SR=0.90   0.761   0.895   1.000   0.824   0.285
+  SR=0.95   0.573   0.669   0.824   1.000   0.498
+  SR=1.00   0.172   0.212   0.285   0.498   1.000
+```
+
+#### DIM 10 (N=1024, OUTPUT_FRACTION=0.25)
+
+```
+          SR=0.80  SR=0.85  SR=0.90  SR=0.95  SR=1.00
+  SR=0.80   1.000   0.908   0.706   0.439  -0.003
+  SR=0.85   0.908   1.000   0.875   0.567  -0.005
+  SR=0.90   0.706   0.875   1.000   0.747   0.022
+  SR=0.95   0.439   0.567   0.747   1.000   0.343
+  SR=1.00  -0.003  -0.005   0.022   0.343   1.000
+```
+
 ### Per-SR Distributions
 
 #### DIM 5 (N=32)
@@ -115,6 +137,36 @@ Best seed rotates across SR values but all winners are in a tight band
 Same best seed at SR 0.85-0.95 (seed 2121059498467618174), NRMSE 0.00231-0.00236.
 Distribution is remarkably tight: at SR 0.80, the entire population spans only
 0.00221-0.00468 (2.1x ratio). Stddev scales ~22x from 0.80 to 1.00.
+
+#### DIM 9 (N=512, OUTPUT_FRACTION=0.5)
+
+| SR   | Mean    | Stddev  | Min     | Max     | Median  | Best seed                  |
+|------|---------|---------|---------|---------|---------|----------------------------|
+| 0.80 | 0.00286 | 0.00024 | 0.00195 | 0.00364 | 0.00285 | 3497053625869237828        |
+| 0.85 | 0.00284 | 0.00024 | 0.00194 | 0.00361 | 0.00284 | 3497053625869237828        |
+| 0.90 | 0.00283 | 0.00024 | 0.00198 | 0.00365 | 0.00282 | 3497053625869237828        |
+| 0.95 | 0.00289 | 0.00056 | 0.00211 | 0.01025 | 0.00284 | 3497053625869237828        |
+| 1.00 | 0.00527 | 0.00490 | 0.00221 | 0.04051 | 0.00317 | 14304042701823205526       |
+
+Same best seed at SR 0.80-0.95 (seed 3497053625869237828), NRMSE 0.00194-0.00211.
+Distribution tighter than DIM 8: at SR 0.80, the population spans 0.00195-0.00364
+(1.87x ratio). Stddev scales ~20x from 0.80 to 1.00.
+
+#### DIM 10 (N=1024, OUTPUT_FRACTION=0.25)
+
+| SR   | Mean    | Stddev  | Min     | Max     | Median  | Best seed                  |
+|------|---------|---------|---------|---------|---------|----------------------------|
+| 0.80 | 0.00241 | 0.00018 | 0.00197 | 0.00294 | 0.00243 | 13856198352863190264       |
+| 0.85 | 0.00236 | 0.00017 | 0.00187 | 0.00291 | 0.00237 | 6437149480297576047        |
+| 0.90 | 0.00228 | 0.00016 | 0.00169 | 0.00285 | 0.00228 | 6437149480297576047        |
+| 0.95 | 0.00226 | 0.00021 | 0.00181 | 0.00380 | 0.00225 | 8167834848992134087        |
+| 1.00 | 0.00417 | 0.00409 | 0.00181 | 0.04181 | 0.00253 | 17450734579398797285       |
+
+Same best seed at SR 0.85-0.90 (seed 6437149480297576047). Best seed rotates at
+each other SR value. Distribution extremely tight: at SR 0.80, the population
+spans 0.00197-0.00294 (1.49x ratio). 0.80↔1.00 goes effectively zero (-0.003),
+and even 0.80↔0.85 drops to 0.908 — correlation decay is accelerating with DIM.
+Stddev scales ~23x from 0.80 to 1.00.
 
 ## Mackey-Glass IS Sweep
 
@@ -240,6 +292,17 @@ DIM 5-7 only (DIM 8 omitted due to runtime).
   SR=1.00   0.353   0.364   0.399   0.633   1.000
 ```
 
+#### DIM 9 (N=512, OUTPUT_FRACTION=0.5)
+
+```
+          SR=0.80  SR=0.85  SR=0.90  SR=0.95  SR=1.00
+  SR=0.80   1.000   0.996   0.991   0.976   0.593
+  SR=0.85   0.996   1.000   0.996   0.982   0.597
+  SR=0.90   0.991   0.996   1.000   0.988   0.610
+  SR=0.95   0.976   0.982   0.988   1.000   0.674
+  SR=1.00   0.593   0.597   0.610   0.674   1.000
+```
+
 ### Per-SR Distributions
 
 #### DIM 5 (N=32)
@@ -281,29 +344,50 @@ at 1.00 as instability destroys memory in some seeds.
 Same best seed at SR 0.80-0.85. MC=0.00 at SR 1.00 for the worst seed
 indicates complete instability (reservoir diverged).
 
+#### DIM 9 (N=512, OUTPUT_FRACTION=0.5)
+
+| SR   | Mean    | Stddev  | Min   | Max   | Median | Best seed                  |
+|------|---------|---------|-------|-------|--------|----------------------------|
+| 0.80 | 20.64   | 2.11    | 13.60 | 28.72 | 20.56  | 11573276275748448556       |
+| 0.85 | 24.60   | 2.98    | 15.13 | 35.46 | 24.49  | 11573276275748448556       |
+| 0.90 | 29.85   | 4.14    | 16.92 | 43.23 | 29.70  | 15230916577091235611       |
+| 0.95 | 35.87   | 4.78    | 19.05 | 48.36 | 36.08  | 15230916577091235611       |
+| 1.00 | 39.18   | 4.83    |  0.00 | 48.66 | 39.84  | 2819849414862717027        |
+
+Same best seed at SR 0.80-0.85 (seed 11573276275748448556), then rotates to
+15230916577091235611 at SR 0.90-0.95. Same worst seed (4826308881478959611) at
+SR 0.80-0.95. MC=0.00 at SR 1.00 for one seed — complete instability, same
+pattern as DIM 7. Mean MC increases monotonically through SR 1.00. Rank
+correlation is remarkably strong: 0.80↔0.95 = 0.976, far exceeding all
+other benchmarks at this DIM distance.
+
 ### MC vs MG Comparison
 
 MC rank correlations are weaker than MG at small DIM but stronger at
 large DIM:
 
-| Pair          | MG DIM 5 | MC DIM 5 | MG DIM 6 | MC DIM 6 | MG DIM 7 | MC DIM 7 |
-|---------------|----------|----------|----------|----------|----------|----------|
-| 0.80 ↔ 0.85  | 0.943    | 0.950    | 0.919    | 0.984    | 0.944    | 0.996    |
-| 0.85 ↔ 0.90  | 0.858    | 0.828    | 0.920    | 0.942    | 0.934    | 0.995    |
-| 0.90 ↔ 0.95  | 0.830    | 0.784    | 0.846    | 0.754    | 0.854    | 0.907    |
-| 0.95 ↔ 1.00  | 0.801    | 0.758    | 0.747    | 0.712    | 0.728    | 0.633    |
-| 0.80 ↔ 1.00  | 0.251    | -0.006   | 0.330    | 0.121    | 0.283    | 0.353    |
+| Pair          | MG DIM 5 | MC DIM 5 | MG DIM 6 | MC DIM 6 | MG DIM 7 | MC DIM 7 | MG DIM 9 | MC DIM 9 |
+|---------------|----------|----------|----------|----------|----------|----------|----------|----------|
+| 0.80 ↔ 0.85  | 0.943    | 0.950    | 0.919    | 0.984    | 0.944    | 0.996    | 0.930    | 0.996    |
+| 0.85 ↔ 0.90  | 0.858    | 0.828    | 0.920    | 0.942    | 0.934    | 0.995    | 0.895    | 0.996    |
+| 0.90 ↔ 0.95  | 0.830    | 0.784    | 0.846    | 0.754    | 0.854    | 0.907    | 0.824    | 0.988    |
+| 0.95 ↔ 1.00  | 0.801    | 0.758    | 0.747    | 0.712    | 0.728    | 0.633    | 0.498    | 0.674    |
+| 0.80 ↔ 1.00  | 0.251    | -0.006   | 0.330    | 0.121    | 0.283    | 0.353    | 0.172    | 0.593    |
 
 At DIM 5, MC 0.80↔1.00 is essentially uncorrelated (-0.006) and the
 0.90↔0.95 drop is steeper than MG. But by DIM 6-7, MC *exceeds* MG in
-the 0.80-0.90 corridor (0.984-0.996 vs 0.919-0.944). MC rank stability
-improves dramatically with reservoir size.
+the 0.80-0.90 corridor (0.984-0.996 vs 0.919-0.944). At DIM 9, this
+gap widens further: MC 0.90↔0.95 = 0.988 vs MG 0.824. MC rank stability
+improves dramatically with reservoir size and at DIM 9 dominates MG
+across the entire SR range, including 0.80↔1.00 (0.593 vs 0.172).
 
 MC depends more heavily on where the reservoir sits on the order/chaos
 spectrum, since memory capacity is directly tied to the eigenvalue
-distribution of the recurrent weight matrix. Best seeds rotate more
-frequently for MC than MG, consistent with MC being a more SR-sensitive
-metric.
+distribution of the recurrent weight matrix. At small DIM, best seeds
+rotate more frequently for MC than MG. However, at DIM 9 this reverses:
+MC ranking becomes the most stable of all three benchmarks, suggesting
+that at large reservoir sizes the topology's memory properties are
+robust to SR perturbation.
 
 ## NARMA-10 SR Sweep
 
@@ -354,6 +438,17 @@ master RNG seed 12345. SR values: {0.80, 0.85, 0.90, 0.95, 1.00}.
   SR=0.90   0.903   0.951   1.000   0.830   0.297
   SR=0.95   0.611   0.686   0.830   1.000   0.658
   SR=1.00   0.082   0.149   0.297   0.658   1.000
+```
+
+#### DIM 9 (N=512, OUTPUT_FRACTION=0.5)
+
+```
+          SR=0.80  SR=0.85  SR=0.90  SR=0.95  SR=1.00
+  SR=0.80   1.000   0.973   0.863   0.510  -0.053
+  SR=0.85   0.973   1.000   0.939   0.617   0.035
+  SR=0.90   0.863   0.939   1.000   0.795   0.210
+  SR=0.95   0.510   0.617   0.795   1.000   0.662
+  SR=1.00  -0.053   0.035   0.210   0.662   1.000
 ```
 
 ### Per-SR Distributions
@@ -409,6 +504,21 @@ at SR 0.80-0.95. 0.80↔1.00 goes negative (-0.149).
 Same best seed at SR 0.80-0.90. Same worst seed (2053994836011988768) at
 SR 0.80-0.95. NRMSE of best seed barely moves (0.0621-0.0826).
 
+#### DIM 9 (N=512, OUTPUT_FRACTION=0.5)
+
+| SR   | Mean   | Stddev | Min    | Max    | Median | Best seed                  |
+|------|--------|--------|--------|--------|--------|----------------------------|
+| 0.80 | 0.1528 | 0.0464 | 0.0904 | 0.4703 | 0.1409 | 3825822836861123807        |
+| 0.85 | 0.1269 | 0.0438 | 0.0776 | 0.4440 | 0.1142 | 3825822836861123807        |
+| 0.90 | 0.1093 | 0.0409 | 0.0688 | 0.4208 | 0.0973 | 10293005394405557670       |
+| 0.95 | 0.1064 | 0.0408 | 0.0652 | 0.4067 | 0.0949 | 1428295035186334863        |
+| 1.00 | 0.1489 | 0.0682 | 0.0700 | 0.4671 | 0.1269 | 8599576300849921522        |
+
+Same best seed at SR 0.80-0.85 (seed 3825822836861123807). Best seed rotates
+at SR 0.90+. Same worst seed (1251456160714132541) at SR 0.80-0.95. Mean NRMSE
+hits minimum at SR 0.95 (0.1064), then rises sharply at 1.00. 0.80↔1.00 goes
+negative (-0.053) — consistent with the DIM 6-7 pattern.
+
 ### Cross-Benchmark Comparison
 
 All three benchmarks at all tested DIM values, 0.85↔0.90 corridor:
@@ -429,16 +539,31 @@ All three benchmarks at all tested DIM values, 0.85↔0.90 corridor:
 | 0.95 ↔ 1.00  | 0.728    | 0.633    | 0.702       | 0.598    | 0.658       |
 | 0.80 ↔ 1.00  | 0.283    | 0.353    | -0.149      | 0.201    | 0.082       |
 
+| Pair          | MG DIM 9 | MC DIM 9 | NARMA DIM 9 |
+|---------------|----------|----------|-------------|
+| 0.80 ↔ 0.85  | 0.930    | 0.996    | 0.973       |
+| 0.85 ↔ 0.90  | 0.895    | 0.996    | 0.939       |
+| 0.90 ↔ 0.95  | 0.824    | 0.988    | 0.795       |
+| 0.95 ↔ 1.00  | 0.498    | 0.674    | 0.662       |
+| 0.80 ↔ 1.00  | 0.172    | 0.593    | -0.053      |
+
 NARMA-10 shows the steepest correlation decay of all three benchmarks.
 It requires both memory and nonlinearity, making it the most sensitive
-to SR-induced dynamical changes. At DIM 6-7, 0.80↔1.00 goes negative
-(-0.018, -0.149) — seeds that excel at low SR actively rank poorly at
-high SR. This is a qualitative regime change, not just decorrelation.
+to SR-induced dynamical changes. At DIM 6-7-9, 0.80↔1.00 goes negative
+(-0.018, -0.149, -0.053) — seeds that excel at low SR actively rank
+poorly at high SR. This is a qualitative regime change, not just
+decorrelation.
 
 However, within the 0.85-0.90 operating corridor, NARMA still shows
-strong correlation (0.851-0.951 at DIM 7-8). The hypothesis holds for
-practical purposes: screen at SR=0.90, and results transfer to adjacent
-SR values.
+strong correlation (0.851-0.951 at DIM 7-8, 0.939 at DIM 9). The
+hypothesis holds for practical purposes: screen at SR=0.90, and results
+transfer to adjacent SR values.
+
+DIM 9 MC stands out: rank correlation is remarkably strong across the
+entire 0.80-0.95 range (0.976-0.996), far exceeding both MG and NARMA
+at the same DIM distances. This suggests that at large reservoir sizes,
+memory capacity ranking becomes nearly independent of spectral radius
+within the operating range.
 
 ## Analysis
 
@@ -447,16 +572,20 @@ SR values.
 **Rank correlation is strong in the 0.85-0.90 corridor for all tasks.**
 Minimum 0.85↔0.90 rho by benchmark: MG 0.858 (DIM 5), MC 0.828 (DIM 5),
 NARMA 0.851 (DIM 7). All exceed 0.82. At DIM >= 6, all exceed 0.85.
+At DIM 9, MC reaches 0.996 in this corridor — near-perfect preservation.
 
 **Correlation decays smoothly with SR distance.** The 0.80↔1.00 extreme
 goes negative for MC (DIM 5: -0.006) and NARMA (DIM 6: -0.018, DIM 7:
--0.149), confirming that low and high SR select for qualitatively
-different topological properties. MG stays positive but weak (0.20-0.33).
+-0.149, DIM 9: -0.053), confirming that low and high SR select for
+qualitatively different topological properties. MG stays positive but
+weak (0.17-0.33). MC at DIM 9 is the exception: 0.80↔1.00 = 0.593,
+remaining strongly positive even at the extremes.
 
 **Best seeds are robust within the operating range.** For MG, a single
-seed wins at SR 0.85-0.95 at DIM 5, 6, and 8. For NARMA, best seeds
-are stable across 0.85-0.95 at DIM 5 and 0.80-0.90 at DIM 8. MC best
-seeds rotate more frequently, consistent with MC being more SR-sensitive.
+seed wins at SR 0.80-0.95 at DIM 9 and SR 0.85-0.95 at DIM 5, 6, and 8.
+For NARMA, best seeds are stable across 0.85-0.95 at DIM 5, 0.80-0.90
+at DIM 8, and 0.80-0.85 at DIM 9. MC best seeds rotate more frequently
+at small DIM but stabilize at DIM 9 (same seed at 0.90-0.95).
 
 **Variance scaling.** Stddev increases dramatically as SR→1.00 (MG):
 
@@ -466,6 +595,7 @@ seeds rotate more frequently, consistent with MC being more SR-sensitive.
 |   6 | 28.9x                             |
 |   7 | 25.7x                             |
 |   8 | 22.1x                             |
+|   9 | 20.4x                             |
 
 The median is far more stable than the mean at every DIM, confirming the
 variance is driven by a growing right tail of pathological seeds, not a
@@ -480,18 +610,20 @@ progressively more concentrated as reservoir size grows:
 |   6 |  64 |  3.2x                    |
 |   7 | 128 |  2.2x                    |
 |   8 | 256 |  2.1x                    |
+|   9 | 512 |  1.9x                    |
 
-At DIM 8, the worst seed is only 2.1x the best. Seed selection matters
-less in absolute terms at larger DIM, but relative ranking remains
-correlated.
+At DIM 9, the worst seed is only 1.9x the best — the tightest yet,
+continuing the monotonic convergence. Seed selection matters less in
+absolute terms at larger DIM, but relative ranking remains correlated.
 
 **Task sensitivity ordering.** From most to least sensitive to SR changes:
-NARMA > MC > MG. NARMA requires both memory and nonlinearity, so SR
-shifts that change the dynamical regime have the strongest effect on
-relative seed quality. MC is purely linear recall but directly tied to
-the eigenvalue distribution. MG is the most stable, likely because
-prediction of a smooth chaotic attractor is more forgiving of dynamical
-shifts.
+NARMA > MG > MC (at DIM 9). At smaller DIM, MC was intermediate between
+NARMA and MG, but at DIM 9 MC rank correlation becomes remarkably stable
+(0.85↔0.90 = 0.996 vs MG 0.895, NARMA 0.939). NARMA requires both
+memory and nonlinearity, making it the most sensitive to SR-induced
+dynamical changes. MG prediction of a smooth chaotic attractor is more
+forgiving. MC at large DIM appears to converge toward topology-dominated
+ranking where SR has minimal reordering effect.
 
 ### Practical takeaway
 
@@ -507,11 +639,13 @@ IS value will rank identically at any other.
 SR has a stronger and task-dependent effect. The 0.85↔0.90 corridor
 is consistently strong: MG 0.86-0.93, MC 0.83-1.00, NARMA 0.85-0.95.
 Beyond that, correlation decays at different rates per task — NARMA
-decays fastest (reaching negative at 0.80↔1.00 for DIM 7), MC is
-intermediate, MG is most stable.
+decays fastest (reaching negative at 0.80↔1.00 for DIM 7 and 9), MG
+is intermediate, and MC at DIM 9 is the most stable (0.80↔1.00 = 0.593).
 
 All three benchmarks confirm SR=1.00 as a qualitatively different regime.
-Correlation with 0.90 drops below 0.45 for all tasks at DIM >= 6.
+Correlation with 0.90 drops below 0.45 for MG and NARMA at DIM >= 6.
+MC is the exception at DIM 9, maintaining 0.610 with SR=0.90 even at
+SR=1.00.
 
 At DIM >= 7, the absolute performance spread is small enough that seed
 selection provides diminishing returns, but the ranking stability confirms
@@ -530,10 +664,12 @@ DIM/diagnostic combination.
 |   6 |  64 | 11459651989651327597 @ SR=0.90 (0.00371)  | 12422613127134089317 @ SR=0.80 (0.1401)    | 17341644007929035161 @ SR=0.90 (27.49)    |
 |   7 | 128 | 10741866950647888161 @ SR=0.90 (0.00316)  | 7788716612116648715 @ SR=0.95 (0.0994)     | 14718990449720733896 @ SR=0.95 (35.95)    |
 |   8 | 256 | 2121059498467618174 @ SR=0.85 (0.00231)   | 13602423379507409791 @ SR=0.90 (0.0621)    | 14376161041117039141 @ SR=0.90 (43.38)    |
+|   9 | 512 | 3497053625869237828 @ SR=0.85 (0.00194)   | 1428295035186334863 @ SR=0.95 (0.0652)     | 2819849414862717027 @ SR=1.00 (48.66)     |
 
 Notable: seed 2121059498467618174 wins MG at DIM 8 *and* NARMA at DIM 5.
 No single seed dominates across all diagnostics — optimal topology depends
-on the task's balance of memory vs nonlinearity.
+on the task's balance of memory vs nonlinearity. At DIM 9, all three
+best seeds are distinct, reinforcing task-specificity of optimal topology.
 
 ## SR=0.90 as General-Purpose Default
 
@@ -550,10 +686,10 @@ SR=0.90 as the best compromise:
 
 SR=0.95 would improve MC and sometimes NARMA, but at the cost of:
 1. Much higher variance across all tasks (stddev roughly doubles)
-2. Weaker rank correlation (0.90↔0.95 rho drops to 0.77-0.91 depending
-   on task, vs 0.85↔0.90 at 0.85-1.00)
+2. Weaker rank correlation (0.90↔0.95 rho drops to 0.79-0.99 depending
+   on task, vs 0.85↔0.90 at 0.90-1.00)
 3. Proximity to the edge-of-chaos regime where SR=1.00 correlation
-   collapses and individual seeds can diverge (MC=0.00 at DIM 7)
+   collapses and individual seeds can diverge (MC=0.00 at DIM 7 and 9)
 
 SR=0.90 sits at the sweet spot: near-optimal mean performance on all
 three tasks, lowest population variance in the 0.85-0.95 range, strongest
