@@ -4,7 +4,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "hypercube-rc"
-version = "0.1.1"
+version = "0.2.0"
 description = "Python bindings for HypercubeRC: reservoir computing on Boolean hypercube graphs"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.21"]

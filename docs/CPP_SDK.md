@@ -66,7 +66,7 @@ include(FetchContent)
 FetchContent_Declare(
     HypercubeRC
     GIT_REPOSITORY https://github.com/dliptak001/HypercubeRC.git
-    GIT_TAG        v0.1.1
+    GIT_TAG        v0.2.0
 )
 FetchContent_MakeAvailable(HypercubeRC)
 
@@ -79,7 +79,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ```
 
-Pin `GIT_TAG` to a release tag (e.g., `v0.1.1`) for reproducible builds.
+Pin `GIT_TAG` to a release tag (e.g., `v0.2.0`) for reproducible builds.
 Include paths are set automatically -- just `#include "ESN.h"`.
 
 ### Installed SDK (find_package)

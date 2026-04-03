@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 4.1)
-project(HypercubeRC VERSION 0.1.0)
+project(HypercubeRC VERSION 0.2.0)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,59 +32,69 @@ target_include_directories(HypercubeRCCore
         $<INSTALL_INTERFACE:include/HypercubeRC>
 )
 
-# ——— Executables link against the static library ———
-add_executable(HypercubeRC main.cpp)
-add_executable(BasicPrediction examples/BasicPrediction.cpp)
-add_executable(SignalClassification examples/SignalClassification.cpp)
-add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp)
-add_executable(StandaloneESNSweep diagnostics/StandaloneESNSweep.cpp)
-add_executable(SeedSurvey diagnostics/SeedSurvey.cpp)
-add_executable(CoreSmokeTest tests/CoreSmokeTest.cpp)
+# ——— Optimization and warning flags (library) ———
+target_compile_options(HypercubeRCCore PRIVATE
+        $<$<CONFIG:Release>:-O3 -march=native -mtune=native -ffast-math>
+        $<$<CONFIG:Debug>:-O0 -g>
+        -Wall -Wextra -Wno-unknown-pragmas
+)
 
-set(DIAGNOSTIC_TARGETS HypercubeRC StandaloneESNSweep SeedSurvey)
-set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly)
-set(TEST_TARGETS CoreSmokeTest)
-set(EXE_TARGETS ${DIAGNOSTIC_TARGETS} ${EXAMPLE_TARGETS} ${TEST_TARGETS})
-set(ALL_TARGETS HypercubeRCCore ${EXE_TARGETS})
-
-foreach(tgt IN LISTS EXE_TARGETS)
-    target_link_libraries(${tgt} PRIVATE HypercubeRCCore)
-endforeach()
-
-# ——— OpenMP (diagnostics only) ———
-# Core library does NOT use OpenMP.  Diagnostic executables use it for
-# parallel seed sweeps and memory-capacity computation.
 if(MINGW)
-    foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
-        target_compile_options(${tgt} PRIVATE -fopenmp)
-        target_link_options(${tgt} PRIVATE -fopenmp)
-    endforeach()
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-    find_package(OpenMP QUIET)
-    if(OpenMP_CXX_FOUND)
-        foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
-            target_link_libraries(${tgt} PRIVATE OpenMP::OpenMP_CXX)
-        endforeach()
-    endif()
-elseif(MSVC)
-    foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
-        target_compile_options(${tgt} PRIVATE /openmp)
-    endforeach()
+    target_link_options(HypercubeRCCore PRIVATE -static-libgcc -static-libstdc++)
 endif()
 
-foreach(tgt IN LISTS ALL_TARGETS)
-    # Optimization and warning flags
-    target_compile_options(${tgt} PRIVATE
-            $<$<CONFIG:Release>:-O3 -march=native -mtune=native -ffast-math>
-            $<$<CONFIG:Debug>:-O0 -g>
-            -Wall -Wextra -Wno-unknown-pragmas
-    )
+# ——— Executables: only when building standalone (not via FetchContent) ———
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    add_executable(HypercubeRC main.cpp)
+    add_executable(BasicPrediction examples/BasicPrediction.cpp)
+    add_executable(SignalClassification examples/SignalClassification.cpp)
+    add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp)
+    add_executable(StandaloneESNSweep diagnostics/StandaloneESNSweep.cpp)
+    add_executable(SeedSurvey diagnostics/SeedSurvey.cpp)
+    add_executable(CoreSmokeTest tests/CoreSmokeTest.cpp)
 
-    # Static linking on MinGW for easier distribution
+    set(DIAGNOSTIC_TARGETS HypercubeRC StandaloneESNSweep SeedSurvey)
+    set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly)
+    set(TEST_TARGETS CoreSmokeTest)
+    set(EXE_TARGETS ${DIAGNOSTIC_TARGETS} ${EXAMPLE_TARGETS} ${TEST_TARGETS})
+
+    foreach(tgt IN LISTS EXE_TARGETS)
+        target_link_libraries(${tgt} PRIVATE HypercubeRCCore)
+    endforeach()
+
+    # ——— OpenMP (diagnostics only) ———
+    # Core library does NOT use OpenMP.  Diagnostic executables use it for
+    # parallel seed sweeps and memory-capacity computation.
     if(MINGW)
-        target_link_options(${tgt} PRIVATE -static-libgcc -static-libstdc++)
+        foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
+            target_compile_options(${tgt} PRIVATE -fopenmp)
+            target_link_options(${tgt} PRIVATE -fopenmp)
+        endforeach()
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        find_package(OpenMP QUIET)
+        if(OpenMP_CXX_FOUND)
+            foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
+                target_link_libraries(${tgt} PRIVATE OpenMP::OpenMP_CXX)
+            endforeach()
+        endif()
+    elseif(MSVC)
+        foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
+            target_compile_options(${tgt} PRIVATE /openmp)
+        endforeach()
     endif()
-endforeach()
+
+    foreach(tgt IN LISTS EXE_TARGETS)
+        target_compile_options(${tgt} PRIVATE
+                $<$<CONFIG:Release>:-O3 -march=native -mtune=native -ffast-math>
+                $<$<CONFIG:Debug>:-O0 -g>
+                -Wall -Wextra -Wno-unknown-pragmas
+        )
+
+        if(MINGW)
+            target_link_options(${tgt} PRIVATE -static-libgcc -static-libstdc++)
+        endif()
+    endforeach()
+endif()
 
 # ——— Install rules ———
 include(GNUInstallDirs)
