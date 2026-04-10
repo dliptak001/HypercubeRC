@@ -18,7 +18,9 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
     output_stride_ = std::max<size_t>(1, N / M);
     num_output_verts_ = (N + output_stride_ - 1) / output_stride_;
 
-    if (readout_type_ == ReadoutType::Ridge)
+    if (readout_type_ == ReadoutType::CNN)
+        readout_ = CNNReadout{};
+    else if (readout_type_ == ReadoutType::Ridge)
         readout_ = RidgeRegression{};
     else
         readout_ = LinearReadout{};
@@ -65,6 +67,12 @@ void ESN<DIM>::ClearStates()
 template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size)
 {
+    if (readout_type_ == ReadoutType::CNN) {
+        // CNN readout uses raw state directly -- no feature pipeline.
+        std::get<CNNReadout>(readout_).Train(
+            states_.data(), targets, train_size, DIM);
+        return;
+    }
     EnsureFeatures();
     size_t nf = NumFeatures();
     std::visit([&](auto& r) {
@@ -94,6 +102,15 @@ void ESN<DIM>::Train(const float* targets, size_t train_size,
 }
 
 template <size_t DIM>
+void ESN<DIM>::Train(const float* targets, size_t train_size,
+                     const CNNReadoutConfig& config)
+{
+    assert(readout_type_ == ReadoutType::CNN);
+    std::get<CNNReadout>(readout_).Train(
+        states_.data(), targets, train_size, DIM, config);
+}
+
+template <size_t DIM>
 void ESN<DIM>::TrainIncremental(const float* targets, size_t train_size,
                                 float blend,
                                 float lr, size_t epochs,
@@ -109,8 +126,12 @@ void ESN<DIM>::TrainIncremental(const float* targets, size_t train_size,
 template <size_t DIM>
 float ESN<DIM>::PredictRaw(size_t timestep) const
 {
-    EnsureFeatures();
     assert(timestep < num_collected_);
+    if (readout_type_ == ReadoutType::CNN) {
+        const float* s = states_.data() + timestep * N;
+        return std::get<CNNReadout>(readout_).PredictRaw(s);
+    }
+    EnsureFeatures();
     size_t nf = NumFeatures();
     const float* f = features_.data() + timestep * nf;
     return std::visit([f](const auto& r) { return r.PredictRaw(f); }, readout_);
@@ -119,8 +140,12 @@ float ESN<DIM>::PredictRaw(size_t timestep) const
 template <size_t DIM>
 double ESN<DIM>::R2(const float* targets, size_t start, size_t count) const
 {
-    EnsureFeatures();
     assert(start + count <= num_collected_);
+    if (readout_type_ == ReadoutType::CNN) {
+        const float* s = states_.data() + start * N;
+        return std::get<CNNReadout>(readout_).R2(s, targets + start, count);
+    }
+    EnsureFeatures();
     size_t nf = NumFeatures();
     const float* f = features_.data() + start * nf;
     return std::visit([&](const auto& r) { return r.R2(f, targets + start, count); }, readout_);
@@ -129,7 +154,6 @@ double ESN<DIM>::R2(const float* targets, size_t start, size_t count) const
 template <size_t DIM>
 double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
 {
-    EnsureFeatures();
     assert(start + count <= num_collected_);
     if (count == 0) return 0.0;
 
@@ -138,18 +162,29 @@ double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
     for (size_t s = 0; s < count; ++s) mean += tgt[s];
     mean /= static_cast<double>(count);
 
-    size_t nf = NumFeatures();
-    const float* f = features_.data() + start * nf;
     double var = 0.0, mse = 0.0;
-    std::visit([&](const auto& r) {
-        for (size_t s = 0; s < count; ++s)
-        {
-            double y = tgt[s];
-            double yh = r.PredictRaw(f + s * nf);
+
+    if (readout_type_ == ReadoutType::CNN) {
+        const auto& cnn = std::get<CNNReadout>(readout_);
+        for (size_t s = 0; s < count; ++s) {
+            double y  = tgt[s];
+            double yh = cnn.PredictRaw(states_.data() + (start + s) * N);
             var += (y - mean) * (y - mean);
             mse += (y - yh) * (y - yh);
         }
-    }, readout_);
+    } else {
+        EnsureFeatures();
+        size_t nf = NumFeatures();
+        const float* f = features_.data() + start * nf;
+        std::visit([&](const auto& r) {
+            for (size_t s = 0; s < count; ++s) {
+                double y  = tgt[s];
+                double yh = r.PredictRaw(f + s * nf);
+                var += (y - mean) * (y - mean);
+                mse += (y - yh) * (y - yh);
+            }
+        }, readout_);
+    }
     if (var < 1e-12) return std::numeric_limits<double>::infinity();
     return std::sqrt(mse / count) / std::sqrt(var / count);
 }
@@ -157,8 +192,12 @@ double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
 template <size_t DIM>
 double ESN<DIM>::Accuracy(const float* labels, size_t start, size_t count) const
 {
-    EnsureFeatures();
     assert(start + count <= num_collected_);
+    if (readout_type_ == ReadoutType::CNN) {
+        const float* s = states_.data() + start * N;
+        return std::get<CNNReadout>(readout_).Accuracy(s, labels + start, count);
+    }
+    EnsureFeatures();
     size_t nf = NumFeatures();
     const float* f = features_.data() + start * nf;
     return std::visit([&](const auto& r) { return r.Accuracy(f, labels + start, count); }, readout_);
@@ -210,6 +249,8 @@ void ESN<DIM>::EnsureFeatures() const
 template <size_t DIM>
 size_t ESN<DIM>::NumFeatures() const
 {
+    if (readout_type_ == ReadoutType::CNN)
+        return N;  // CNN operates on full raw state
     if (feature_mode_ == FeatureMode::Translated)
         return TranslationFeatureCountSelected(num_output_verts_);
     return num_output_verts_;
@@ -250,7 +291,8 @@ void ESN<DIM>::SetReadoutState(const ReadoutState& state)
     if (!state.is_trained) return;
     std::visit([&](auto& r) {
         using R = std::decay_t<decltype(r)>;
-        if constexpr (std::is_same_v<R, RidgeRegression>) {
+        if constexpr (std::is_same_v<R, RidgeRegression> ||
+                      std::is_same_v<R, CNNReadout>) {
             r.SetState(state.weights, state.bias,
                        state.feature_mean, state.feature_scale);
         } else {
@@ -261,7 +303,7 @@ void ESN<DIM>::SetReadoutState(const ReadoutState& state)
     }, readout_);
 }
 
-// Explicit template instantiations (DIM 5-12)
+// Explicit template instantiations (DIM 5-16)
 template class ESN<5>;
 template class ESN<6>;
 template class ESN<7>;
@@ -270,3 +312,7 @@ template class ESN<9>;
 template class ESN<10>;
 template class ESN<11>;
 template class ESN<12>;
+template class ESN<13>;
+template class ESN<14>;
+template class ESN<15>;
+template class ESN<16>;

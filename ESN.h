@@ -9,8 +9,9 @@
 #include "TranslationLayer.h"
 #include "LinearReadout.h"
 #include "RidgeRegression.h"
+#include "CNNReadout.h"
 
-enum class ReadoutType { Linear, Ridge };
+enum class ReadoutType { Linear, Ridge, CNN };
 enum class FeatureMode { Raw, Translated };
 
 /// @brief Echo-state network implementing the full pipeline:
@@ -78,6 +79,10 @@ public:
     void Train(const float* targets, size_t train_size,
                float lr, size_t epochs,
                float weight_decay = 1e-4f, float lr_decay = 0.01f);
+
+    /// @brief Train CNN readout on raw reservoir states (bypasses feature pipeline).
+    void Train(const float* targets, size_t train_size,
+               const CNNReadoutConfig& config);
 
     /// @brief Incremental training for streaming (Linear readout only).
     void TrainIncremental(const float* targets, size_t train_size,
@@ -154,7 +159,7 @@ private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
     ReadoutType readout_type_;
     FeatureMode feature_mode_;
-    std::variant<LinearReadout, RidgeRegression> readout_;
+    std::variant<LinearReadout, RidgeRegression, CNNReadout> readout_;
 
     size_t num_inputs_ = 1;
     float output_fraction_ = 1.0f;

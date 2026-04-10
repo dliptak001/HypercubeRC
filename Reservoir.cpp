@@ -151,7 +151,7 @@ void Reservoir<DIM>::InjectInput(size_t channel, float input)
         vtx_output_[v] += vtx_input_weight_[v] * input;
 }
 
-// Explicit template instantiations (DIM 5-12)
+// Explicit template instantiations (DIM 5-16)
 template class Reservoir<5>;
 template class Reservoir<6>;
 template class Reservoir<7>;
@@ -160,3 +160,7 @@ template class Reservoir<9>;
 template class Reservoir<10>;
 template class Reservoir<11>;
 template class Reservoir<12>;
+template class Reservoir<13>;
+template class Reservoir<14>;
+template class Reservoir<15>;
+template class Reservoir<16>;

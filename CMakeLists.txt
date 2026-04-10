@@ -21,6 +21,18 @@ set(PUBLIC_HEADERS
     ${PROJECT_SOURCE_DIR}/TranslationLayer.h
     ${PROJECT_SOURCE_DIR}/readout/LinearReadout.h
     ${PROJECT_SOURCE_DIR}/readout/RidgeRegression.h
+    ${PROJECT_SOURCE_DIR}/readout/CNNReadout.h
+)
+
+# ——— HypercubeCNN dependency (CNN readout) ———
+# Sibling project at ../HypercubeCNN.  Built as a static library.
+set(HCNN_DIR "${PROJECT_SOURCE_DIR}/../HypercubeCNN")
+set(HCNN_BUILD_DIR "${HCNN_DIR}/cmake-build-release")
+
+add_library(HypercubeCNNCore STATIC IMPORTED)
+set_target_properties(HypercubeCNNCore PROPERTIES
+    IMPORTED_LOCATION "${HCNN_BUILD_DIR}/libHypercubeCNNCore.a"
+    INTERFACE_INCLUDE_DIRECTORIES "${HCNN_DIR}"
 )
 
 # Include directories: PROJECT_SOURCE_DIR and readout/ for in-tree builds,
@@ -31,6 +43,8 @@ target_include_directories(HypercubeRCCore
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/readout>
         $<INSTALL_INTERFACE:include/HypercubeRC>
 )
+
+target_link_libraries(HypercubeRCCore PUBLIC HypercubeCNNCore)
 
 # ——— Optimization and warning flags (library) ———
 target_compile_options(HypercubeRCCore PRIVATE
