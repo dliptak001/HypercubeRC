@@ -11,6 +11,10 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
       readout_type_(readout_type),
       feature_mode_(feature_mode)
 {
+    // HCNN readout operates on raw reservoir states -- force Raw mode.
+    if (readout_type_ == ReadoutType::HCNN)
+        feature_mode_ = FeatureMode::Raw;
+
     num_inputs_ = cfg.num_inputs;
     output_fraction_ = cfg.output_fraction;
     assert(output_fraction_ > 0.0f && output_fraction_ <= 1.0f);
@@ -18,7 +22,7 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
     output_stride_ = std::max<size_t>(1, N / M);
     num_output_verts_ = (N + output_stride_ - 1) / output_stride_;
 
-    if (readout_type_ == ReadoutType::CNN)
+    if (readout_type_ == ReadoutType::HCNN)
         readout_ = CNNReadout{};
     else if (readout_type_ == ReadoutType::Ridge)
         readout_ = RidgeRegression{};
@@ -67,7 +71,7 @@ void ESN<DIM>::ClearStates()
 template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size)
 {
-    if (readout_type_ == ReadoutType::CNN) {
+    if (readout_type_ == ReadoutType::HCNN) {
         // CNN readout uses raw state directly -- no feature pipeline.
         std::get<CNNReadout>(readout_).Train(
             states_.data(), targets, train_size, DIM);
@@ -76,7 +80,10 @@ void ESN<DIM>::Train(const float* targets, size_t train_size)
     EnsureFeatures();
     size_t nf = NumFeatures();
     std::visit([&](auto& r) {
-        r.Train(features_.data(), targets, train_size, nf);
+        using R = std::decay_t<decltype(r)>;
+        if constexpr (!std::is_same_v<R, CNNReadout>) {
+            r.Train(features_.data(), targets, train_size, nf);
+        }
     }, readout_);
 }
 
@@ -105,7 +112,7 @@ template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size,
                      const CNNReadoutConfig& config)
 {
-    assert(readout_type_ == ReadoutType::CNN);
+    assert(readout_type_ == ReadoutType::HCNN);
     std::get<CNNReadout>(readout_).Train(
         states_.data(), targets, train_size, DIM, config);
 }
@@ -127,7 +134,7 @@ template <size_t DIM>
 float ESN<DIM>::PredictRaw(size_t timestep) const
 {
     assert(timestep < num_collected_);
-    if (readout_type_ == ReadoutType::CNN) {
+    if (readout_type_ == ReadoutType::HCNN) {
         const float* s = states_.data() + timestep * N;
         return std::get<CNNReadout>(readout_).PredictRaw(s);
     }
@@ -138,12 +145,29 @@ float ESN<DIM>::PredictRaw(size_t timestep) const
 }
 
 template <size_t DIM>
+void ESN<DIM>::PredictRaw(size_t timestep, float* output) const
+{
+    assert(timestep < num_collected_);
+    if (readout_type_ == ReadoutType::HCNN) {
+        const float* s = states_.data() + timestep * N;
+        std::get<CNNReadout>(readout_).PredictRaw(s, output);
+        return;
+    }
+    // Linear/Ridge: single scalar output.
+    EnsureFeatures();
+    size_t nf = NumFeatures();
+    const float* f = features_.data() + timestep * nf;
+    output[0] = std::visit([f](const auto& r) { return r.PredictRaw(f); }, readout_);
+}
+
+template <size_t DIM>
 double ESN<DIM>::R2(const float* targets, size_t start, size_t count) const
 {
     assert(start + count <= num_collected_);
-    if (readout_type_ == ReadoutType::CNN) {
+    if (readout_type_ == ReadoutType::HCNN) {
+        const auto& cnn = std::get<CNNReadout>(readout_);
         const float* s = states_.data() + start * N;
-        return std::get<CNNReadout>(readout_).R2(s, targets + start, count);
+        return cnn.R2(s, targets + start * cnn.NumOutputs(), count);
     }
     EnsureFeatures();
     size_t nf = NumFeatures();
@@ -157,34 +181,53 @@ double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
     assert(start + count <= num_collected_);
     if (count == 0) return 0.0;
 
+    if (readout_type_ == ReadoutType::HCNN) {
+        const auto& cnn = std::get<CNNReadout>(readout_);
+        const size_t K = cnn.NumOutputs();
+        const float* tgt = targets + start * K;
+        std::vector<float> pred(K);
+
+        // Average NRMSE across outputs.
+        double nrmse_sum = 0.0;
+        for (size_t k = 0; k < K; ++k) {
+            double mean = 0.0;
+            for (size_t s = 0; s < count; ++s)
+                mean += tgt[s * K + k];
+            mean /= static_cast<double>(count);
+
+            double var = 0.0, mse_k = 0.0;
+            for (size_t s = 0; s < count; ++s) {
+                cnn.PredictRaw(states_.data() + (start + s) * N, pred.data());
+                double y  = tgt[s * K + k];
+                double yh = pred[k];
+                var += (y - mean) * (y - mean);
+                mse_k += (y - yh) * (y - yh);
+            }
+            if (var < 1e-12)
+                nrmse_sum += std::numeric_limits<double>::infinity();
+            else
+                nrmse_sum += std::sqrt(mse_k / count) / std::sqrt(var / count);
+        }
+        return nrmse_sum / static_cast<double>(K);
+    }
+
     const float* tgt = targets + start;
     double mean = 0.0;
     for (size_t s = 0; s < count; ++s) mean += tgt[s];
     mean /= static_cast<double>(count);
 
     double var = 0.0, mse = 0.0;
-
-    if (readout_type_ == ReadoutType::CNN) {
-        const auto& cnn = std::get<CNNReadout>(readout_);
+    EnsureFeatures();
+    size_t nf = NumFeatures();
+    const float* f = features_.data() + start * nf;
+    std::visit([&](const auto& r) {
         for (size_t s = 0; s < count; ++s) {
             double y  = tgt[s];
-            double yh = cnn.PredictRaw(states_.data() + (start + s) * N);
+            double yh = r.PredictRaw(f + s * nf);
             var += (y - mean) * (y - mean);
             mse += (y - yh) * (y - yh);
         }
-    } else {
-        EnsureFeatures();
-        size_t nf = NumFeatures();
-        const float* f = features_.data() + start * nf;
-        std::visit([&](const auto& r) {
-            for (size_t s = 0; s < count; ++s) {
-                double y  = tgt[s];
-                double yh = r.PredictRaw(f + s * nf);
-                var += (y - mean) * (y - mean);
-                mse += (y - yh) * (y - yh);
-            }
-        }, readout_);
-    }
+    }, readout_);
     if (var < 1e-12) return std::numeric_limits<double>::infinity();
     return std::sqrt(mse / count) / std::sqrt(var / count);
 }
@@ -193,7 +236,7 @@ template <size_t DIM>
 double ESN<DIM>::Accuracy(const float* labels, size_t start, size_t count) const
 {
     assert(start + count <= num_collected_);
-    if (readout_type_ == ReadoutType::CNN) {
+    if (readout_type_ == ReadoutType::HCNN) {
         const float* s = states_.data() + start * N;
         return std::get<CNNReadout>(readout_).Accuracy(s, labels + start, count);
     }
@@ -201,6 +244,14 @@ double ESN<DIM>::Accuracy(const float* labels, size_t start, size_t count) const
     size_t nf = NumFeatures();
     const float* f = features_.data() + start * nf;
     return std::visit([&](const auto& r) { return r.Accuracy(f, labels + start, count); }, readout_);
+}
+
+template <size_t DIM>
+size_t ESN<DIM>::NumOutputs() const
+{
+    if (readout_type_ == ReadoutType::HCNN)
+        return std::get<CNNReadout>(readout_).NumOutputs();
+    return 1;
 }
 
 template <size_t DIM>
@@ -249,7 +300,7 @@ void ESN<DIM>::EnsureFeatures() const
 template <size_t DIM>
 size_t ESN<DIM>::NumFeatures() const
 {
-    if (readout_type_ == ReadoutType::CNN)
+    if (readout_type_ == ReadoutType::HCNN)
         return N;  // CNN operates on full raw state
     if (feature_mode_ == FeatureMode::Translated)
         return TranslationFeatureCountSelected(num_output_verts_);

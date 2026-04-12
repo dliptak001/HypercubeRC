@@ -11,7 +11,7 @@
 #include "RidgeRegression.h"
 #include "CNNReadout.h"
 
-enum class ReadoutType { Linear, Ridge, CNN };
+enum class ReadoutType { Linear, Ridge, HCNN };
 enum class FeatureMode { Raw, Translated };
 
 /// @brief Echo-state network implementing the full pipeline:
@@ -94,20 +94,30 @@ public:
     //  Prediction & evaluation
     // ---------------------------------------------------------------
 
-    /// @brief Predict from collected state at a given timestep index.
+    /// @brief Predict from collected state at a given timestep index (scalar).
     [[nodiscard]] float PredictRaw(size_t timestep) const;
 
+    /// @brief Multi-output predict: writes NumOutputs() floats to output.
+    /// For HCNN readout with num_outputs > 1; for Linear/Ridge writes 1 float.
+    void PredictRaw(size_t timestep, float* output) const;
+
     /// @brief R² on a slice of collected states [start, start+count).
-    /// Both features and targets are indexed from `start`.
+    /// targets layout: count * NumOutputs() floats (row-major) for HCNN,
+    /// count floats for Linear/Ridge.  Indexed from `start`.
     [[nodiscard]] double R2(const float* targets, size_t start, size_t count) const;
 
     /// @brief NRMSE on a slice of collected states [start, start+count).
-    /// Both features and targets are indexed from `start`.
+    /// targets layout: count * NumOutputs() floats (row-major) for HCNN,
+    /// count floats for Linear/Ridge.  Indexed from `start`.
     [[nodiscard]] double NRMSE(const float* targets, size_t start, size_t count) const;
 
     /// @brief Classification accuracy on a slice of collected states.
-    /// Both features and labels are indexed from `start`.
+    /// labels layout: count floats (class indices for HCNN, ±1 for Linear/Ridge).
+    /// Indexed from `start`.
     [[nodiscard]] double Accuracy(const float* labels, size_t start, size_t count) const;
+
+    /// @brief Number of output neurons (1 for Linear/Ridge, config-based for HCNN).
+    [[nodiscard]] size_t NumOutputs() const;
 
     // ---------------------------------------------------------------
     //  State & feature access

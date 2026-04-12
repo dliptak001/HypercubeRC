@@ -46,7 +46,7 @@ int main()
     // CNN uses ALL vertices (no stride selection).
     cfg.output_fraction = 1.0f;
 
-    ESN<DIM> esn(cfg, ReadoutType::CNN);
+    ESN<DIM> esn(cfg, ReadoutType::HCNN);
 
     std::cout << "Reservoir: DIM=" << DIM << "  N=" << N
               << "  leak_rate=" << cfg.leak_rate << "\n";

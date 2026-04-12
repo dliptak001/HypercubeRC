@@ -6,8 +6,13 @@
 
 namespace hcnn { class HCNN; }
 
+/// Task type for the HCNN readout.
+enum class HCNNTask { Regression, Classification };
+
 /// Configuration for the CNN readout's architecture and training.
 struct CNNReadoutConfig {
+    int num_outputs   = 1;        ///< Number of output neurons (classes or regression targets).
+    HCNNTask task     = HCNNTask::Regression; ///< Task type.
     int conv_channels = 16;       ///< Number of convolution channels.
     int epochs        = 200;      ///< Training epochs.
     int batch_size    = 32;       ///< Mini-batch size.
@@ -50,40 +55,44 @@ public:
 
     /// @brief Train the CNN readout on raw reservoir states.
     /// @param states     Row-major: num_samples rows, each of N = 2^dim floats.
-    /// @param targets    One scalar target per sample.
+    /// @param targets    For regression: num_samples * num_outputs floats (row-major).
+    ///                   For classification: num_samples floats (class indices as float).
     /// @param num_samples Number of training samples.
     /// @param dim        Hypercube dimension (N = 2^dim vertices per state).
     /// @param config     Architecture and training hyperparameters.
     void Train(const float* states, const float* targets,
                size_t num_samples, size_t dim,
-               const CNNReadoutConfig& config);
+               const CNNReadoutConfig& config = {});
 
-    /// @brief Compatibility Train matching Linear/Ridge signature.
-    /// Called by ESN's generic std::visit path.  For CNN this is a no-op
-    /// that throws -- CNN training must go through the dim-aware overload
-    /// or the ESN's CNN-specific Train path.
-    void Train(const float* features, const float* labels,
-               size_t num_samples, size_t num_features);
+    /// @brief Multi-output prediction: writes num_outputs floats to output.
+    /// For regression: de-centered predictions.  For classification: raw logits.
+    void PredictRaw(const float* state, float* output) const;
 
-    /// @brief Predict from a single raw state vector (N floats).
-    /// Applies input standardization and target de-centering.
+    /// @brief Scalar prediction (backward compat, num_outputs must be 1).
     [[nodiscard]] float PredictRaw(const float* state) const;
 
-    /// @brief Classification-style thresholded prediction (at 0.0).
-    [[nodiscard]] float Predict(const float* state) const;
+    /// @brief Classification: returns predicted class index.
+    [[nodiscard]] int PredictClass(const float* state) const;
 
-    /// @brief R-squared on raw state vectors.
+    /// @brief R-squared on raw state vectors (regression).
+    /// For multi-output: returns average R2 across outputs.
+    /// targets layout: num_samples * num_outputs floats (row-major).
     [[nodiscard]] double R2(const float* states, const float* targets,
                             size_t num_samples) const;
 
     /// @brief Classification accuracy on raw state vectors.
+    /// For multi-class: compares argmax(logits) vs int(label).
+    /// labels layout: num_samples floats (class indices).
     [[nodiscard]] double Accuracy(const float* states, const float* labels,
                                   size_t num_samples) const;
+
+    /// @brief Number of output neurons.
+    [[nodiscard]] size_t NumOutputs() const { return num_outputs_; }
 
     // --- State accessors (interface compatibility with Linear/Ridge) ---
 
     [[nodiscard]] size_t NumFeatures() const { return num_features_; }
-    [[nodiscard]] double Bias() const { return target_mean_; }
+    [[nodiscard]] double Bias() const { return target_mean_.empty() ? 0.0 : target_mean_[0]; }
 
     [[nodiscard]] const std::vector<float>& FeatureMean() const { return input_mean_; }
     [[nodiscard]] const std::vector<float>& FeatureScale() const { return input_scale_; }
@@ -107,13 +116,14 @@ private:
     bool trained_ = false;
     size_t dim_ = 0;
     size_t num_features_ = 0;  // N = 2^dim (raw state size, for interface compat)
+    size_t num_outputs_ = 1;
 
     // Input standardization: per-vertex mean and 1/std.
     std::vector<float> input_mean_;
     std::vector<float> input_scale_;
 
-    // Target centering.
-    double target_mean_ = 0.0;
+    // Target centering (per-output, regression only).
+    std::vector<double> target_mean_;
 
     // Flattened weight blob for serialization (mirrors Weights() interface).
     std::vector<double> weights_blob_;
