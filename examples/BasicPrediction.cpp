@@ -114,7 +114,7 @@ int main(int argc, char* argv[])
 
     CNNReadoutConfig cnn_cfg;
     cnn_cfg.conv_channels = 16;
-    cnn_cfg.epochs = 100;
+    cnn_cfg.epochs = 200;
     cnn_cfg.batch_size = 32;
     cnn_cfg.lr_max = 0.005f;
     cnn_cfg.lr_min_frac = 0.1f;
