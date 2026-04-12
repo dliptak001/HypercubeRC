@@ -35,10 +35,20 @@ public:
 
     NARMA10(ReadoutType readout_type = ReadoutType::Linear,
             const ReservoirConfig* config = nullptr, float output_fraction = 1.0f,
-            bool run_hcnn = false)
+            bool run_hcnn = false, const CNNReadoutConfig& hcnn_config = BenchmarkCNNConfig())
         : readout_type_(readout_type), config_(config), output_fraction_(output_fraction),
-          run_hcnn_(run_hcnn)
+          run_hcnn_(run_hcnn), hcnn_config_(hcnn_config)
     {
+    }
+
+    /// @brief Benchmark-tuned HCNN defaults: larger batch, moderate epochs.
+    static CNNReadoutConfig BenchmarkCNNConfig()
+    {
+        CNNReadoutConfig cfg;
+        cfg.epochs = 300;
+        cfg.batch_size = 128;
+        cfg.lr_max = 0.003f;
+        return cfg;
     }
 
     /// @brief Run the benchmark and return results without printing.
@@ -95,7 +105,7 @@ public:
                 ESN<DIM> esn(hcnn_cfg, ReadoutType::HCNN);
                 esn.Warmup(ri.data(), warmup);
                 esn.Run(ri.data() + warmup, collect);
-                esn.Train(targets.data(), tr);
+                esn.Train(targets.data(), tr, hcnn_config_);
                 s_nrmse_hcnn += esn.NRMSE(targets.data(), tr, te);
             }
         }
@@ -133,6 +143,7 @@ private:
     const ReservoirConfig* config_;
     float output_fraction_;
     bool run_hcnn_;
+    CNNReadoutConfig hcnn_config_;
 
     static constexpr uint64_t DefaultSeed()
     {
