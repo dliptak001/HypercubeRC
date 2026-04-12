@@ -185,7 +185,11 @@ double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
         const auto& cnn = std::get<CNNReadout>(readout_);
         const size_t K = cnn.NumOutputs();
         const float* tgt = targets + start * K;
-        std::vector<float> pred(K);
+
+        // Predict all samples once, cache results.
+        std::vector<float> preds(count * K);
+        for (size_t s = 0; s < count; ++s)
+            cnn.PredictRaw(states_.data() + (start + s) * N, preds.data() + s * K);
 
         // Average NRMSE across outputs.
         double nrmse_sum = 0.0;
@@ -197,9 +201,8 @@ double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
 
             double var = 0.0, mse_k = 0.0;
             for (size_t s = 0; s < count; ++s) {
-                cnn.PredictRaw(states_.data() + (start + s) * N, pred.data());
                 double y  = tgt[s * K + k];
-                double yh = pred[k];
+                double yh = preds[s * K + k];
                 var += (y - mean) * (y - mean);
                 mse_k += (y - yh) * (y - yh);
             }

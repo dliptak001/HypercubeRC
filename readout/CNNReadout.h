@@ -32,7 +32,11 @@ struct CNNReadoutConfig {
 /// extraction, no translation layer, no stride selection.
 ///
 /// **Data path:** raw reservoir state -> input standardization ->
-///   HypercubeCNN (Conv -> MaxPool -> GAP -> Linear) -> de-center -> output.
+///   HypercubeCNN (Conv->Pool stack -> GAP -> Linear) -> de-center -> output.
+///
+/// **Architecture:** Auto-sized from DIM: min(DIM-3, 4) Conv+Pool pairs,
+///   channels doubling per layer (16, 32, 64, 128).  Override via
+///   CNNReadoutConfig::num_layers.
 ///
 /// **Interface compatibility:** Provides the same method signatures as
 /// LinearReadout / RidgeRegression so that ESN's std::visit lambdas compile

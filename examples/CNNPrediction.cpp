@@ -72,13 +72,26 @@ int main()
     cnn_cfg.lr_min_frac = 0.1f;
     cnn_cfg.seed = 42;
 
-    const int conv_params = 1 * cnn_cfg.conv_channels * static_cast<int>(DIM)
-                          + cnn_cfg.conv_channels;
-    const int readout_params = cnn_cfg.conv_channels + 1;
-
-    std::cout << "CNN:       Conv(" << cnn_cfg.conv_channels << ", TANH) -> MaxPool -> GAP -> Linear(1)\n";
-    std::cout << "           " << (conv_params + readout_params) << " parameters ("
-              << conv_params << " conv + " << readout_params << " readout)\n";
+    // Auto-sized architecture: min(DIM - 3, 4) Conv+Pool pairs, channels doubling.
+    const int num_layers = std::min(static_cast<int>(DIM) - 3, 4);
+    int total_params = 0;
+    int ch_in = 1;
+    int layer_dim = static_cast<int>(DIM);
+    std::cout << "CNN:       ";
+    for (int i = 0; i < num_layers; ++i) {
+        int ch_out = cnn_cfg.conv_channels * (1 << i);
+        int layer_params = ch_in * ch_out * layer_dim + ch_out;  // kernel + bias
+        total_params += layer_params;
+        if (i > 0) std::cout << " -> ";
+        std::cout << "Conv(" << ch_out << ",K=" << layer_dim << ") -> Pool";
+        ch_in = ch_out;
+        layer_dim -= 1;
+    }
+    int readout_params = ch_in + 1;  // GAP reduces to ch_in features -> Linear(1)
+    total_params += readout_params;
+    std::cout << " -> GAP -> Linear(1)\n";
+    std::cout << "           " << total_params << " parameters ("
+              << num_layers << " conv+pool layers)\n";
     std::cout << "Training:  " << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size
               << ", lr=" << cnn_cfg.lr_max << " (cosine, floor=" << (cnn_cfg.lr_max * cnn_cfg.lr_min_frac) << ")\n";
     std::cout << "Data:      " << train_size << " train, " << test_size << " test\n\n";
@@ -144,7 +157,7 @@ int main()
     std::cout << "  ---------+------------+------------+------------\n";
     std::cout << "  CNN      | " << std::setprecision(6) << std::setw(10) << r2
               << " | " << std::setw(10) << nrmse
-              << " | " << std::setw(10) << (conv_params + readout_params) << "\n";
+              << " | " << std::setw(10) << total_params << "\n";
     std::cout << "  Ridge    | " << std::setw(10) << r2_ridge
               << " | " << std::setw(10) << nrmse_ridge
               << " | " << std::setw(10) << esn_ridge.NumFeatures() << "\n";

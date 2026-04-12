@@ -20,30 +20,31 @@ CNNReadout& CNNReadout::operator=(CNNReadout&&) noexcept = default;
 void CNNReadout::compute_standardization(const float* states,
                                          size_t num_samples, size_t n)
 {
-    input_mean_.assign(n, 0.0f);
-    input_scale_.assign(n, 1.0f);
+    input_mean_.resize(n);
+    input_scale_.resize(n);
 
-    // Per-vertex mean (double accumulator for precision at large N).
+    // Per-vertex mean (double accumulation for precision at large N).
+    std::vector<double> mean_acc(n, 0.0);
     for (size_t s = 0; s < num_samples; ++s) {
         const float* x = states + s * n;
         for (size_t v = 0; v < n; ++v)
-            input_mean_[v] += x[v];
+            mean_acc[v] += x[v];
     }
-    const float inv_n = 1.0f / static_cast<float>(num_samples);
+    const double inv_n = 1.0 / static_cast<double>(num_samples);
     for (size_t v = 0; v < n; ++v)
-        input_mean_[v] *= inv_n;
+        input_mean_[v] = static_cast<float>(mean_acc[v] * inv_n);
 
-    // Per-vertex std.
-    std::vector<float> var(n, 0.0f);
+    // Per-vertex variance (double accumulation).
+    std::vector<double> var_acc(n, 0.0);
     for (size_t s = 0; s < num_samples; ++s) {
         const float* x = states + s * n;
         for (size_t v = 0; v < n; ++v) {
-            float d = x[v] - input_mean_[v];
-            var[v] += d * d;
+            double d = x[v] - input_mean_[v];
+            var_acc[v] += d * d;
         }
     }
     for (size_t v = 0; v < n; ++v) {
-        float std_v = std::sqrt(var[v] * inv_n);
+        float std_v = static_cast<float>(std::sqrt(var_acc[v] * inv_n));
         input_scale_[v] = (std_v > 1e-8f) ? (1.0f / std_v) : 1.0f;
     }
 }
@@ -173,11 +174,6 @@ void CNNReadout::Train(const float* states, const float* targets,
         }
     }
 
-    // --- Allocate persistent scratch buffers ---
-    scratch_state_.resize(n);
-    scratch_embedded_.resize(n);
-    scratch_pred_.resize(num_outputs_);
-
     // --- Flatten weights for serialization ---
     flatten_weights();
     trained_ = true;
@@ -238,27 +234,31 @@ double CNNReadout::R2(const float* states, const float* targets,
 {
     if (num_samples == 0) return 0.0;
     const size_t n = num_features_;
-    std::vector<float> pred(num_outputs_);
+    const size_t K = num_outputs_;
+
+    // Predict all samples once, cache results.
+    std::vector<float> preds(num_samples * K);
+    for (size_t s = 0; s < num_samples; ++s)
+        PredictRaw(states + s * n, preds.data() + s * K);
 
     // Average R2 across outputs.
     double r2_sum = 0.0;
-    for (size_t k = 0; k < num_outputs_; ++k) {
+    for (size_t k = 0; k < K; ++k) {
         double tgt_mean = 0.0;
         for (size_t s = 0; s < num_samples; ++s)
-            tgt_mean += targets[s * num_outputs_ + k];
+            tgt_mean += targets[s * K + k];
         tgt_mean /= static_cast<double>(num_samples);
 
         double ss_res = 0.0, ss_tot = 0.0;
         for (size_t s = 0; s < num_samples; ++s) {
-            PredictRaw(states + s * n, pred.data());
-            double y  = targets[s * num_outputs_ + k];
-            double yh = pred[k];
+            double y  = targets[s * K + k];
+            double yh = preds[s * K + k];
             ss_res += (y - yh) * (y - yh);
             ss_tot += (y - tgt_mean) * (y - tgt_mean);
         }
         r2_sum += (ss_tot < 1e-12) ? 0.0 : (1.0 - ss_res / ss_tot);
     }
-    return r2_sum / static_cast<double>(num_outputs_);
+    return r2_sum / static_cast<double>(K);
 }
 
 double CNNReadout::Accuracy(const float* states, const float* labels,
@@ -314,10 +314,24 @@ void CNNReadout::SetState(std::vector<double> weights, double bias,
                           std::vector<float> feature_scale)
 {
     weights_blob_ = std::move(weights);
-    target_mean_.assign(1, bias);
     input_mean_ = std::move(feature_mean);
     input_scale_ = std::move(feature_scale);
     num_features_ = input_mean_.size();
+
+    // Infer dim from num_features (N = 2^dim).
+    if (num_features_ > 0) {
+        size_t n = num_features_;
+        size_t d = 0;
+        while ((1ULL << d) < n) ++d;
+        if ((1ULL << d) == n)
+            dim_ = d;
+    }
+
+    // Restore target centering.  For multi-output the full vector should be
+    // preserved via the weights blob round-trip; the single bias parameter
+    // is a backward-compat fallback for scalar readouts.
+    if (target_mean_.empty())
+        target_mean_.assign(num_outputs_, bias);
 
     if (!weights_blob_.empty()) {
         rebuild_from_blob();

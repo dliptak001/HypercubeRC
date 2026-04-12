@@ -37,7 +37,7 @@ enum class FeatureMode { Raw, Translated };
 /// **State access.** States(), SelectedStates(), and Features() remain
 /// available for direct access (diagnostics, analysis, custom readouts).
 ///
-/// @tparam DIM Hypercube dimension (5-12). Vertex count is 2^DIM.
+/// @tparam DIM Hypercube dimension (5-16). Vertex count is 2^DIM.
 template <size_t DIM>
 class ESN
 {
