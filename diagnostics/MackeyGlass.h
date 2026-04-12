@@ -26,13 +26,17 @@ public:
     {
         double nrmse_raw;
         double nrmse_full;
-        double pct_change;  // % change from raw to full
+        double nrmse_hcnn;       // -1.0 if not run
+        double pct_change;       // % change raw → full
+        double pct_change_hcnn;  // % change raw → hcnn
     };
 
     MackeyGlass(size_t prediction_horizon = 1, ReadoutType readout_type = ReadoutType::Linear,
-                const ReservoirConfig* config = nullptr, float output_fraction = 1.0f)
+                const ReservoirConfig* config = nullptr, float output_fraction = 1.0f,
+                bool run_hcnn = false)
         : prediction_horizon_(prediction_horizon), readout_type_(readout_type),
-          config_(config), output_fraction_(output_fraction)
+          config_(config), output_fraction_(output_fraction),
+          run_hcnn_(run_hcnn)
     {
     }
 
@@ -42,7 +46,7 @@ public:
         constexpr size_t warmup = (N < 256) ? 200 : 500;
         constexpr size_t collect = 18 * N;
 
-        double s_nrmse_raw = 0.0, s_nrmse_full = 0.0;
+        double s_nrmse_raw = 0.0, s_nrmse_full = 0.0, s_nrmse_hcnn = 0.0;
 
         for (uint64_t seed : Seeds())
         {
@@ -61,7 +65,7 @@ public:
             if (output_fraction_ != 1.0f)
                 cfg.output_fraction = output_fraction_;
 
-            // Raw features
+            // Ridge: raw features
             {
                 ESN<DIM> esn(cfg, readout_type_, FeatureMode::Raw);
                 esn.Warmup(series.data(), warmup);
@@ -70,7 +74,7 @@ public:
                 s_nrmse_raw += esn.NRMSE(targets.data(), tr, te);
             }
 
-            // Full translation
+            // Ridge: full translation
             {
                 ESN<DIM> esn(cfg, readout_type_, FeatureMode::Translated);
                 esn.Warmup(series.data(), warmup);
@@ -78,14 +82,28 @@ public:
                 esn.Train(targets.data(), tr);
                 s_nrmse_full += esn.NRMSE(targets.data(), tr, te);
             }
+
+            // HCNN
+            if (run_hcnn_) {
+                ReservoirConfig hcnn_cfg = cfg;
+                hcnn_cfg.output_fraction = 1.0f;
+                ESN<DIM> esn(hcnn_cfg, ReadoutType::HCNN);
+                esn.Warmup(series.data(), warmup);
+                esn.Run(series.data() + warmup, collect);
+                esn.Train(targets.data(), tr);
+                s_nrmse_hcnn += esn.NRMSE(targets.data(), tr, te);
+            }
         }
 
         double n = static_cast<double>(Seeds().size());
         double nrmse_raw = s_nrmse_raw / n;
         double nrmse_full = s_nrmse_full / n;
+        double nrmse_hcnn = run_hcnn_ ? s_nrmse_hcnn / n : -1.0;
         double pct = (nrmse_raw > 1e-12) ? 100.0 * (nrmse_full - nrmse_raw) / nrmse_raw : 0.0;
+        double pct_hcnn = (run_hcnn_ && nrmse_raw > 1e-12)
+                              ? 100.0 * (nrmse_hcnn - nrmse_raw) / nrmse_raw : 0.0;
 
-        return {nrmse_raw, nrmse_full, pct};
+        return {nrmse_raw, nrmse_full, nrmse_hcnn, pct, pct_hcnn};
     }
 
     /// @brief Run the benchmark and print a standalone result row.
@@ -110,6 +128,7 @@ private:
     ReadoutType readout_type_;
     const ReservoirConfig* config_;
     float output_fraction_;
+    bool run_hcnn_;
 
     static constexpr uint64_t DefaultSeed()
     {

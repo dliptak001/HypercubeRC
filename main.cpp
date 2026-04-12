@@ -1,19 +1,20 @@
 /// @file main.cpp
 /// @brief HypercubeRC benchmark suite entry point.
+///
+/// Usage: HypercubeRC [--hcnn]
+///   --hcnn  Include HCNN (HypercubeCNN) readout in MG and NARMA-10 benchmarks.
 
 #include "diagnostics/BenchmarkSuite.h"
+#include <cstring>
 
-int main()
+int main(int argc, char* argv[])
 {
-    // Optional: set output fraction (default 1.0 = all vertices).
-    // BenchmarkSuite::RunAll(0.5f);           // 50% of vertices as readout features
+    bool run_hcnn = false;
+    for (int i = 1; i < argc; ++i) {
+        if (std::strcmp(argv[i], "--hcnn") == 0)
+            run_hcnn = true;
+    }
 
-    // Optional: override reservoir parameters for all benchmarks.
-    // SR and input_scaling defaults are scale-invariant — usually no need to change them.
-    // ReservoirConfig cfg;
-    // cfg.leak_rate = 0.3f;
-    // BenchmarkSuite::RunAll(1.0f, &cfg);
-
-    BenchmarkSuite::RunAll();
+    BenchmarkSuite::RunAll(1.0f, nullptr, run_hcnn);
     return 0;
 }
