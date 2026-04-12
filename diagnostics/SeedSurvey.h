@@ -8,10 +8,12 @@
 #include <algorithm>
 #include <numeric>
 #include <random>
+#include <stdexcept>
 #include <cstddef>
 #include "MemoryCapacity.h"
 #include "MackeyGlass.h"
 #include "NARMA10.h"
+#include "../readout/CNNReadout.h"
 
 /// @brief Diagnostic: Seed quality survey.
 ///
@@ -31,6 +33,11 @@ class SeedSurvey
 public:
     enum class Diagnostic { Memory_Capacity, Mackey_Glass, NARMA_10 };
 
+    /// Readout family used for MG/NARMA surveys. Memory_Capacity always
+    /// uses Linear and ignores this field (HCNN cannot do the 50-lag
+    /// parallel regression structure that MC requires).
+    enum class Readout { Ridge, HCNN };
+
     struct Result
     {
         std::map<uint64_t, double> seed_results;  // seed -> metric value
@@ -45,11 +52,20 @@ public:
     };
 
     SeedSurvey(int seed_count, float spectral_radius, float input_scaling,
-               Diagnostic diagnostic, float output_fraction = 1.0f)
+               Diagnostic diagnostic, float output_fraction = 1.0f,
+               Readout readout = Readout::Ridge,
+               CNNReadoutConfig hcnn_config = {})
         : seed_count_(seed_count), spectral_radius_(spectral_radius),
           input_scaling_(input_scaling), diagnostic_(diagnostic),
-          output_fraction_(output_fraction)
+          output_fraction_(output_fraction),
+          readout_(readout), hcnn_config_(hcnn_config)
     {
+        if (readout_ == Readout::HCNN &&
+            diagnostic_ == Diagnostic::Memory_Capacity) {
+            throw std::invalid_argument(
+                "SeedSurvey: HCNN readout is not supported for Memory_Capacity "
+                "(MC uses Linear regression across 50 lags).");
+        }
     }
 
     Result Run()
@@ -64,9 +80,13 @@ public:
 
         PrintHeader();
 
-        // Run all seeds in parallel — each thread sets its own thread_local single_seed
+        // Run all seeds in parallel — each thread sets its own thread_local
+        // single_seed.  For HCNN the inner training already saturates all
+        // cores, so we disable the outer parallel to avoid oversubscription
+        // (sequential outer × parallel inner is the right shape).
+        const bool parallel_outer = (readout_ != Readout::HCNN);
         std::vector<double> values(seed_count_);
-        #pragma omp parallel for schedule(dynamic)
+        #pragma omp parallel for schedule(dynamic) if(parallel_outer)
         for (int i = 0; i < seed_count_; ++i)
             values[i] = RunSingleSeed(seeds[i]);
 
@@ -132,6 +152,8 @@ private:
     float input_scaling_;
     Diagnostic diagnostic_;
     float output_fraction_;
+    Readout readout_;
+    CNNReadoutConfig hcnn_config_;
 
     int MetricPrecision() const
     {
@@ -157,7 +179,8 @@ private:
 
     const char* ReadoutName() const
     {
-        return (diagnostic_ == Diagnostic::Memory_Capacity) ? "Linear" : "Ridge";
+        if (diagnostic_ == Diagnostic::Memory_Capacity) return "Linear";
+        return (readout_ == Readout::HCNN) ? "HCNN" : "Ridge";
     }
 
     void PrintHeader() const
@@ -167,7 +190,14 @@ private:
         std::cout << "SR: " << std::fixed << std::setprecision(2) << spectral_radius_
                   << " | Input scaling: " << std::setprecision(3) << input_scaling_
                   << " | " << seed_count_ << " seeds"
-                  << " | " << ReadoutName() << " readout\n\n";
+                  << " | " << ReadoutName() << " readout";
+        if (readout_ == Readout::HCNN && diagnostic_ != Diagnostic::Memory_Capacity) {
+            std::cout << " (epochs=" << hcnn_config_.epochs
+                      << ", batch=" << hcnn_config_.batch_size
+                      << ", lr_max=" << std::setprecision(4) << hcnn_config_.lr_max
+                      << ")";
+        }
+        std::cout << "\n\n";
     }
 
     double RunSingleSeed(uint64_t seed)
@@ -176,21 +206,25 @@ private:
         cfg.spectral_radius = spectral_radius_;
         cfg.input_scaling = input_scaling_;
 
+        const bool run_hcnn = (readout_ == Readout::HCNN);
+
         switch (diagnostic_)
         {
             case Diagnostic::Mackey_Glass:
             {
                 MackeyGlass<DIM>::single_seed = seed;
-                MackeyGlass<DIM> mg(1, ReadoutType::Ridge, &cfg, output_fraction_);
+                MackeyGlass<DIM> mg(1, ReadoutType::Ridge, &cfg, output_fraction_,
+                                    run_hcnn, hcnn_config_);
                 auto r = mg.Run();
-                return r.nrmse_full;
+                return run_hcnn ? r.nrmse_hcnn : r.nrmse_full;
             }
             case Diagnostic::NARMA_10:
             {
                 NARMA10<DIM>::single_seed = seed;
-                NARMA10<DIM> narma(ReadoutType::Ridge, &cfg, output_fraction_);
+                NARMA10<DIM> narma(ReadoutType::Ridge, &cfg, output_fraction_,
+                                   run_hcnn, hcnn_config_);
                 auto r = narma.Run();
-                return r.nrmse_full;
+                return run_hcnn ? r.nrmse_hcnn : r.nrmse_full;
             }
             case Diagnostic::Memory_Capacity:
             {
@@ -271,7 +305,9 @@ public:
         const std::vector<float>& sr_values,
         float input_scaling,
         Diagnostic diagnostic,
-        float output_fraction = 1.0f)
+        float output_fraction = 1.0f,
+        Readout readout = Readout::Ridge,
+        CNNReadoutConfig hcnn_config = {})
     {
         const bool lower_is_better = (diagnostic != Diagnostic::Memory_Capacity);
 
@@ -280,7 +316,8 @@ public:
         results.reserve(sr_values.size());
         for (float sr : sr_values)
         {
-            SeedSurvey<DIM> survey(seed_count, sr, input_scaling, diagnostic, output_fraction);
+            SeedSurvey<DIM> survey(seed_count, sr, input_scaling, diagnostic,
+                                   output_fraction, readout, hcnn_config);
             results.push_back(survey.Run());
             std::cout << "\n";
         }
@@ -324,7 +361,9 @@ public:
         float spectral_radius,
         const std::vector<float>& is_values,
         Diagnostic diagnostic,
-        float output_fraction = 1.0f)
+        float output_fraction = 1.0f,
+        Readout readout = Readout::Ridge,
+        CNNReadoutConfig hcnn_config = {})
     {
         const bool lower_is_better = (diagnostic != Diagnostic::Memory_Capacity);
 
@@ -333,7 +372,8 @@ public:
         results.reserve(is_values.size());
         for (float isc : is_values)
         {
-            SeedSurvey<DIM> survey(seed_count, spectral_radius, isc, diagnostic, output_fraction);
+            SeedSurvey<DIM> survey(seed_count, spectral_radius, isc, diagnostic,
+                                   output_fraction, readout, hcnn_config);
             results.push_back(survey.Run());
             std::cout << "\n";
         }
