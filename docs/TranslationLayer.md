@@ -27,6 +27,14 @@ The translation layer is a pure function with no learnable parameters.
 It transforms each state snapshot independently using fixed algebraic
 operations.
 
+> **Note:** The translation layer is specific to the Linear/Ridge
+> readout path. `CNNReadout` (the HCNN readout) bypasses it entirely
+> and consumes the raw N-vertex reservoir state directly — its
+> convolutional kernels discover their own nonlinear features in place
+> of the hand-crafted `x + x² + x*x'` expansion. When
+> `ReadoutType::HCNN` is selected, ESN forces `FeatureMode::Raw`. See
+> `docs/Readout.md` and `readout/CNNReadout.md` for details.
+
 ## Three feature classes
 
 | Class | Count | Formula | What it captures |
@@ -83,7 +91,9 @@ Both LinearReadout and RidgeRegression standardize features internally
 standardization, the readout's regularization would penalize the
 feature groups unevenly based on their raw scale, leading to biased
 weight allocation. See the readout class briefs in `readout/LinearReadout.h`
-and `readout/RidgeRegression.h` for details.
+and `readout/RidgeRegression.h` for details. CNNReadout applies its
+own per-vertex standardization to the raw state *before* the translation
+layer, so it never sees this feature-scale imbalance.
 
 ## Does antipodal pairing matter?
 

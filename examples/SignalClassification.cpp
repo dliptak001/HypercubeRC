@@ -313,7 +313,7 @@ int main(int argc, char* argv[])
     cnn_cfg.task = HCNNTask::Classification;
     cnn_cfg.epochs = 25;
     cnn_cfg.batch_size = 128;
-    cnn_cfg.lr_max = 0.003f;
+    cnn_cfg.lr_max = 0.002f;
 
     std::cout << "HCNN training: " << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size
               << ", lr_max=" << std::setprecision(4) << cnn_cfg.lr_max
