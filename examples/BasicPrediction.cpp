@@ -1,23 +1,28 @@
 /// @file BasicPrediction.cpp
-/// @brief Minimal example: predict a sine wave using HypercubeRC.
+/// @brief Predict a sine wave using HypercubeRC with Ridge and HCNN readouts.
 ///
-/// The simplest end-to-end reservoir computing demo. A sine wave is fed into
-/// the reservoir, and a linear readout learns to predict the next value from
-/// the reservoir's internal state alone. Start here if you're new to RC.
+/// The simplest end-to-end reservoir computing demo.  A sine wave is fed into
+/// the reservoir, and two readouts learn to predict the next value from the
+/// reservoir's internal state alone:
+///   - Ridge regression on stride-selected features (fast, closed-form)
+///   - HypercubeCNN on raw state (learned convolutional readout)
 ///
-/// See BasicPrediction.md for a detailed walkthrough, expected output, and
-/// suggested experiments.
+/// Both readouts are trained and evaluated on identical data from the same
+/// reservoir run, giving an apples-to-apples comparison.
+///
+/// See BasicPrediction.md for a detailed walkthrough and suggested experiments.
 
-#include <iostream>
-#include <iomanip>
-#include <vector>
+#include <chrono>
 #include <cmath>
 #include <cstring>
+#include <iomanip>
+#include <iostream>
+#include <vector>
 #include "ESN.h"
 
 int main(int argc, char* argv[])
 {
-    // --- Parse feature mode ---
+    // --- Parse feature mode for Ridge readout ---
     FeatureMode feature_mode = FeatureMode::Raw;  // default
     if (argc > 1)
     {
@@ -42,9 +47,9 @@ int main(int argc, char* argv[])
 
     constexpr uint64_t seed = 6437149480297576047ULL;  // NARMA-10 best seed for DIM 7
 
-    std::cout << "=== HypercubeRC: Basic Sine Wave Prediction ===\n\n";
+    std::cout << "=== HypercubeRC: Sine Wave Prediction ===\n\n";
     std::cout << "Task: predict the next value of sin(0.1t) from the reservoir's\n";
-    std::cout << "internal state. The readout never sees the input directly -- it\n";
+    std::cout << "internal state.  The readout never sees the input directly -- it\n";
     std::cout << "learns the input-to-output mapping entirely from reservoir dynamics.\n\n";
 
     // --- Step 1: Generate a sine wave input signal ---
@@ -53,27 +58,7 @@ int main(int argc, char* argv[])
     for (size_t t = 0; t < total; ++t)
         signal[t] = std::sin(0.1f * static_cast<float>(t));
 
-    // --- Step 2: Create ESN and drive the reservoir ---
-    ReservoirConfig cfg;
-    cfg.seed = seed;
-    cfg.leak_rate        = 0.2f;
-    cfg.output_fraction  = 0.1f;
-    ESN<DIM> esn(cfg, ReadoutType::Ridge, feature_mode);
-    const size_t num_features = esn.NumFeatures();
-
-    bool use_translation = (feature_mode == FeatureMode::Translated);
-    const char* readout_label = (esn.GetReadoutType() == ReadoutType::Ridge) ? "Ridge" : "Linear";
-    std::cout << "Config: DIM=" << DIM << "  N=" << N << "  Outputs=" << esn.NumOutputVerts()
-              << " (" << static_cast<int>(esn.OutputFraction() * 100) << "%)"
-              << "  Features=" << num_features
-              << " (" << (use_translation ? "translation" : "raw") << ")"
-              << "  Readout=" << readout_label
-              << "  Horizon=" << horizon << "\n\n";
-
-    esn.Warmup(signal.data(), warmup);
-    esn.Run(signal.data() + warmup, collect);
-
-    // --- Step 3: Build targets and train ---
+    // --- Step 2: Build targets ---
     std::vector<float> targets(collect);
     for (size_t t = 0; t < collect; ++t)
         targets[t] = signal[warmup + t + horizon];
@@ -81,44 +66,99 @@ int main(int argc, char* argv[])
     size_t train_size = static_cast<size_t>(collect * train_fraction);
     size_t test_size = collect - train_size;
 
-    esn.Train(targets.data(), train_size);
+    // --- Common reservoir config ---
+    ReservoirConfig cfg;
+    cfg.seed = seed;
+    cfg.leak_rate = 0.2f;
 
-    std::cout << "--- Pipeline ---\n";
-    std::cout << "  1. Generated " << (warmup + collect) << " samples of sin(0.1t)\n";
-    std::cout << "  2. Drove reservoir for " << warmup << " warmup + "
-              << collect << " recorded steps\n";
-    std::cout << "  3. Extracted " << num_features << " features per step"
-              << (use_translation ? " (x + x^2 + x*x' translation)" : " (raw states)")
-              << "\n";
-    std::cout << "  4. Trained " << readout_label << " readout on " << train_size
-              << " samples, testing on " << test_size << "\n\n";
+    // ===================================================================
+    //  Ridge readout
+    // ===================================================================
+    std::cout << "--- Ridge readout ---\n\n";
 
-    // --- Step 4: Evaluate on the test set ---
-    double r2 = esn.R2(targets.data(), train_size, test_size);
-    double nrmse = esn.NRMSE(targets.data(), train_size, test_size);
+    ReservoirConfig ridge_cfg = cfg;
+    ridge_cfg.output_fraction = 0.1f;
+    ESN<DIM> esn_ridge(ridge_cfg, ReadoutType::Ridge, feature_mode);
 
-    std::cout << "--- How well does it predict? ---\n\n";
-    std::cout << "  R2:    " << std::fixed << std::setprecision(7) << r2;
-    if (r2 > 0.9999)
-        std::cout << "  (effectively perfect)";
-    else if (r2 > 0.99)
-        std::cout << "  (excellent)";
+    bool use_translation = (feature_mode == FeatureMode::Translated);
+    std::cout << "  Config: N=" << N
+              << "  Outputs=" << esn_ridge.NumOutputVerts()
+              << " (" << static_cast<int>(esn_ridge.OutputFraction() * 100) << "%)"
+              << "  Features=" << esn_ridge.NumFeatures()
+              << " (" << (use_translation ? "translation" : "raw") << ")\n";
+
+    esn_ridge.Warmup(signal.data(), warmup);
+    esn_ridge.Run(signal.data() + warmup, collect);
+    esn_ridge.Train(targets.data(), train_size);
+
+    double r2_ridge = esn_ridge.R2(targets.data(), train_size, test_size);
+    double nrmse_ridge = esn_ridge.NRMSE(targets.data(), train_size, test_size);
+
+    std::cout << "  R2:    " << std::fixed << std::setprecision(6) << r2_ridge;
+    if (r2_ridge > 0.9999) std::cout << "  (effectively perfect)";
+    else if (r2_ridge > 0.99) std::cout << "  (excellent)";
     std::cout << "\n";
-    std::cout << "  NRMSE: " << std::setprecision(7) << nrmse;
-    if (nrmse < 0.001)
-        std::cout << "  (sub-0.1% error)";
-    else if (nrmse < 0.01)
-        std::cout << "  (under 1% error)";
+    std::cout << "  NRMSE: " << std::setprecision(6) << nrmse_ridge;
+    if (nrmse_ridge < 0.001) std::cout << "  (sub-0.1% error)";
+    else if (nrmse_ridge < 0.01) std::cout << "  (under 1% error)";
     std::cout << "\n\n";
 
-    // --- Show a few predictions vs actual ---
-    std::cout << "Sample predictions (test set, never seen during training):\n\n";
+    // ===================================================================
+    //  HCNN readout
+    // ===================================================================
+    std::cout << "--- HCNN readout ---\n\n";
+
+    ReservoirConfig hcnn_cfg_r = cfg;
+    hcnn_cfg_r.output_fraction = 1.0f;  // CNN uses all vertices
+    ESN<DIM> esn_hcnn(hcnn_cfg_r, ReadoutType::HCNN);
+
+    CNNReadoutConfig cnn_cfg;
+    cnn_cfg.conv_channels = 16;
+    cnn_cfg.epochs = 100;
+    cnn_cfg.batch_size = 32;
+    cnn_cfg.lr_max = 0.005f;
+    cnn_cfg.lr_min_frac = 0.1f;
+    cnn_cfg.seed = 42;
+
+    std::cout << "  Config: N=" << N << "  raw state (all vertices)\n";
+    std::cout << "  Training: " << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size
+              << ", lr=" << cnn_cfg.lr_max
+              << " (cosine, floor=" << (cnn_cfg.lr_max * cnn_cfg.lr_min_frac) << ")\n";
+
+    esn_hcnn.Warmup(signal.data(), warmup);
+    esn_hcnn.Run(signal.data() + warmup, collect);
+
+    std::cout << "  Training..." << std::flush;
+    auto t0 = std::chrono::steady_clock::now();
+    esn_hcnn.Train(targets.data(), train_size, cnn_cfg);
+    auto t1 = std::chrono::steady_clock::now();
+    double secs = std::chrono::duration<double>(t1 - t0).count();
+    std::cout << " done (" << std::fixed << std::setprecision(1) << secs << "s)\n";
+
+    double r2_hcnn = esn_hcnn.R2(targets.data(), train_size, test_size);
+    double nrmse_hcnn = esn_hcnn.NRMSE(targets.data(), train_size, test_size);
+
+    std::cout << "  R2:    " << std::fixed << std::setprecision(6) << r2_hcnn;
+    if (r2_hcnn > 0.9999) std::cout << "  (effectively perfect)";
+    else if (r2_hcnn > 0.99) std::cout << "  (excellent)";
+    else if (r2_hcnn > 0.9) std::cout << "  (good)";
+    std::cout << "\n";
+    std::cout << "  NRMSE: " << std::setprecision(6) << nrmse_hcnn;
+    if (nrmse_hcnn < 0.001) std::cout << "  (sub-0.1% error)";
+    else if (nrmse_hcnn < 0.01) std::cout << "  (under 1% error)";
+    else if (nrmse_hcnn < 0.1) std::cout << "  (under 10% error)";
+    std::cout << "\n\n";
+
+    // ===================================================================
+    //  Sample predictions (HCNN)
+    // ===================================================================
+    std::cout << "Sample predictions (HCNN, test set):\n\n";
     std::cout << "  Step  |   Actual   |  Predicted  |    Error\n";
     std::cout << "  ------+------------+-------------+-----------\n";
     for (size_t i = 0; i < 10; ++i)
     {
         float actual = targets[train_size + i];
-        float predicted = esn.PredictRaw(train_size + i);
+        float predicted = esn_hcnn.PredictRaw(train_size + i);
         float error = actual - predicted;
         std::cout << "  " << std::setw(5) << (train_size + i)
                   << " | " << std::showpos << std::setprecision(5) << std::setw(10) << actual
@@ -127,10 +167,19 @@ int main(int argc, char* argv[])
                   << std::noshowpos << "\n";
     }
 
-    std::cout << "\nThe readout learned sin(t+1) from " << num_features
-              << " reservoir state features.\n";
-    std::cout << "Errors are in the 4th decimal place -- the reservoir's nonlinear\n";
-    std::cout << "dynamics encode enough of the input history for near-exact prediction.\n";
+    // ===================================================================
+    //  Comparison
+    // ===================================================================
+    std::cout << "\n--- Comparison ---\n\n";
+    std::cout << "  Readout |  R2         |  NRMSE\n";
+    std::cout << "  --------+-------------+-----------\n";
+    std::cout << "  Ridge   | " << std::setprecision(6) << std::setw(11) << r2_ridge
+              << " | " << std::setw(10) << nrmse_ridge << "\n";
+    std::cout << "  HCNN    | " << std::setw(11) << r2_hcnn
+              << " | " << std::setw(10) << nrmse_hcnn << "\n";
+
+    std::cout << "\nBoth readouts learned sin(t+1) from the same reservoir dynamics.\n";
+    std::cout << "Ridge uses hand-crafted features; HCNN discovers features via convolution.\n";
 
     return 0;
 }
