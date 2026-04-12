@@ -311,12 +311,13 @@ int main(int argc, char* argv[])
     CNNReadoutConfig cnn_cfg;
     cnn_cfg.num_outputs = NUM_CLASSES;
     cnn_cfg.task = HCNNTask::Classification;
-    cnn_cfg.epochs = 200;
+    cnn_cfg.epochs = 25;
     cnn_cfg.batch_size = 128;
     cnn_cfg.lr_max = 0.003f;
 
     std::cout << "HCNN training: " << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size
-              << ", lr=" << cnn_cfg.lr_max << "\n";
+              << ", lr_max=" << std::setprecision(4) << cnn_cfg.lr_max
+              << " (cosine floor " << cnn_cfg.lr_max * cnn_cfg.lr_min_frac << ")\n";
     std::cout << "Training..." << std::flush;
     auto t0 = std::chrono::steady_clock::now();
     esn_hcnn.Train(float_labels.data(), train_size, cnn_cfg);

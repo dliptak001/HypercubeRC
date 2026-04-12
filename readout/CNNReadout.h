@@ -21,6 +21,7 @@ struct CNNReadoutConfig {
     float lr_min_frac = 0.1f;     ///< lr_min = lr_max * lr_min_frac.
     float weight_decay = 0.0f;    ///< L2 weight decay.
     unsigned seed     = 42;       ///< Weight initialization seed.
+    bool verbose      = false;    ///< Print per-epoch training progress to stdout.
 };
 
 /// @brief HypercubeCNN-based readout for reservoir computing.

@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdio>
 #include <numbers>
 #include <numeric>
 
@@ -132,6 +133,11 @@ void CNNReadout::Train(const float* states, const float* targets,
 
         target_mean_.clear();  // no centering for classification
 
+        // Verbose: preallocate buffer for training-set forward pass.
+        std::vector<float> verbose_logits;
+        if (config.verbose)
+            verbose_logits.resize(num_samples * num_outputs_);
+
         for (int e = 0; e < config.epochs; ++e) {
             float progress = static_cast<float>(e) / static_cast<float>(config.epochs);
             float lr = lr_min + 0.5f * (config.lr_max - lr_min) *
@@ -144,6 +150,26 @@ void CNNReadout::Train(const float* states, const float* targets,
                 lr, /*momentum=*/0.0f, config.weight_decay,
                 /*class_weights=*/nullptr,
                 /*shuffle_seed=*/static_cast<unsigned>(e + 1));
+
+            if (config.verbose) {
+                // Compute training accuracy after this epoch.
+                net_->ForwardBatch(std_states.data(), static_cast<int>(n),
+                                   static_cast<int>(num_samples),
+                                   verbose_logits.data());
+                size_t correct = 0;
+                for (size_t s = 0; s < num_samples; ++s) {
+                    const float* row = verbose_logits.data() + s * num_outputs_;
+                    size_t pred = 0;
+                    float best = row[0];
+                    for (size_t k = 1; k < num_outputs_; ++k)
+                        if (row[k] > best) { best = row[k]; pred = k; }
+                    if (static_cast<int>(pred) == int_targets[s]) ++correct;
+                }
+                double acc = 100.0 * correct / num_samples;
+                std::printf("  epoch %3d/%d  lr=%.5f  train_acc=%.2f%%\n",
+                            e + 1, config.epochs, lr, acc);
+                std::fflush(stdout);
+            }
         }
     } else {
         // Regression: per-output target centering.
