@@ -55,6 +55,44 @@ void CNNReadout::standardize(const float* in, float* out, size_t n) const
 }
 
 // ---------------------------------------------------------------------------
+//  Architecture
+// ---------------------------------------------------------------------------
+
+void CNNReadout::build_architecture()
+{
+    assert(dim_ >= 5);
+    const size_t n = 1ULL << dim_;
+    const int d = static_cast<int>(dim_);
+
+    // Auto-size layers: min(DIM - 3, 4), at least 1.
+    int layers = (config_.num_layers > 0)
+                     ? config_.num_layers
+                     : std::min(d - 3, 4);
+    layers = std::max(layers, 1);
+    assert(layers <= d - 3);
+
+    auto task_type = (config_.task == HCNNTask::Classification)
+                         ? hcnn::TaskType::Classification
+                         : hcnn::TaskType::Regression;
+    net_ = std::make_unique<hcnn::HCNN>(
+        d, config_.num_outputs, /*input_channels=*/1,
+        hcnn::ReadoutType::GAP, task_type);
+
+    int ch = config_.conv_channels;
+    for (int i = 0; i < layers; ++i) {
+        net_->AddConv(ch, hcnn::Activation::TANH, /*use_bias=*/true);
+        net_->AddPool(hcnn::PoolType::MAX);
+        ch *= 2;
+    }
+
+    net_->RandomizeWeights(0.0f, config_.seed);
+
+    scratch_state_.resize(n);
+    scratch_embedded_.resize(n);
+    scratch_pred_.resize(num_outputs_);
+}
+
+// ---------------------------------------------------------------------------
 //  Training
 // ---------------------------------------------------------------------------
 
@@ -78,14 +116,7 @@ void CNNReadout::Train(const float* states, const float* targets,
         standardize(states + s * n, std_states.data() + s * n, n);
 
     // --- Build HCNN ---
-    auto task_type = is_classification ? hcnn::TaskType::Classification
-                                       : hcnn::TaskType::Regression;
-    net_ = std::make_unique<hcnn::HCNN>(
-        static_cast<int>(dim), config.num_outputs, /*input_channels=*/1,
-        hcnn::ReadoutType::GAP, task_type);
-    net_->AddConv(config.conv_channels, hcnn::Activation::TANH, /*use_bias=*/true);
-    net_->AddPool(hcnn::PoolType::MAX);
-    net_->RandomizeWeights(0.0f, config.seed);
+    build_architecture();
     net_->SetOptimizer(hcnn::OptimizerType::ADAM);
 
     // --- Cosine LR annealing with floor ---
@@ -271,20 +302,7 @@ void CNNReadout::rebuild_from_blob()
 
     // Reconstruct the network from stored config if needed.
     if (!net_) {
-        const size_t n = 1ULL << dim_;
-        auto task_type = (config_.task == HCNNTask::Classification)
-                             ? hcnn::TaskType::Classification
-                             : hcnn::TaskType::Regression;
-        net_ = std::make_unique<hcnn::HCNN>(
-            static_cast<int>(dim_), config_.num_outputs, /*input_channels=*/1,
-            hcnn::ReadoutType::GAP, task_type);
-        net_->AddConv(config_.conv_channels, hcnn::Activation::TANH, /*use_bias=*/true);
-        net_->AddPool(hcnn::PoolType::MAX);
-        net_->RandomizeWeights(0.0f, config_.seed);
-
-        scratch_state_.resize(n);
-        scratch_embedded_.resize(n);
-        scratch_pred_.resize(num_outputs_);
+        build_architecture();
     }
 
     std::vector<float> fw(weights_blob_.begin(), weights_blob_.end());

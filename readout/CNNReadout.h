@@ -13,7 +13,8 @@ enum class HCNNTask { Regression, Classification };
 struct CNNReadoutConfig {
     int num_outputs   = 1;        ///< Number of output neurons (classes or regression targets).
     HCNNTask task     = HCNNTask::Regression; ///< Task type.
-    int conv_channels = 16;       ///< Number of convolution channels.
+    int num_layers    = 0;        ///< Conv+Pool pairs. 0 = auto: min(DIM-3, 4). Channels double per layer.
+    int conv_channels = 16;       ///< Base convolution channels (doubles per layer: 16, 32, 64, 128).
     int epochs        = 200;      ///< Training epochs.
     int batch_size    = 32;       ///< Mini-batch size.
     float lr_max      = 0.005f;   ///< Peak learning rate (cosine annealing).
@@ -135,6 +136,7 @@ private:
 
     void standardize(const float* in, float* out, size_t n) const;
     void compute_standardization(const float* states, size_t num_samples, size_t n);
+    void build_architecture();
     void flatten_weights();
     void rebuild_from_blob();
 };
