@@ -59,7 +59,7 @@ Input signal ──> Reservoir ────┤      15 vertices          (traine
    features on the hypercube.
 
 6. **Train readouts** — Fit both readouts on the same 70% train split.
-   Ridge is a closed-form solve; HCNN runs 200 epochs of Adam with a
+   Ridge is a closed-form solve; HCNN runs 100 epochs of Adam with a
    cosine learning-rate schedule.
 
 7. **Evaluate** — Measure R² and NRMSE on the held-out 30% test set for
@@ -74,8 +74,8 @@ for both readouts, so both hit near-perfect scores:
 
 - **Ridge** (10% output, 15 raw features): R² effectively 1.0, NRMSE
   in the sub-0.1% range.
-- **HCNN** (all 128 vertices, 3 Conv+Pool pairs, 200 epochs): R²
-  effectively 1.0, NRMSE comparable to Ridge.
+- **HCNN** (all 128 vertices, 3 Conv+Pool pairs, 100 epochs): R²
+  effectively 1.0, NRMSE within ~2× of Ridge.
 
 On a task this easy the two readouts are indistinguishable — both
 find the sine's phase structure from the reservoir state with
@@ -129,11 +129,13 @@ detection sensitivity and classification accuracy.
   `ReadoutType::Linear`. Ridge gives slightly better results on this
   easy task; the difference is more dramatic on harder benchmarks.
 
-- **HCNN epochs / learning rate.** Lower `cnn_cfg.epochs` to 50 and
-  the training time drops proportionally; on sine the accuracy barely
-  moves because the task saturates. Raising `cnn_cfg.lr_max` above
-  ~0.003 is risky — weights can diverge into denormals and CPU falls
-  off fast math paths. Stick to `lr_max <= 0.005` in this example.
+- **HCNN epochs / learning rate.** The default is 100 epochs — a
+  sweet spot for this task. Training longer (e.g. 200) actually
+  *degrades* test NRMSE on sine: the reservoir state is low-rank
+  and the CNN starts fitting numerical noise. Dropping to 50 gets
+  most of the accuracy at half the time. Raising `cnn_cfg.lr_max`
+  above ~0.005 is risky — weights can diverge into denormals and
+  the CPU falls off fast-math paths.
 
 - **HCNN layer count.** Leave `cnn_cfg.num_layers = 0` for the
   DIM-auto default (`min(DIM-3, 4)` pairs). Override with a smaller
