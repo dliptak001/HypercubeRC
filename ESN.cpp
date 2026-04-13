@@ -11,12 +11,20 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
       readout_type_(readout_type),
       feature_mode_(feature_mode)
 {
-    // HCNN readout operates on raw reservoir states -- force Raw mode.
-    if (readout_type_ == ReadoutType::HCNN)
-        feature_mode_ = FeatureMode::Raw;
-
-    num_inputs_ = cfg.num_inputs;
+    num_inputs_      = cfg.num_inputs;
     output_fraction_ = cfg.output_fraction;
+
+    // HCNN readout operates on the full raw hypercube state.  It cannot
+    // use a stride-selected subset (would break spatial assumptions) and
+    // cannot consume translation features.  Force Raw mode and
+    // output_fraction=1.0 so stride, num_output_verts, OutputFraction(),
+    // and serialization all match what CNNReadout actually sees.
+    if (readout_type_ == ReadoutType::HCNN)
+    {
+        feature_mode_    = FeatureMode::Raw;
+        output_fraction_ = 1.0f;
+    }
+
     assert(output_fraction_ > 0.0f && output_fraction_ <= 1.0f);
     size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * output_fraction_)));
     output_stride_ = std::max<size_t>(1, N / M);
