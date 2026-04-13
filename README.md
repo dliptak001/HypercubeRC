@@ -6,7 +6,7 @@
 A reservoir computer whose neurons live on a Boolean hypercube — a
 DIM-dimensional graph where each vertex is addressed by a DIM-bit binary
 index, with all connectivity defined by XOR operations on vertex indices.
-No adjacency list is stored. N = 2^DIM neurons, DIM 5-12.
+No adjacency list is stored. N = 2^DIM neurons, DIM 5-16.
 
 Licensed under the [Apache License 2.0](LICENSE).
 
@@ -40,7 +40,7 @@ families — cumulative-bit Hamming shells for long-range mixing and single-bit
 nearest-neighbor flips for local coupling. All neighbor addresses are computed by
 XOR on vertex indices; no adjacency list is stored.
 
-The system targets DIM 5-12 (32 to 4096 neurons), the practical range for
+The system targets DIM 5-16 (32 to 65536 neurons), the practical range for
 reservoir computing applications.
 
 ## Scale-Invariant Hyperparameters
@@ -171,14 +171,14 @@ hierarchies. They become relevant at scale or in constrained environments.
 
 ## Architecture Summary
 
-| Property | Detail |
-|----------|--------|
-| Neurons | N = 2^DIM, DIM 5-12 (32 to 4096) |
-| Connections per neuron | 2*DIM - 2 (DIM-2 shells + DIM nearest-neighbor) |
-| Addressing | XOR on vertex indices — O(1) per lookup, zero storage |
-| Step cost | O(N * DIM) per timestep — sparse, not O(N²) |
-| Hyperparameters | Scale-invariant: SR=0.90, input_scaling=0.02, all DIM |
-| Readout cost control | `output_fraction` selects M of N vertices for readout |
+| Property | Detail                                                          |
+|----------|-----------------------------------------------------------------|
+| Neurons | N = 2^DIM, DIM 5-16 (32 to 65536)                               |
+| Connections per neuron | 2*DIM - 2 (DIM-2 shells + DIM nearest-neighbor)                 |
+| Addressing | XOR on vertex indices — O(1) per lookup, zero storage           |
+| Step cost | O(N * DIM) per timestep — sparse, not O(N²)                     |
+| Hyperparameters | Scale-invariant: SR=0.90, input_scaling=0.02, all DIM           |
+| Readout cost control | `output_fraction` selects M of N vertices for readout           |
 | Multi-input | Stride-interleaved: channel k drives vertices k, k+K, k+2K, ... |
 
 **Output selection.** The `output_fraction` parameter controls how many vertices

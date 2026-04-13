@@ -96,15 +96,15 @@ print(f"R² = {r2:.6f}")
 
 ### The `dim` parameter
 
-`dim` controls the hypercube dimension. The reservoir has N = 2^dim neurons. Supported values: 5-12.
+`dim` controls the hypercube dimension. The reservoir has N = 2^dim neurons. Supported values: 5-16.
 
-| dim | Neurons | Typical use |
-|-----|---------|-------------|
-| 5   | 32      | Fast prototyping, embedded |
-| 6   | 64      | Light benchmarks |
-| 7   | 128     | Standard benchmarks |
-| 8   | 256     | Production, complex tasks |
-| 9-12 | 512-4096 | Research, high-capacity tasks |
+| dim  | Neurons   | Typical use |
+|------|-----------|-------------|
+| 5    | 32        | Fast prototyping, embedded |
+| 6    | 64        | Light benchmarks |
+| 7    | 128       | Standard benchmarks |
+| 8    | 256       | Production, complex tasks |
+| 9-16 | 512-65536 | Research, high-capacity tasks |
 
 For dim 9+, reduce `output_fraction` to control Ridge readout cost (e.g., 0.25 for dim 10).
 
