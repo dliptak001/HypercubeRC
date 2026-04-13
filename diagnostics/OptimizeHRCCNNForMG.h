@@ -177,20 +177,27 @@ public:
     }
 
     /// Run a batch of configs, printing a comparison table followed by the
-    /// cached Ridge baselines (raw and translated) for context.
+    /// cached Ridge baselines (raw and translated) for context.  Each
+    /// trial prints a "starting" marker before running and flushes its
+    /// result row on completion, so long sweeps show progress live.
     std::vector<Result>
     RunSweep(const std::vector<std::pair<std::string, CNNReadoutConfig>>& trials)
     {
         PrintTableHeader();
         std::vector<Result> results;
         results.reserve(trials.size());
-        for (auto const& [label, cfg] : trials)
+        for (size_t i = 0; i < trials.size(); ++i)
+        {
+            const auto& [label, cfg] = trials[i];
+            std::cout << "  [" << FormatNow() << "] starting " << (i + 1)
+                      << "/" << trials.size() << ": " << label << std::endl;
             results.push_back(RunOne(cfg, label));
+        }
         std::cout << "  " << std::string(79, '-') << "\n";
         std::cout << "  Ridge raw         NRMSE: "
                   << std::fixed << std::setprecision(6) << RidgeBaseline() << "\n";
         std::cout << "  Ridge translated  NRMSE: "
-                  << std::fixed << std::setprecision(6) << TranslationBaseline() << "\n";
+                  << std::fixed << std::setprecision(6) << TranslationBaseline() << std::endl;
         return results;
     }
 
@@ -301,6 +308,6 @@ private:
                   << std::setw(3) << c.batch_size << " | "
                   << std::fixed << std::setprecision(5) << std::setw(7) << c.lr_max << " | "
                   << std::setprecision(6) << std::setw(8) << r.nrmse << " | "
-                  << std::setprecision(2) << std::setw(7) << r.elapsed_s << "\n";
+                  << std::setprecision(2) << std::setw(7) << r.elapsed_s << std::endl;
     }
 };
