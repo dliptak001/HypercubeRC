@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cmath>
 #include "../ESN.h"
+#include "../readout/HCNNPresets.h"
 #include "SignalGenerators.h"
 
 /// @brief Diagnostic: NARMA-10 nonlinear benchmark.
@@ -41,14 +42,12 @@ public:
     {
     }
 
-    /// @brief Benchmark-tuned HCNN defaults: larger batch, moderate epochs.
+    /// @brief Benchmark-tuned HCNN defaults for this DIM.
+    /// Delegates to the central preset table in `readout/HCNNPresets.h`;
+    /// untuned DIMs fall through to CNNReadoutConfig defaults.
     static CNNReadoutConfig BenchmarkCNNConfig()
     {
-        CNNReadoutConfig cfg;
-        cfg.epochs = 300;
-        cfg.batch_size = 128;
-        cfg.lr_max = 0.003f;
-        return cfg;
+        return hcnn_presets::NARMA10<DIM>().cnn;
     }
 
     /// @brief Run the benchmark and return results without printing.
@@ -145,13 +144,9 @@ private:
     bool run_hcnn_;
     CNNReadoutConfig hcnn_config_;
 
-    static constexpr uint64_t DefaultSeed()
+    static uint64_t DefaultSeed()
     {
-        if constexpr (DIM == 5) return 2121059498467618174ULL;
-        else if constexpr (DIM == 6) return 10977843040216038077ULL;
-        else if constexpr (DIM == 7) return 6437149480297576047ULL;
-        else if constexpr (DIM == 8) return 13602423379507409791ULL;
-        else return 42;
+        return hcnn_presets::NARMA10<DIM>().reservoir.seed;
     }
 
     static std::vector<uint64_t> Seeds()
