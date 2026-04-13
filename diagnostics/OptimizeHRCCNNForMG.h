@@ -178,21 +178,16 @@ public:
 
     /// Run a batch of configs, printing a comparison table followed by the
     /// cached Ridge baselines (raw and translated) for context.  Each
-    /// trial prints a "starting" marker before running and flushes its
-    /// result row on completion, so long sweeps show progress live.
+    /// trial flushes its result row on completion, so long sweeps show
+    /// progress live instead of buffering until the end of the batch.
     std::vector<Result>
     RunSweep(const std::vector<std::pair<std::string, CNNReadoutConfig>>& trials)
     {
         PrintTableHeader();
         std::vector<Result> results;
         results.reserve(trials.size());
-        for (size_t i = 0; i < trials.size(); ++i)
-        {
-            const auto& [label, cfg] = trials[i];
-            std::cout << "  [" << FormatNow() << "] starting " << (i + 1)
-                      << "/" << trials.size() << ": " << label << std::endl;
+        for (auto const& [label, cfg] : trials)
             results.push_back(RunOne(cfg, label));
-        }
         std::cout << "  " << std::string(79, '-') << "\n";
         std::cout << "  Ridge raw         NRMSE: "
                   << std::fixed << std::setprecision(6) << RidgeBaseline() << "\n";
