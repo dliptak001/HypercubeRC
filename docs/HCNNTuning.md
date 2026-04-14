@@ -271,11 +271,62 @@ The shape makes sense once framed in terms of **total gradient updates**, not ba
 
 ### DIM 7
 
-_(pending first run)_
+DIM 7 opened the tuning cycle from the DIM 6 Gold template (nl=1/ch=16/FLAT/ep=2000/lr=0.0015) with bs scaled 32→64 to hold the 50k gradient-update invariant at DIM 7's ~1613 training samples. Survey seed = 10741866950647888161ULL. Ridge baselines: raw 0.00431, translated 0.00316.
+
+**Run 27 (first-probe 3-trial chunk, 5 seeds):** re-tested the DIM 5/6 architectural invariants at 128 neurons with a direct-transfer trial plus depth and width probes. All three trials shared nl/ch/FLAT/ep=2000/bs=64/lr=0.0015.
+
+| Trial            | nl | ch | NRMSE    | vs Ridge trans | time   |
+|------------------|---:|---:|---------:|---------------:|-------:|
+| nl1-ch16-direct  |  1 | 16 | 0.002435 |          −23% |  22.6s |
+| nl2-ch16-depth   |  2 | 16 | **0.001663** |      **−47%** | 127.9s |
+| nl1-ch24-width   |  1 | 24 | 0.002181 |          −31% |  32.7s |
+
+Run 27 broke two DIM 5/6 invariants at once. (a) **nl=1 is no longer optimal** — nl=2 beats nl=1 at matched ch=16 by 32%. (b) **ch=16 is no longer the "absolute constant"** — at nl=1, ch=24 beats ch=16 by 10.4% (opposite sign from DIM 6, where ch=24 was +11% worse). Both breaks point the same direction: DIM 7's 128 neurons have the capacity budget to absorb more parameters than DIM 5/6 did.
+
+**Run 28 (2-trial follow-up chunk, 5 seeds):** combined-wins probe plus channel-bowl saturation check at nl=1, ordered fastest-first.
+
+| Trial              | nl | ch | NRMSE    | vs Ridge trans | time   |
+|--------------------|---:|---:|---------:|---------------:|-------:|
+| nl1-ch32-width     |  1 | 32 | 0.002142 |          −32% |  41.6s |
+| nl2-ch24-combine   |  2 | 24 | **0.001398** |      **−56%** | 267.1s |
+
+nl1-ch32 showed the nl=1 channel bowl flattening hard: ch=16→24 was −10.4%, but ch=24→32 was only −1.8%. Diminishing returns confirmed at nl=1. **nl2-ch24 is the new DIM 7 leader** — combining the two wins gave a clean −16% over nl2-ch16 at nl=2 ch-scaling that was actually steeper than nl=1's (−16% vs −10% for ch=16→24). First hint that nl=2 is *more* channel-sensitive than nl=1, not less. Runtime scaling at nl=2: 267/128 = 2.09× for 1.5× channels, matching the ch² prediction 1.5² = 2.25.
+
+**Run 29 (channel-sensitivity probe at nl=2, 5 seeds):** tested whether nl=2 is channel-insensitive (which would make ch=8 viable as a compute-efficient default for DIM 8+, per the Pareto reframe set in this session).
+
+| Trial          | nl | ch | NRMSE    | vs nl2-ch16 | vs nl1-ch32 | time  |
+|----------------|---:|---:|---------:|------------:|------------:|------:|
+| nl2-ch8-lean   |  2 |  8 | 0.002287 |       +37.5% |       +6.8% | 48.1s |
+
+**Hypothesis rejected.** nl=2 is *more* channel-sensitive than nl=1 (−17% penalty for nl=1 ch=16→8 at DIM 5/6 vs −37.5% at nl=2). Moreover nl2-ch8 is **Pareto-dominated by nl1-ch32** (nl1-ch32 is both better on NRMSE and slightly faster). Intuition: at nl=2 the layer-2 ch→ch conv has to distill `ch` input channels into `ch` output channels over a larger receptive field; a narrower channel dim bottlenecks the representation harder than at nl=1. Run 29 killed the "ch=8 saves compute at DIM 8+" story for nl=2 — ch=16 is the lean floor; below that, drop depth instead.
+
+**DIM 7 Pareto frontier after runs 27-29 (5-seed scouting, nl2-ch8 removed as dominated):**
+
+| Config     | NRMSE    | Time   | marginal Δ NRMSE | marginal Δ time |
+|------------|---------:|-------:|-----------------:|----------------:|
+| nl1-ch16   | 0.002435 |  22.6s |                — |               — |
+| nl1-ch24   | 0.002181 |  32.7s |           −10.4% |          +10.1s |
+| nl1-ch32   | 0.002142 |  41.6s |            −1.8% |           +8.9s |
+| nl2-ch16   | 0.001663 | 127.9s |           −22.3% |          +86.3s |
+| **nl2-ch24** | **0.001398** | **267.1s** |       **−15.9%** |     **+139.2s** |
+
+Two clear knees: nl1-ch24 for the cheap end (first big NRMSE drop for ~10s marginal) and nl2-ch24 for the quality end. Pareto-frontier slot for DIM 7 still TBD — picking between these two is deferred to a future session after the Gold is frozen.
+
+**Run 30 (10-seed confirmation at nl2-ch24, 2026-04-14):** 0.001494 (5→10 seed drift +6.9% vs run 28's 0.001398). Higher drift than DIM 6's 1.4-3.0% but still decisive — nl2-ch24 beats every other config on the DIM 7 leaderboard by large margins, and the 10-seed NRMSE still halves Ridge translated's error. **−52.8% vs Ridge translated, −65.3% vs Ridge raw.**
+
+Runtime curiosity: 10-seed run 30 took 261.6s vs the 5-seed run 28's 267.1s — essentially identical, not 2×. Strongly suggests the HypercubeCNN thread pool is parallelizing CNN-seed training and was under-utilized at 5 seeds on this machine's core count. Filed as a potential optimization signal in `project_hcnn_optimization_tasks.md` memory.
+
+**DIM 7 MG GOLD STANDARD at nl=2, ch=24, head=FLAT, ep=2000, bs=64, lr=0.0015 → NRMSE 0.001494.** `HCNNPresets.h` DIM 7 block updated.
+
+**Key lessons from DIM 7 for DIM 8+:**
+- The small-N architectural sweet spot (nl=1, ch=16) is a symptom of under-capacity, not a universal law. Higher DIM gives the readout more data to soak up, so both depth and width can grow.
+- **Survivor-count rule hypothesis:** optimal depth maximizes nl subject to ≥32 FLATTEN positions. DIM 5 nl=1 → 16 surv, DIM 6 nl=1 → 32, DIM 7 nl=2 → 32. Predicts nl=3 wins at DIM 8. Competing heuristic (sample/parameter ratio) pulls the opposite direction at DIM 8 — unresolved until run 31+ lands.
+- **Channel sensitivity steepens with depth.** nl=2 is ~2× more channel-sensitive than nl=1; treat ch=16 as a floor at nl=2, not as the sweet spot it was at nl=1.
+- **Compute-budget is now first-class at DIM 8+.** See `feedback_pareto_at_high_dim.md` — DIM 8 has a hard runtime wall around nl=2/ch=32 territory and may force Gold to collapse into Pareto.
 
 ### DIM 8
 
-_(pending first run)_
+_(pending first run — run 31 driver built and ready as of 2026-04-14: nl=2/ch=16/FLAT/ep=2000/bs=128/lr=0.0015, 5 seeds)_
 
 ### DIM 9+
 

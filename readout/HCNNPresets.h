@@ -67,6 +67,14 @@ struct HCNNPreset
 ///     **-49% vs Ridge raw (0.00616)**,
 ///     **-28% vs Ridge translated (0.00438)**.
 ///
+/// DIM 7 **GOLD STANDARD** (frozen 2026-04-14, runs 27-30):
+///   nl=2, ch=24, head=FLAT, ep=2000, bs=64, **lr_max=0.0015**
+///   → averaged NRMSE 0.001494 (10 CNN inits on the survey reservoir),
+///     **-65.3% vs Ridge raw (0.00431)**,
+///     **-52.8% vs Ridge translated (0.00316)**.
+///   First DIM where the "nl=1 + ch=16" small-N sweet spot breaks;
+///   deeper and wider both win.  See DIM 7 block comment for details.
+///
 ///   Training dynamics at this backbone favor a lower learning rate than
 ///   the old nl=3/ch=32/GAP preset used: runs 19-20 traced a clean bowl
 ///   from lr∈{0.0015, 0.002, 0.0025, 0.003, 0.0035} with the minimum
@@ -116,7 +124,43 @@ HCNNPreset MackeyGlass()
         p.cnn.batch_size    = 32;
         p.cnn.lr_max        = 0.0015f;
     }
-    // DIM 7+: untuned.  Falls through to CNNReadoutConfig defaults.
+    else if constexpr (DIM == 7)
+    {
+        // DIM 7 GOLD STANDARD (frozen 2026-04-14, runs 27-30):
+        //   nl=2, ch=24, FLAT, ep=2000, bs=64, lr=0.0015
+        //   → NRMSE 0.001494 (10 CNN seeds on the survey reservoir),
+        //     **-52.8% vs Ridge translated (0.00316)**,
+        //     **-65.3% vs Ridge raw (0.00431)**.  Runtime ~262s.
+        //
+        // Two DIM 5/6 architectural invariants broke at DIM 7:
+        //   1. nl=1 is no longer optimal — nl=2 beats nl=1 by 32%.
+        //   2. ch=16 is no longer the "absolute constant" — ch=24
+        //      beats ch=16 by 16% at nl=2.
+        // Both breaks point the same direction: DIM 7's 128-neuron
+        // reservoir has the capacity budget to absorb more parameters
+        // than DIM 5/6 did, so the small-N sweet spots (flat + lean)
+        // stop being optimal.
+        //
+        // bs=64 holds the ~50k gradient-update invariant (DIM 7 has
+        // ~1613 training samples → ~25 updates/epoch × 2000 epochs
+        // = ~50k total updates, matching DIM 5/6 Gold cadence).
+        //
+        // 5→10 seed drift from scouting to confirmation was +6.9%
+        // (5-seed 0.001398 → 10-seed 0.001494), higher than DIM 6's
+        // 1.4-3.0% drift but still decisively the best config on
+        // the DIM 7 leaderboard by a wide margin.  Pareto-frontier
+        // slot (cheap-knee config) still TBD.
+        //
+        // See `docs/HCNNTuning.md` DIM 7 section for runs 27-30
+        // narrative and the full scouting frontier.
+        p.cnn.num_layers    = 2;
+        p.cnn.conv_channels = 24;
+        p.cnn.readout_type  = HCNNReadoutType::FLATTEN;
+        p.cnn.epochs        = 2000;
+        p.cnn.batch_size    = 64;
+        p.cnn.lr_max        = 0.0015f;
+    }
+    // DIM 8+: untuned.  Falls through to CNNReadoutConfig defaults.
 
     return p;
 }

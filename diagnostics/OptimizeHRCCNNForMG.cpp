@@ -1,22 +1,21 @@
 // Driver for OptimizeHRCCNNForMG — edited per iteration as we tune each DIM.
 //
-// Current target: DIM 6 Mackey-Glass horizon 1, batch_size sweep.
+// Current target: DIM 8 Mackey-Glass horizon 1, first probe (run 31).
 //
-// Locked from prior DIM 6 probes: nl=1/ch=16/FLAT/ep=2000/lr=0.0015.
-// 10-seed variance check landed at 0.003414 — beats Ridge raw by 34%
-// and Ridge translated by 8%.
+// Minimum-viable DIM 8 first probe: pipeline check + directional read
+// on the nl=2 transfer question.
 //
-// bs was inherited uncritically from the DIM 5 Gold Standard, but at
-// DIM 6 there are 2x more training samples (806 vs 403) which doubles
-// the per-epoch gradient update count at the same bs.  So bs=16 at
-// DIM 6 = ~50 updates/epoch vs DIM 5's ~25 updates/epoch — different
-// training cadence, may not be optimal on the new sample budget.
+// Trial: nl2-ch16/FLAT/ep=2000/bs=128/lr=0.0015, 5 CNN seeds.
 //
-// Sweep (single axis, powers of 2):
-//   bs ∈ {8, 16, 32, 64}
+// Calibration:
+//   - bs=128 with 3226 training samples → 25 updates/ep × 2000 ep
+//     = 50k total updates.  Matches the gradient-update invariant used
+//     at DIM 5/6/7 Gold — this is properly calibrated, not under-trained.
+//   - 5 seeds is the standard scouting resolution.  Good for ranking
+//     configs with ≥5-10% deltas; 10-seed refinement only for freezes.
 //
-// num_cnn_seeds=5 for a quick scouting pass; if the curve points
-// somewhere other than bs=16, refine at 10 seeds next.
+// Expected runtime: ~8.5 min (DIM 7 nl=2/ch=16 @ ep=2000/5seeds was
+// 128s; scale ~4× for DIM 8 → ~512s).
 
 #include <iostream>
 #include <string>
@@ -28,29 +27,24 @@
 
 int main()
 {
-    constexpr size_t DIM = 6;
+    constexpr size_t DIM = 8;
 
-    OptimizeHRCCNNForMG<DIM> opt(/*num_seeds=*/1, /*num_cnn_seeds=*/10);
+    OptimizeHRCCNNForMG<DIM> opt(/*num_seeds=*/1, /*num_cnn_seeds=*/5);
     opt.PrintHeader();
 
-    // Both Ridge baselines: raw (apples-to-apples with HCNN) and translated
-    // (2.5N hand-crafted features, upper-bound target for HCNN to beat).
     std::cout << "\n  Ridge raw        NRMSE: " << opt.RidgeBaseline()        << "\n";
     std::cout << "  Ridge translated NRMSE: " << opt.TranslationBaseline() << "\n";
 
-    // DIM 6 Gold Standard with ep=1500 instead of the frozen ep=2000.
-    // Single-point check: does dropping 25% of the epoch budget cost
-    // any meaningful NRMSE on the new backbone?
-    CNNReadoutConfig c;
-    c.num_layers    = 1;
-    c.conv_channels = 16;
-    c.readout_type  = HCNNReadoutType::FLATTEN;
-    c.epochs        = 1500;
-    c.batch_size    = 32;
-    c.lr_max        = 0.0015f;
+    CNNReadoutConfig nl2_ch16;
+    nl2_ch16.num_layers    = 2;
+    nl2_ch16.conv_channels = 16;
+    nl2_ch16.readout_type  = HCNNReadoutType::FLATTEN;
+    nl2_ch16.epochs        = 2000;
+    nl2_ch16.batch_size    = 128;
+    nl2_ch16.lr_max        = 0.0015f;
 
     std::vector<std::pair<std::string, CNNReadoutConfig>> trials = {
-        {"ep1500-10seed", c},
+        {"nl2-ch16-first-probe", nl2_ch16},
     };
     opt.RunSweep(trials);
 
