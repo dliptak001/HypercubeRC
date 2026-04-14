@@ -9,10 +9,17 @@ namespace hcnn { class HCNN; }
 /// Task type for the HCNN readout.
 enum class HCNNTask { Regression, Classification };
 
+/// Readout head after the conv/pool stack.
+/// - GAP: global average pool per channel → [channels] → Linear. Translation-invariant across hypercube vertices.
+/// - FLATTEN: every (channel, vertex) activation is a feature → [channels * 2^final_dim] → Linear. Position-sensitive.
+/// Mirrors hcnn::ReadoutType; translated in CNNReadout.cpp so HCNN headers stay out of the RC public API.
+enum class HCNNReadoutType { GAP, FLATTEN };
+
 /// Configuration for the CNN readout's architecture and training.
 struct CNNReadoutConfig {
     int num_outputs   = 1;        ///< Number of output neurons (classes or regression targets).
     HCNNTask task     = HCNNTask::Regression; ///< Task type.
+    HCNNReadoutType readout_type = HCNNReadoutType::GAP; ///< Post-conv readout head (GAP or FLATTEN).
     int num_layers    = 0;        ///< Conv+Pool pairs. 0 = auto: min(DIM-3, 4). Channels double per layer.
     int conv_channels = 16;       ///< Base convolution channels (doubles per layer: 16, 32, 64, 128).
     int epochs        = 200;      ///< Training epochs.
@@ -33,7 +40,8 @@ struct CNNReadoutConfig {
 /// extraction, no translation layer, no stride selection.
 ///
 /// **Data path:** raw reservoir state -> input standardization ->
-///   HypercubeCNN (Conv->Pool stack -> GAP -> Linear) -> de-center -> output.
+///   HypercubeCNN (Conv->Pool stack -> GAP|FLATTEN -> Linear) -> de-center -> output.
+///   Readout head is selectable via CNNReadoutConfig::readout_type.
 ///
 /// **Architecture:** Auto-sized from DIM: min(DIM-3, 4) Conv+Pool pairs,
 ///   channels doubling per layer (16, 32, 64, 128).  Override via

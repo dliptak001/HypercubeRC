@@ -287,8 +287,8 @@ private:
     void PrintTableHeader() const
     {
         std::cout << "\n"
-                  << "  label                 | layers | ch | ep  |  bs | lr_max  |    NRMSE |  time(s)\n"
-                  << "  ----------------------+--------+----+-----+-----+---------+----------+---------\n";
+                  << "  label                 | layers | ch | head |  ep  |  bs | lr_max  |    NRMSE |  time(s)\n"
+                  << "  ----------------------+--------+----+------+------+-----+---------+----------+---------\n";
     }
 
     void PrintRow(const CNNReadoutConfig& c, const Result& r) const
@@ -296,10 +296,13 @@ private:
         std::string label = r.label;
         if (label.size() > 21) label.resize(21);
 
+        const char* head = (c.readout_type == HCNNReadoutType::FLATTEN) ? "FLAT" : "GAP ";
+
         std::cout << "  " << std::left << std::setw(21) << label << " | "
                   << std::right << std::setw(6) << r.num_layers << " | "
                   << std::setw(2) << c.conv_channels << " | "
-                  << std::setw(3) << c.epochs << " | "
+                  << head << " | "
+                  << std::setw(4) << c.epochs << " | "
                   << std::setw(3) << c.batch_size << " | "
                   << std::fixed << std::setprecision(5) << std::setw(7) << c.lr_max << " | "
                   << std::setprecision(6) << std::setw(8) << r.nrmse << " | "

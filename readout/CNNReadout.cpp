@@ -76,9 +76,12 @@ void CNNReadout::build_architecture()
     auto task_type = (config_.task == HCNNTask::Classification)
                          ? hcnn::TaskType::Classification
                          : hcnn::TaskType::Regression;
+    auto readout_type = (config_.readout_type == HCNNReadoutType::FLATTEN)
+                            ? hcnn::ReadoutType::FLATTEN
+                            : hcnn::ReadoutType::GAP;
     net_ = std::make_unique<hcnn::HCNN>(
         d, config_.num_outputs, /*input_channels=*/1,
-        hcnn::ReadoutType::GAP, task_type);
+        readout_type, task_type);
 
     int ch = config_.conv_channels;
     for (int i = 0; i < layers; ++i) {

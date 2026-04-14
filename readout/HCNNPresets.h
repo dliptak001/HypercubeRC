@@ -61,13 +61,24 @@ struct HCNNPreset
 
 /// @brief Tuned HCNN preset for the Mackey-Glass chaotic benchmark.
 ///
-/// DIM 5 (frozen 2026-04-13): nl=3, ch=32, ep=2000, bs=16, lr_max=0.003
-///   → averaged NRMSE 0.00490 (3 CNN inits on the survey reservoir),
-///     -21% vs Ridge raw (0.00616), +12% vs Ridge translated (0.00438).
-///   Note: nl=3 exceeds CNNReadout's auto-rule cap `min(DIM-3,4)`=2.
-///   The auto-rule's assert is off-by-one — real HCNNConv constraint is
-///   `nl ≤ DIM-2`, and depth past the auto-rule is a real improvement
-///   at DIM=5.  See `docs/HCNNTuning.md` for the full tuning history.
+/// DIM 5 **GOLD STANDARD** (frozen 2026-04-13, runs 15-20):
+///   nl=1, ch=16, head=FLAT, ep=2000, bs=16, **lr_max=0.0015**
+///   → averaged NRMSE 0.003169 (10 CNN inits on the survey reservoir),
+///     **-49% vs Ridge raw (0.00616)**,
+///     **-28% vs Ridge translated (0.00438)**.
+///
+///   Training dynamics at this backbone favor a lower learning rate than
+///   the old nl=3/ch=32/GAP preset used: runs 19-20 traced a clean bowl
+///   from lr∈{0.0015, 0.002, 0.0025, 0.003, 0.0035} with the minimum
+///   cleanly at 0.0015.  The coarser decade sweep in run 18 had missed
+///   it by spacing.
+///
+///   The architecture itself (nl=1 FLATTEN) was pinned in runs 15-17:
+///   GAP and FLATTEN have opposite backbone preferences on a hypercube
+///   reservoir — GAP wants deep+wide, FLATTEN wants minimum-depth +
+///   fan-in-sized channels.  For FLATTEN a second conv+pool destroys
+///   per-vertex structure that the readout needs.  See `docs/HCNNTuning.md`
+///   runs 15-20 for the full narrative.
 template <size_t DIM>
 HCNNPreset MackeyGlass()
 {
@@ -82,11 +93,12 @@ HCNNPreset MackeyGlass()
 
     if constexpr (DIM == 5)
     {
-        p.cnn.num_layers    = 3;
-        p.cnn.conv_channels = 32;
+        p.cnn.num_layers    = 1;
+        p.cnn.conv_channels = 16;
+        p.cnn.readout_type  = HCNNReadoutType::FLATTEN;
         p.cnn.epochs        = 2000;
         p.cnn.batch_size    = 16;
-        p.cnn.lr_max        = 0.003f;
+        p.cnn.lr_max        = 0.0015f;
         // lr_min_frac, weight_decay, seed, num_outputs, task: defaults.
     }
     // DIM 6+: untuned.  Falls through to CNNReadoutConfig defaults.
