@@ -101,7 +101,22 @@ HCNNPreset MackeyGlass()
         p.cnn.lr_max        = 0.0015f;
         // lr_min_frac, weight_decay, seed, num_outputs, task: defaults.
     }
-    // DIM 6+: untuned.  Falls through to CNNReadoutConfig defaults.
+    else if constexpr (DIM == 6)
+    {
+        // DIM 6 GOLD STANDARD (frozen 2026-04-13, runs 21-26): same
+        // architecture as DIM 5 (nl=1/ch=16/FLAT/lr=0.0015) with bs
+        // scaled up to 32 to match DIM 5's gradient-update cadence
+        // (DIM 6 has 2x training samples, so bs must double to keep
+        // total updates ~constant).  NRMSE 0.003346, -36% vs Ridge raw,
+        // -10% vs Ridge translated.
+        p.cnn.num_layers    = 1;
+        p.cnn.conv_channels = 16;
+        p.cnn.readout_type  = HCNNReadoutType::FLATTEN;
+        p.cnn.epochs        = 2000;
+        p.cnn.batch_size    = 32;
+        p.cnn.lr_max        = 0.0015f;
+    }
+    // DIM 7+: untuned.  Falls through to CNNReadoutConfig defaults.
 
     return p;
 }

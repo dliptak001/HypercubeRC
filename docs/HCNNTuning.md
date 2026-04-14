@@ -21,7 +21,7 @@ Data: 18·N collected samples, 70/30 train/test, normalized to [-1, +1].
 | DIM |   N   | Ridge raw | Ridge trans. | Best HCNN | layers | ch | head | ep | bs | lr_max | wd | seed | Notes |
 |----:|------:|----------:|-------------:|----------:|-------:|---:|:----:|---:|---:|-------:|---:|-----:|:------|
 |   5 |    32 |  0.006165 |     0.004375 |  0.003169 |      1 | 16 | FLAT |2000|  16| 0.0015 |  0 | 11822067163148543833 | **GOLD STANDARD** 2026-04-13 (runs 15-20, averaged 10 CNN inits). **-49% vs Ridge raw**, **-28% vs Ridge translated**. Single conv layer, FLATTEN readout, lr=0.0015. Architecture pinned in runs 15-17 (GAP vs FLATTEN have opposite backbone preferences); lr_max refined in runs 18-20 (coarse decade sweep missed the optimum by spacing — fine sweep at 10 seeds showed a clean bowl with minimum at 0.0015). Runtime ~14s (6.9× faster than the old nl=3/ch=32/GAP preset at 95s). |
-|   6 |    64 |         – |            – |         – |      – |  – |   –  |  – |  – |      – |  – |    – | not yet tuned |
+|   6 |    64 |  0.005205 |     0.003713 |  0.003346 |      1 | 16 | FLAT |2000|  32 | 0.0015 |  0 | 11459651989651327597 | **GOLD STANDARD** 2026-04-13 (runs 21-26, averaged 10 CNN inits). **-36% vs Ridge raw**, **-10% vs Ridge translated**. Direct architectural transfer from DIM 5 (nl=1/ch=16/FLAT/lr=0.0015); bs scaled 16→32 to hold total gradient updates constant as training samples doubled (806 vs 403). Runtime ~11s. |
 |   7 |   128 |         – |            – |         – |      – |  – |   –  |  – |  – |      – |  – |    – | not yet tuned |
 |   8 |   256 |         – |            – |         – |      – |  – |   –  |  – |  – |      – |  – |    – | not yet tuned |
 |   9 |   512 |         – |            – |         – |      – |  – |   –  |  – |  – |      – |  – |    – | not yet tuned |
@@ -214,7 +214,60 @@ Tight bowl with minimum at lr_max=0.0015. Going lower (toward 0.001) costs 30% �
 
 ### DIM 6
 
-_(pending first run)_
+DIM 6 is the first DIM probed after the architectural pivot — nl=1/ch=16/FLAT became the DIM 5 Gold Standard in runs 15-20, so the DIM 6 probe starts from that template rather than the old nl=3/ch=32/GAP regime. Ridge baselines: raw 0.005205, translated 0.003713.
+
+**Run 21 (first-probe 2×2, FLATTEN-only, 5 seeds):** four trials on `(nl, ch) ∈ {1,2} × {16,24}` at ep=2000/bs=16/lr=0.0015, all FLAT. GAP intentionally skipped — DIM 5 showed it's strictly worse for small DIM, and the deep-hierarchy win (where GAP could plausibly show up) won't appear until ≥DIM 7.
+
+| Trial         | nl | ch | final V | FLAT in | NRMSE    | vs Ridge raw | vs Ridge trans |
+|---------------|---:|---:|--------:|--------:|---------:|-------------:|---------------:|
+| **nl1-ch16**  |  1 | 16 |      32 |     512 | **0.003315** |      **-36%** |      **-11%** |
+| nl1-ch24      |  1 | 24 |      32 |     768 | 0.003684 |         -29% |           -0.8% |
+| nl2-ch16      |  2 | 16 |      16 |     512 | 0.004614 |         +13% |           +24% |
+| nl2-ch24      |  2 | 24 |      16 |     768 | (interrupted, didn't print) |
+
+Two findings settled fast: **nl=1 transfers from DIM 5** (nl=2 is +39% worse at matched ch), and **ch=24 is worse than ch=16** (+11%). The "channels scale with DIM" heuristic from the fan-in argument was refuted — ch=16 is an absolute sweet spot, not a DIM-proportional one. nl2-ch24 wasn't needed given nl2-ch16 was already decisively bad.
+
+**Run 22 (nl1-ch8 lean channel probe, 5 seeds):** 0.003881 (+17% vs ch=16). Confirms the channel bowl has a crisp minimum at ch=16 — ch=8 is too lean (undershoots layer-1 fan-in over-completeness), ch=24 is too wide. Identical shape to DIM 5's run-16 result where ch=8 vs ch=16 at nl=1 gave the same 17% penalty. **ch=16 is a genuine architectural constant at small DIM, not a coincidence.**
+
+**Run 23 (coarse lr_max sweep, 5 seeds — interrupted):** lr ∈ {0.0005, 0.001, 0.002, 0.003, 0.005} started, got through the first three before Ctrl+C:
+
+| lr_max | NRMSE    | Δ vs min |
+|-------:|---------:|---------:|
+| 0.0005 | 0.004692 |     +41% |
+| 0.001  | 0.003319 |        — |
+| 0.0015 | 0.003315 | (run 21) |
+| 0.002  | 0.004125 |     +24% |
+
+lr=0.001 (0.003319) and lr=0.0015 (0.003315) are **functionally identical** — 0.12% delta at 5-seed resolution is pure variance. The bowl has a flat floor from ~0.001 to ~0.0015 and a sharp right wall past 0.0015 (+24% at 0.002). Left wall is gentler (+41% at 0.0005). DIM 5's lr=0.0015 sits inside the flat region, so it transfers.
+
+**Run 24 (10-seed variance check at lr=0.0015):** 0.003414 (+3.0% vs 5-seed 0.003315). Expected noise discount, still cleanly beats both baselines (-34% raw, -8% translated). No instability.
+
+**Run 25 (bs sweep, 5 seeds):** this is the run that reframed the whole DIM 6 story. Swept `bs ∈ {8, 16, 32, 64}` at locked nl=1/ch=16/FLAT/ep=2000/lr=0.0015:
+
+| bs   | NRMSE    | Δ vs best | time   | updates/epoch |
+|-----:|---------:|----------:|-------:|--------------:|
+|    8 | 0.004304 |     +30.5% | 54.9s  |          ~100 |
+|   16 | 0.003315 |      +0.5% | 27.2s  |           ~50 |
+| **32** | **0.003299** |  **—** | **10.3s** |      **~25** |
+|   64 | 0.005727 |     +73.6% |  6.4s  |           ~13 |
+
+**bs=16 and bs=32 are statistically tied**, but bs=32 runs 2.6× faster. bs=8 is +30% (opposite of DIM 5 where bs=8 was marginally *better*), and bs=64 blows up to worse than Ridge raw (+74%).
+
+The shape makes sense once framed in terms of **total gradient updates**, not batch size:
+
+- DIM 5 bs=16 (403 samples) → ~25 updates/epoch × 2000 = **50k total updates**
+- DIM 6 bs=16 (806 samples) → ~50 updates/epoch × 2000 = **100k total updates** (2× — over-trained)
+- DIM 6 bs=32 → ~25 updates/epoch × 2000 = **50k total updates** (matches DIM 5 exactly)
+- DIM 6 bs=8 → ~100 updates/epoch × 2000 = 200k (4× — way over)
+- DIM 6 bs=64 → ~13 updates/epoch × 2000 = 26k (half — under)
+
+**The real invariant across DIMs is ~50k total gradient updates**, not a fixed batch size. Inheriting bs=16 from DIM 5 quietly doubled the update count at DIM 6 — the extra gradient steps past 50k were buying nothing, just burning compute. This is a meaningful finding for DIM 7+: **bs should scale linearly with training-sample count** so `bs * updates_per_epoch * epochs` stays ~50k. DIM 7 has ~1613 train samples → bs=64. DIM 8 → bs=128. Etc.
+
+**Run 26 (10-seed confirmation at bs=32):** 0.003346 (+1.4% vs 5-seed 0.003299 — tighter drift than bs=16's +3.0% 5→10 drift, suggesting bs=32 is also lower-variance). At 10 seeds bs=32 (0.003346) **cleanly beats bs=16** (0.003414) by 2.0%, AND it's 2.5× faster. bs=32 is strictly better on both axes.
+
+**DIM 6 MG GOLD STANDARD at nl=1, ch=16, head=FLAT, ep=2000, bs=32, lr=0.0015 → NRMSE 0.003346.** `HCNNPresets.h` updated.
+
+**Key lesson from DIM 6 for DIM 7+:** the "50k total gradient updates" heuristic should drive `batch_size` selection. Don't inherit bs from a smaller DIM without scaling.
 
 ### DIM 7
 
