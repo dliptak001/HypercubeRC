@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <ctime>
@@ -48,7 +49,13 @@ public:
     struct Result
     {
         double      nrmse;          ///< Test NRMSE averaged across seeds.
+        double      nrmse_min;      ///< Min NRMSE across seeds (0 if n<2).
+        double      nrmse_max;      ///< Max NRMSE across seeds (0 if n<2).
+        double      nrmse_std;      ///< Sample std of NRMSE across seeds (0 if n<2).
         double      elapsed_s;      ///< Wall-clock HCNN training time (averaged).
+        double      elapsed_min;    ///< Min wall time across seeds (0 if n<2).
+        double      elapsed_max;    ///< Max wall time across seeds (0 if n<2).
+        size_t      n_trials;       ///< Total num_seeds * num_cnn_seeds.
         int         num_layers;     ///< Conv+Pool pairs actually built.
         int         conv_channels;  ///< Base convolution channels.
         std::string label;
@@ -132,6 +139,10 @@ public:
         double nrmse_acc   = 0.0;
         double elapsed_acc = 0.0;
         size_t trial_count = 0;
+        std::vector<double> nrmse_samples;
+        std::vector<double> elapsed_samples;
+        nrmse_samples.reserve(num_seeds_ * num_cnn_seeds_);
+        elapsed_samples.reserve(num_seeds_ * num_cnn_seeds_);
 
         for (uint64_t seed : Seeds())
         {
@@ -158,16 +169,41 @@ public:
                 esn.Train(targets.data(), tr, cnn_copy);
                 auto t1 = std::chrono::steady_clock::now();
 
-                nrmse_acc   += esn.NRMSE(targets.data(), tr, te);
-                elapsed_acc += std::chrono::duration<double>(t1 - t0).count();
+                const double this_nrmse   = esn.NRMSE(targets.data(), tr, te);
+                const double this_elapsed = std::chrono::duration<double>(t1 - t0).count();
+                nrmse_acc   += this_nrmse;
+                elapsed_acc += this_elapsed;
+                nrmse_samples.push_back(this_nrmse);
+                elapsed_samples.push_back(this_elapsed);
                 ++trial_count;
             }
         }
 
-        const double denom = static_cast<double>(trial_count);
+        const double denom     = static_cast<double>(trial_count);
+        const double nrmse_m   = nrmse_acc   / denom;
+        const double elapsed_m = elapsed_acc / denom;
+
+        double nrmse_min = 0.0, nrmse_max = 0.0, nrmse_std = 0.0;
+        double elapsed_min = 0.0, elapsed_max = 0.0;
+        if (trial_count >= 2) {
+            nrmse_min = *std::min_element(nrmse_samples.begin(), nrmse_samples.end());
+            nrmse_max = *std::max_element(nrmse_samples.begin(), nrmse_samples.end());
+            elapsed_min = *std::min_element(elapsed_samples.begin(), elapsed_samples.end());
+            elapsed_max = *std::max_element(elapsed_samples.begin(), elapsed_samples.end());
+            double ssq = 0.0;
+            for (double v : nrmse_samples) { const double d = v - nrmse_m; ssq += d * d; }
+            nrmse_std = std::sqrt(ssq / static_cast<double>(trial_count - 1));
+        }
+
         Result r{
-            .nrmse         = nrmse_acc   / denom,
-            .elapsed_s     = elapsed_acc / denom,
+            .nrmse         = nrmse_m,
+            .nrmse_min     = nrmse_min,
+            .nrmse_max     = nrmse_max,
+            .nrmse_std     = nrmse_std,
+            .elapsed_s     = elapsed_m,
+            .elapsed_min   = elapsed_min,
+            .elapsed_max   = elapsed_max,
+            .n_trials      = trial_count,
             .num_layers    = ResolvedLayers(cnn_cfg),
             .conv_channels = cnn_cfg.conv_channels,
             .label         = label
@@ -307,5 +343,17 @@ private:
                   << std::fixed << std::setprecision(5) << std::setw(7) << c.lr_max << " | "
                   << std::setprecision(6) << std::setw(8) << r.nrmse << " | "
                   << std::setprecision(2) << std::setw(7) << r.elapsed_s << std::endl;
+
+        if (r.n_trials >= 2) {
+            // Spread line: min..max NRMSE, std, and wall-time min..max across seeds.
+            // Indented under the row above rather than aligned with table columns
+            // (the stats string is wider than any single numeric column).
+            std::cout << "    (n=" << r.n_trials << ")"
+                      << "  nrmse " << std::fixed << std::setprecision(6)
+                      << r.nrmse_min << ".." << r.nrmse_max
+                      << "  s=" << r.nrmse_std
+                      << "   time " << std::setprecision(2)
+                      << r.elapsed_min << ".." << r.elapsed_max << std::endl;
+        }
     }
 };
