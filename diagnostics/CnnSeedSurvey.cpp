@@ -60,7 +60,7 @@ struct CnnSeedResult
 // =====================================================================
 // Configuration — change these and rebuild
 // =====================================================================
-static constexpr size_t   NUM_CNN_SEEDS = 100;   ///< Seeds per DIM.
+static constexpr size_t   NUM_CNN_SEEDS = 50;    ///< Seeds per DIM.
 static constexpr unsigned SEED_BASE     = 1;     ///< First cnn_cfg.seed value.
 static constexpr size_t   TOP_K         = 10;    ///< Top-N seeds tracked per DIM.
 // =====================================================================
