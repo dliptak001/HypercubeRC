@@ -189,4 +189,38 @@ HCNNPreset NARMA10()
     return p;
 }
 
+// ---------------------------------------------------------------------------
+//  HRCCNN baseline — uniform first-probe architecture, DIM 5-16.
+// ---------------------------------------------------------------------------
+
+/// @brief HRCCNN baseline HCNN config — see `docs/HRCCNNBaselineConfig.md`.
+///
+/// Minimum-capacity first-probe architecture, uniform across every DIM:
+///
+///   nl=1, ch=8, FLATTEN, ep=2000, lr_max=0.0015, bs = 1 << (DIM-1)
+///
+/// `ep=2000` is calibrated for **chaotic** signals (Mackey-Glass, NARMA).
+/// Smooth-signal tasks saturate at `ep=25`; do not reuse this config as-is
+/// for smooth tasks without lowering the epoch count.
+///
+/// The `bs` formula holds the ~50k-gradient-update invariant constant
+/// across DIMs and coincides with the DIM 5/6/7 Gold Standard `bs` values,
+/// so benchmark cadence is commensurable with the tuned reference runs.
+/// This is the current default HCNN config used by the diagnostic
+/// benchmarks (`MackeyGlass<DIM>::BenchmarkCNNConfig()` and
+/// `NARMA10<DIM>::BenchmarkCNNConfig()`).  The per-DIM Gold Standards in
+/// `MackeyGlass()` above remain available for explicit users.
+template <size_t DIM>
+CNNReadoutConfig HRCCNNBaseline()
+{
+    CNNReadoutConfig cfg;
+    cfg.num_layers    = 1;
+    cfg.conv_channels = 8;
+    cfg.readout_type  = HCNNReadoutType::FLATTEN;
+    cfg.epochs        = 2000;
+    cfg.batch_size    = 1 << (DIM - 1);
+    cfg.lr_max        = 0.0015f;
+    return cfg;
+}
+
 }  // namespace hcnn_presets

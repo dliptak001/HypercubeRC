@@ -25,6 +25,7 @@
 #include <cstring>
 #include <random>
 #include "ESN.h"
+#include "readout/HCNNPresets.h"
 
 // --- Signal generation ---
 static void GenerateProcess(float* out, size_t n, size_t t_start,
@@ -176,12 +177,15 @@ int main(int argc, char* argv[])
     std::cout << " done (" << std::fixed << std::setprecision(2) << ridge_train_s << "s)\n";
 
     // --- Train HCNN ---
-    CNNReadoutConfig cnn_cfg;
+    // HRCCNN baseline architecture (nl=1, ch=8, FLAT, lr=0.0015,
+    // bs=1<<(DIM-1)) with smooth-signal epochs: ep=25 is the saturation
+    // point for the smooth anomaly process here.  The baseline's default
+    // ep=2000 is calibrated for chaotic MG/NARMA.
+    CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
     cnn_cfg.num_outputs = 1;
-    cnn_cfg.task = HCNNTask::Regression;
-    cnn_cfg.epochs = 25;
-    cnn_cfg.batch_size = 128;
-    cnn_cfg.lr_max = 0.003f;
+    cnn_cfg.task        = HCNNTask::Regression;
+    cnn_cfg.epochs      = 1000;
+    cnn_cfg.seed        = 420607;
 
     std::cout << "HCNN : training on " << train_n << " samples ("
               << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size

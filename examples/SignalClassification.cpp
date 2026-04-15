@@ -17,6 +17,7 @@
 #include <cmath>
 #include <cstring>
 #include "ESN.h"
+#include "readout/HCNNPresets.h"
 
 static constexpr float PI = 3.14159265358979323846f;
 static constexpr size_t NUM_CLASSES = 4;
@@ -308,12 +309,14 @@ int main(int argc, char* argv[])
     for (size_t t = 0; t < collect; ++t)
         float_labels[t] = static_cast<float>(labels[t]);
 
-    CNNReadoutConfig cnn_cfg;
+    // HRCCNN baseline architecture (nl=1, ch=8, FLAT, lr=0.0015,
+    // bs=1<<(DIM-1)) with smooth-signal epochs: ep=25 is the saturation
+    // point for the sinusoidal classification signals here.  The baseline's
+    // default ep=2000 is calibrated for chaotic MG/NARMA.
+    CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
     cnn_cfg.num_outputs = NUM_CLASSES;
-    cnn_cfg.task = HCNNTask::Classification;
-    cnn_cfg.epochs = 25;
-    cnn_cfg.batch_size = 128;
-    cnn_cfg.lr_max = 0.002f;
+    cnn_cfg.task        = HCNNTask::Classification;
+    cnn_cfg.epochs      = 100;
 
     std::cout << "HCNN training: " << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size
               << ", lr_max=" << std::setprecision(4) << cnn_cfg.lr_max

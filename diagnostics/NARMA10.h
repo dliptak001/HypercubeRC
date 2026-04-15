@@ -42,12 +42,14 @@ public:
     {
     }
 
-    /// @brief Benchmark-tuned HCNN defaults for this DIM.
-    /// Delegates to the central preset table in `readout/HCNNPresets.h`;
-    /// untuned DIMs fall through to CNNReadoutConfig defaults.
+    /// @brief Default HCNN config used by this benchmark.
+    /// Returns the HRCCNN baseline architecture (uniform across all DIMs,
+    /// see `docs/HRCCNNBaselineConfig.md`).  Callers that want the per-DIM
+    /// Gold Standards can still pass `hcnn_presets::NARMA10<DIM>().cnn`
+    /// explicitly to the constructor.
     static CNNReadoutConfig BenchmarkCNNConfig()
     {
-        return hcnn_presets::NARMA10<DIM>().cnn;
+        return hcnn_presets::HRCCNNBaseline<DIM>();
     }
 
     /// @brief Run the benchmark and return results without printing.

@@ -87,8 +87,11 @@ struct BenchmarkSuite
         std::cout << "  DIM  -- hypercube dimension; the reservoir has N = 2^DIM neurons\n";
         std::cout << "  raw  -- Ridge readout on N raw reservoir states\n";
         std::cout << "  full -- Ridge readout on 2.5M translated features (x, x^2, x*x')\n";
-        if (run_hcnn)
+        if (run_hcnn) {
             std::cout << "  HCNN -- HypercubeCNN readout on N raw states (learned convolution)\n";
+            std::cout << "          config: nl=1 ch=8 FLAT ep=2000 lr=0.0015 bs=1<<(DIM-1)"
+                      << "  [HRCCNN baseline]\n";
+        }
         std::cout << "\n";
 
         std::cout << "--- Memory Capacity (lags 1-50) ---\n";
@@ -100,6 +103,7 @@ struct BenchmarkSuite
         RunAndPrintMC<6>(output_fraction, config);
         RunAndPrintMC<7>(output_fraction, config);
         RunAndPrintMC<8>(output_fraction, config);
+        RunAndPrintMC<9>(output_fraction, config);
 
         std::cout << "\n--- Mackey-Glass h=1 (NRMSE, lower is better) ---\n";
         std::cout << "One-step prediction of a chaotic time series. Tests how well the\n";
@@ -113,6 +117,7 @@ struct BenchmarkSuite
         RunAndPrintMG<6>(output_fraction, config, run_hcnn);
         RunAndPrintMG<7>(output_fraction, config, run_hcnn);
         RunAndPrintMG<8>(output_fraction, config, run_hcnn);
+        RunAndPrintMG<9>(output_fraction, config, run_hcnn);
 
         std::cout << "\n--- NARMA-10 (NRMSE, lower is better) ---\n";
         std::cout << "Nonlinear autoregressive benchmark requiring both memory (10-step\n";
@@ -127,6 +132,7 @@ struct BenchmarkSuite
         RunAndPrintNARMA<6>(output_fraction, config, run_hcnn);
         RunAndPrintNARMA<7>(output_fraction, config, run_hcnn);
         RunAndPrintNARMA<8>(output_fraction, config, run_hcnn);
+        RunAndPrintNARMA<9>(output_fraction, config, run_hcnn);
     }
 
 private:

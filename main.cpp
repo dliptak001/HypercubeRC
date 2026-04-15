@@ -2,7 +2,9 @@
 /// @brief HypercubeRC benchmark suite entry point.
 ///
 /// Usage: HypercubeRC [--hcnn]
-///   --hcnn  Include HCNN (HypercubeCNN) readout in MG and NARMA-10 benchmarks.
+///   --hcnn  Include HCNN (HypercubeCNN) readout in MG and NARMA-10
+///          benchmarks. The default HCNN config is the HRCCNN baseline
+///          from `docs/HRCCNNBaselineConfig.md` (uniform across DIMs).
 
 #include "diagnostics/BenchmarkSuite.h"
 #include <cstring>

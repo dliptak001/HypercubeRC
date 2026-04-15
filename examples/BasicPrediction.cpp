@@ -19,6 +19,7 @@
 #include <iostream>
 #include <vector>
 #include "ESN.h"
+#include "readout/HCNNPresets.h"
 
 int main(int argc, char* argv[])
 {
@@ -112,13 +113,14 @@ int main(int argc, char* argv[])
     hcnn_cfg_r.output_fraction = 1.0f;  // CNN uses all vertices
     ESN<DIM> esn_hcnn(hcnn_cfg_r, ReadoutType::HCNN);
 
-    CNNReadoutConfig cnn_cfg;
-    cnn_cfg.conv_channels = 16;
-    cnn_cfg.epochs = 100;
-    cnn_cfg.batch_size = 32;
-    cnn_cfg.lr_max = 0.005f;
+    // HRCCNN baseline architecture (nl=1, ch=8, FLAT, lr=0.0015,
+    // bs=1<<(DIM-1)) with smooth-signal epochs: ep=100 stays because
+    // BasicPrediction is a sine wave (not chaotic), and the baseline's
+    // ep=2000 is calibrated for MG/NARMA.
+    CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
+    cnn_cfg.epochs      = 1000;
     cnn_cfg.lr_min_frac = 0.1f;
-    cnn_cfg.seed = 42;
+    cnn_cfg.seed        = 42007;
 
     std::cout << "  Config: N=" << N << "  raw state (all vertices)\n";
     std::cout << "  Training: " << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size
