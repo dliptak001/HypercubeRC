@@ -38,19 +38,29 @@ cycles without earning its keep.
   - `a op b` → depth 1.
   - `(a op b) op c` → depth 2 (one level of parens).
   - `(c op (a op b)) op d` → depth 3 (two levels; out of scope).
-- Operand values in `[-100.00, 100.00]`, always printed with exactly 2
-  decimal places.
-- Answer printed with exactly 2 decimal places followed by `#`.
+- **LHS operand values in `[-100, 100]`** at ≤2dp resolution (per the
+  canonical form: trailing zeros dropped).
+- **RHS result is not range-clipped.** It inherits whatever magnitude
+  the expression produces, printed in canonical form (≤2dp, trailing
+  zeros dropped). Bounded only by the natural grammar ceiling: depth-2
+  multiplicative expressions over LHS ∈ [-100, 100] top out at ~1e8,
+  so RHS integer parts are at most 9 digits wide. Float32 headroom
+  (~3.4e38) is astronomical relative to this; no float-level clipping
+  needed.
 
-EBNF sketch:
+EBNF sketch (LHS and RHS grammars are intentionally asymmetric):
 
 ```
-line    := expr ' = ' number '#'
-expr    := operand ( ' ' op ' ' operand )*
-operand := number | '(' expr ')'
-number  := [ '-' ] digit{1,3} '.' digit digit
-op      := '+' | '-' | '*' | '/'
+line        := expr ' = ' result '#'
+expr        := operand ( ' ' op ' ' operand )*
+operand     := number_lhs | '(' expr ')'
+number_lhs  := [ '-' ] digit{1,3} [ '.' digit{1,2} ]    // |v| ≤ 100
+result      := [ '-' ] digit{1,9} [ '.' digit{1,2} ]    // unbounded magnitude
+op          := '+' | '-' | '*' | '/'
 ```
+
+Same canonical-form rule (drop trailing zeros, drop bare decimal)
+applies to both `number_lhs` and `result`.
 
 **Unary minus.** A leading `-` may prefix any `number` in any position
 — after `=`, after `(`, after a binary operator, or at the start of a
@@ -59,12 +69,14 @@ operand (e.g., `3.00 * -5.00 = -15.00#` is well-formed). The model is
 expected to infer operator precedence from context; unary vs. binary
 `-` is disambiguated by position, not grammar.
 
-**Value-range risk.** Depth-2 multiplication permits results like
-`100.00 * 100.00 * 100.00 = 1e6` — blows the 2-decimal output format and
-smears the target distribution over an enormous range. Mitigation:
-**value-clipped generation** — reject any expression whose true result
-falls outside `[-999.99, 999.99]`. Training data is generated on the fly,
-so rejection sampling is nearly free.
+**Output-magnitude spread.** The grammar allows RHS magnitudes from
+~0 (rounded from `0.01 * 0.01`) up to `(100 * 100) * (100 * 100) = 1e8`
+— about 8 orders of magnitude. That full range would stress the
+readout's magnitude encoding hard: variable-length integer parts up to
+9 digits wide, with correct digit count. For v1 we narrow this to
+`|RHS| ≤ 999` via the training-data filter (below), keeping integer
+parts ≤ 3 digits while the grammar itself stays open-ended. Removing
+the filter later tests generalization to larger magnitudes.
 
 **Operand cap.** At depth ≤ 2 with strictly binary ops, the natural upper
 bound is 4 atomic operands. That's fine; no explicit cap needed beyond
@@ -80,13 +92,22 @@ the depth constraint. Worst-case line length is roughly 40–50 characters.
   (`(a op b) op c` or `a op (b op c)`). A model trained on
   depth-1-dominated data will fail at depth-2 inference; balanced
   sampling forces the model to handle both from the start.
-- **Operand distribution:** uniform in `[-100.00, 100.00]` at 2-decimal
-  resolution (20,001 discrete values per operand slot). Note that
-  **value-clipped rejection is asymmetric across operators** —
-  multiplicative depth-2 expressions reject far more often than
-  additive ones, so the *effective* operand distribution seen by the
-  model at multiplicative positions is narrower than at additive
-  positions. Watching for this bias is a Phase 4 diagnostic.
+- **Operand distribution:** uniform in `[-100, 100]` at ≤2-decimal
+  resolution (20,001 discrete values per operand slot).
+- **Training-data RHS filter (v1 only):** after rounding/canonicalizing,
+  reject any expression with `|RHS| > 999`. This is a *training-set*
+  filter, not a grammar constraint — the `result` production still
+  permits up to 9 integer digits, and the model's architecture is
+  unchanged. The filter keeps v1 evaluation focused on ≤ 3-digit
+  integer parts, so decimal-misalignment and integer-digit-miscount
+  failures happen within a bounded window. Removing the filter
+  (Phase 3+ or Phase 5) is a distinct generalization test.
+- **Rejection-rate consequence:** with the `|RHS| ≤ 999` filter in
+  place, multiplicative depth-2 expressions reject far more often than
+  additive ones (e.g., `a * b * c` with each in [-100, 100] exceeds
+  999 for most operand triples). The *effective* operand distribution
+  seen by the model at multiplicative positions is narrower than at
+  additive positions. Watching for this bias is a Phase 4 diagnostic.
 - **Division by zero:** generator rejects any expression whose grammar
   would force a `0.00` divisor at any `/` position. Rejection sampling.
 - **Unary minus frequency:** any generated `number` carries a leading
@@ -95,23 +116,42 @@ the depth constraint. Worst-case line length is roughly 40–50 characters.
 
 ## Number Format & Division Policy
 
-All numbers printed with exactly 2 decimal places. `5` becomes `"5.00"`,
-never `"5"` or `"5.0"`. Uniform width reduces the formatting burden on the
-readout — after a `.` it always emits two digits, then space or `#`.
+**Maximum 2 decimal places, trailing zeros dropped.** Numbers are
+printed in a canonical form: at most 2 digits after the decimal
+point, and trailing zeros (including the decimal point itself if the
+fractional part collapses to zero) are dropped.
 
-Division rarely produces a clean 2-decimal result. Three candidate
+| Value (rounded to 2dp) | Canonical form |
+|---|---|
+| `5.00` | `5` |
+| `5.50` | `5.5` |
+| `5.25` | `5.25` |
+| `-12.00` | `-12` |
+| `-12.40` | `-12.4` |
+| `0.00` | `0` |
+| `-0.00` | `0` |
+
+This is strictly more natural than the uniform-width 2dp format and a
+genuinely harder formatting task: at each digit position the model has
+to decide "emit another digit" vs. "end the number." That decision is
+a cleaner test of whether the model is actually computing rather than
+pattern-matching a fixed numeric width. If v1 cannot learn the stop
+condition, falling back to uniform 2dp is a simplifying lever.
+
+Division rarely produces a clean ≤2-decimal result. Three candidate
 policies:
 
 | Option | Meaning | Tradeoff |
 |---|---|---|
-| A | Round true result to 2 decimals via `std::round` (half-away-from-zero) | Target is approximate; model learns rounding |
-| B | Reject expressions whose result isn't exactly 2-decimal | Aggressive filter; starves grammar diversity |
+| A | Round true result to 2 decimals via `std::round` (half-away-from-zero), then canonicalize | Target is approximate; model learns rounding + trailing-zero dropping |
+| B | Reject expressions whose result isn't exactly ≤2-decimal | Aggressive filter; starves grammar diversity |
 | C | Restrict divisor to clean values (integers, powers of 10) | Narrows grammar, cleanly preserves format |
 
-**Default: Option A** with `std::round` (half-away-from-zero). Rounding
-is a legitimate "do the math" skill and the model should learn it. This
-rounding is applied **only during training-dataset construction** — the
-model just sees the final 2-decimal target. Revisit if training stalls
+**Default: Option A** with `std::round` (half-away-from-zero) followed
+by canonicalization. Rounding is a legitimate "do the math" skill and
+the model should learn it. Both the rounding and the canonicalization
+are applied **only during training-dataset construction** — the model
+just sees the canonical target string. Revisit if training stalls
 specifically on division.
 
 ## Input Encoding
@@ -277,12 +317,13 @@ exactly with the inference regime (the user presents one equation;
 we reset, prime, generate).
 
 ```
-sample: "5.00 + 3.00 = 8.00#"                  # depth-1, plain
-sample: "-2.50 * 4.00 = -10.00#"               # depth-1, unary-minus operand
-sample: "(1.00 + 2.00) * 3.00 = 9.00#"         # depth-2, paren on left
-sample: "5.00 * (2.00 - -3.00) = 25.00#"       # depth-2, unary minus inside parens
-sample: "10.00 / -4.00 = -2.50#"               # depth-1, rounded division
-sample: "(2.50 + 7.50) / 3.00 = 3.33#"         # depth-2, rounded division
+sample: "5 + 3 = 8#"                           # depth-1, integer operands
+sample: "-2.5 * 4 = -10#"                      # depth-1, mixed widths, unary minus
+sample: "(1.5 + 2.5) * 3 = 12#"                # depth-2, paren on left
+sample: "5 * (2 - -3) = 25#"                   # depth-2, unary minus inside parens
+sample: "10 / -4 = -2.5#"                      # depth-1, rounded division to 1dp
+sample: "(2.5 + 7.5) / 3 = 3.33#"              # depth-2, rounded division to 2dp
+sample: "0.25 * 0.4 = 0.1#"                    # small operands, canonicalized result
 ...
 ```
 
@@ -327,10 +368,14 @@ emits RHS characters; LHS is always given. Two views:
 **Default: train on everything.** The LHS pretext should make formatting
 solid before computation even kicks in.
 
-**Class-imbalance.** Digits dominate target positions (probably >70%);
-operators, parens, `=`, and `#` together are a small tail. Watch for
+**Class-imbalance.** Digits dominate target positions (probably >60%);
+operators, parens, `=`, `.`, and `#` together are the tail. Watch for
 the head collapsing to always-predict-digit. If it does, inverse-
 frequency loss reweighting in the softmax head is the first lever.
+With canonical (trailing-zeros-dropped) numbers, the `.` character is
+scarcer than under a uniform-2dp format (only present when a number
+has a fractional part), so it may need extra weighting if
+decimal-placement errors dominate.
 
 ## Inference
 
@@ -362,8 +407,10 @@ own argmax.
 - **Character-level accuracy**: per-position argmax-matches-target rate.
   Climbs earlier and smoother than exact-match; the training dashboard.
 - **Format accuracy**: fraction of emitted RHS strings that parse as a
-  valid `[-]d+\.dd#` regardless of value. Separates "learned numeric
-  format" from "learned computation." Format should saturate first.
+  valid canonical number followed by `#` — i.e., `[-]?\d{1,3}(\.\d{1,2})?#`
+  with no trailing zeros in the fractional part and no bare trailing `.`.
+  Separates "learned numeric format" from "learned computation." Format
+  should saturate first.
 
 Expected ordering during training: format ≫ character ≫ exact-match.
 If format accuracy plateaus below 90%, the model is undersized or the
@@ -378,9 +425,19 @@ head is under-tuned — diagnose before scaling.
 - **Operator confusion**: `/` is the rarest and hardest; expect
   operator-stratified accuracy to show a `/ << +` gap. Data generator
   should enforce a uniform operator distribution, not natural frequency.
-- **Decimal misalignment**: emitting `"1.05"` for true `"10.50"`.
-  Indicates weak magnitude encoding in the reservoir's projection of
-  operand digits. A distinct failure pattern worth watching for.
+- **Decimal misalignment / integer-digit miscount**: emitting
+  `"1.05"` for true `"10.5"`, `"0.5"` for true `"5"`, or `"99"` for
+  true `"999"`. Indicates weak magnitude encoding in the reservoir's
+  projection of operand digits. Under the v1 training filter
+  (`|RHS| ≤ 999`) this is bounded to at most 3 integer digits; when
+  the filter is removed later (Phase 3+ or 5), integer-digit miscount
+  becomes a first-class failure mode with RHS parts up to 9 digits
+  wide.
+- **Premature-stop / non-stop on number emission**: under the canonical
+  format the model must decide, at each digit position, whether to
+  emit another digit or terminate the number. Failure mode: always
+  emitting exactly 2 decimal digits (reversion to uniform format) or
+  stopping after the integer part when fractional digits were needed.
 - **EOS over/under-prediction**: model emits `#` too early (truncated
   answer) or never (runaway). Class reweighting on `#` loss addresses
   both directions.
@@ -389,7 +446,9 @@ head is under-tuned — diagnose before scaling.
 
 **Phase 1 — scaffold (no HRC).**
 - Expression generator: grammar (with the distribution policy above),
-  value clipping, division rounding, division-by-zero rejection.
+  division rounding + canonicalization, division-by-zero rejection.
+  No RHS value clipping — the result inherits whatever magnitude the
+  grammar produces.
 - 8-bit bipolar **input** encoder (char → 8-dim ±1 vector for the
   reservoir).
 - Vocab ↔ class-index tables for the **output** side (20-way target
@@ -435,10 +494,15 @@ head is under-tuned — diagnose before scaling.
 - `nl` / `ch` sweep only if the head swap doesn't help. Single seed
   throughout — no seed survey.
 
-**Phase 5 — scale out if needed.**
+**Phase 5 — scale out / generalize if needed.**
 - If DIM 12 caps below, say, 80% exact-match despite Phase 4, try
   DIM 14 (N=16k, ~4× training cost). DIM 16 is the hard ceiling
   (library-supported).
+- **Generalization test**: remove the `|RHS| ≤ 999` training filter
+  and evaluate whether the Phase 3 model still holds up on the full
+  grammar-permitted RHS range (~1e8). Expect a drop; the magnitude
+  of the drop measures how much of v1's success was within-bounds
+  pattern-matching vs. genuine multi-digit integer-emission skill.
 
 ## Open Decisions
 
