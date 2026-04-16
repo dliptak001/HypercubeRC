@@ -143,33 +143,80 @@ state; no translation layer (HCNN always bypasses it).
 
 ## Readout
 
-- `CNNReadout` in **multi-class classification** mode, 20 softmax heads.
-- Starting architecture: `HRCCNNBaseline<12>()` (nl=2, ch=16, FLATTEN,
-  ep=2000, bs=2048, lr=0.0015).
-- That baseline is calibrated for regression on NARMA, not 20-way
-  classification on arithmetic. Expect per-task retuning. Concretely:
-  deeper `nl` and wider `ch` may be needed because the output head's
-  job is far more complex than one regression scalar.
+`CNNReadout` in **multi-class classification** mode:
+
+- **Output shape**: one linear layer projects the CNN backbone's
+  flattened feature vector to **20 logits** → softmax → probability
+  distribution over the vocab. Not 20 independent heads — one head
+  with a 20-way softmax.
+- **Training loss**: softmax + cross-entropy over class-index targets.
+  Handled internally by `CNNReadout`'s multi-class mode — no readout-
+  side code changes needed; the head shape is configuration.
+- **Inference decode**: **argmax** over the 20 probabilities. Picks
+  the single strongest token per step.
+
+Starting architecture: `HRCCNNBaseline<12>()` (nl=2, ch=16, FLATTEN,
+ep=2000, bs=2048, lr=0.0015). That baseline is calibrated for
+regression on NARMA, not 20-way classification on arithmetic. Expect
+per-task retuning — deeper `nl` and wider `ch` may be needed because
+the readout's job here is far more complex than one regression scalar.
+
+**Decode knobs deferred until v1 works:**
+
+- **Temperature sampling** (instead of argmax): useful diagnostic if
+  the model gets stuck on a wrong early-RHS token and can't recover.
+  Not needed until we have a working model to debug.
+- **Top-k / nucleus *sampling*** (as a generation strategy): irrelevant
+  for this task — we want one correct answer per expression, not
+  generation diversity. Not to be confused with the next item.
+- **Softmax distribution *inspection*** (as a diagnostic): genuinely
+  useful — surfaces per-step top-N contenders, confidence margins,
+  and entropy of the predictive distribution. Distinct from sampling:
+  the model still emits argmax, but we *log* the full distribution
+  for offline analysis. Tracked as a Phase 4 item.
 
 ## Training Regime
 
-**One long stream**, no resets. Expressions concatenated with `#` as
-the only separator:
+**Per-expression reset.** Each expression is an independent training
+unit. Before feeding an expression's LHS, the reservoir state is reset
+to zero; `#` is a pure EOS marker with no dual purpose. This aligns
+training exactly with the inference regime (the user presents one
+equation; we reset and generate).
 
 ```
-5.00 + 3.00 = 8.00#-2.50 * 4.00 = -10.00#(1.00 + 2.00) / 3.00 = 1.00#...
+sample: "5.00 + 3.00 = 8.00#"
+sample: "-2.50 * 4.00 = -10.00#"
+sample: "(1.00 + 2.00) / 3.00 = 1.00#"
+...
 ```
 
-- Reservoir warms up once at the start, then runs continuously.
-- `#` is dual-purpose: the EOS emitted at inference, and the delimiter
-  that cues "new expression begins" during training. The reservoir
-  learns `#` as a context-reset marker without an explicit reset.
-- Teacher forcing: at training position `t`, input = char(t), target =
-  char(t+1). Every position contributes a training example.
-- Target training-stream length: **~1M characters** for first pass
-  (~25k expressions at ~40 chars each). Scale up if accuracy plateaus
-  without overfitting.
-- Validation: independently-generated 10k-expression stream.
+- Before each expression: `reservoir.Reset()` (zero the state vector).
+- Feed the full expression character by character.
+- Teacher forcing: at position `t`, input = char(t), target = char(t+1).
+  Every position contributes a training example.
+- Target training-set size: **~25k independent expressions** for first
+  pass. Scale up if accuracy plateaus without overfitting.
+- Validation: independently-generated 10k-expression set.
+
+**Implications of the reset:**
+
+- **Batching is now trivial.** Each expression is an independent (state
+  trajectory, target trajectory) pair. Batched training over N
+  expressions in parallel is straightforward — previously the
+  single-stream model made batching awkward.
+- **`#` is now only the EOS character.** It no longer doubles as a
+  context-reset marker, so the model's `#` prediction is a pure
+  "answer is complete" signal, not "new context begins."
+- **No cross-expression carryover.** The reservoir never sees a
+  previous expression's residual state, so training samples are IID.
+- **Transient-washout cost.** Spectral radius 0.90 means zero-init
+  state decays toward its input-driven trajectory over ~5-10 steps.
+  The first few character positions per expression operate on weak
+  state. For v1 we accept this: training sees it consistently, so
+  the model learns to bootstrap from cold-start. If early-position
+  accuracy materially lags late-position accuracy in phase 2
+  diagnostics, prepend a short fixed priming prefix (e.g., `"##"`)
+  to each expression at train and inference time.
 
 **Should LHS positions contribute loss?** At deployment the model only
 emits RHS characters; LHS is always given. Two views:
@@ -190,22 +237,24 @@ frequency loss reweighting in the softmax head is the first lever.
 ## Inference
 
 ```
-1. Warm up reservoir on LHS: feed "5.00 + 3.00 = " one char at a time.
-2. Loop:
+1. reservoir.Reset()                          # zero the state
+2. Feed LHS one char at a time: "5.00 + 3.00 = "
+3. Loop:
      p ← softmax(CNNReadout(state))
-     c ← argmax(p)          # start with argmax; sampling later
+     c ← argmax(p)                            # argmax first; sampling later
      emit c
      if c == '#': break
-     state ← reservoir.step(bipolar_bits(c))   # 8-dim ±1 from ASCII byte
-3. Concatenated emitted chars = predicted RHS.
+     state ← reservoir.step(bipolar_bits(c))  # 8-dim ±1 from ASCII byte
+4. Concatenated emitted chars = predicted RHS.
 ```
 
 Hard output-length cap of ~12 chars prevents runaway generation when
 `#` is never emitted.
 
-Training and inference reservoir dynamics are identical — only the
-input source differs (teacher-forced ground truth vs. model's own
-previous output).
+Training and inference reservoir dynamics are identical: reset, feed,
+(optionally) generate. The only difference is the input source during
+the generation phase — teacher-forced ground truth vs. the model's
+own argmax.
 
 ## Success Metrics
 
@@ -256,7 +305,8 @@ head is under-tuned — diagnose before scaling.
 
 **Phase 3 — scale to target.**
 - DIM 12, full vocab, full grammar.
-- 1M-character training stream.
+- 25k independent training expressions (scale up if plateau without
+  overfit).
 - Track all three metrics (format, character, exact-match) across
   epochs.
 
@@ -265,6 +315,11 @@ head is under-tuned — diagnose before scaling.
 - Operator-stratified accuracy (where does it fail?).
 - Operand-magnitude-stratified accuracy (does performance degrade
   for `|x| > 50`?).
+- **Softmax distribution logging** during held-out inference: for
+  each RHS position, capture top-N contenders, confidence margin
+  (`p_argmax - p_second`), and distribution entropy. Surfaces where
+  the model is confident-and-wrong vs. uncertain-and-wrong — very
+  different failure modes that call for different fixes.
 - Head architecture sweep if exact-match stalls (probe `nl`, `ch`).
 
 **Phase 5 — scale out if needed.**
