@@ -1,4 +1,4 @@
-# math_llm — Character-Level Math LM on HRCCNN
+# HRCCNN_LLM_Math — Character-Level Math LM on HRCCNN
 
 ## Goal
 
