@@ -14,15 +14,16 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
     num_inputs_      = cfg.num_inputs;
     output_fraction_ = cfg.output_fraction;
 
-    // HCNN readout operates on the full raw hypercube state.  It cannot
-    // use a stride-selected subset (would break spatial assumptions) and
-    // cannot consume translation features.  Force Raw mode and
-    // output_fraction=1.0 so stride, num_output_verts, OutputFraction(),
-    // and serialization all match what CNNReadout actually sees.
+    // HCNN readout cannot consume translation features — force Raw mode.
+    // (output_fraction is NOT forced here; callers driving CNNReadout
+    // directly may use stride-of-power-of-2 subsampling to present the
+    // CNN with a sub-hypercube of reduced effective DIM. Arbitrary strides
+    // still break HypercubeCNN's XOR-neighbor assumptions, so non-power-
+    // of-2 values remain risky for HCNN users and are the caller's
+    // responsibility.)
     if (readout_type_ == ReadoutType::HCNN)
     {
         feature_mode_    = FeatureMode::Raw;
-        output_fraction_ = 1.0f;
     }
 
     assert(output_fraction_ > 0.0f && output_fraction_ <= 1.0f);

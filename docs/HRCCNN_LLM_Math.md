@@ -256,7 +256,8 @@ the output space.
 - **DIM 12** (N = 4096).
 - **Spectral radius** 0.90, **input scaling** 0.02 — scale-invariant
   defaults for the hypercube topology; no per-size re-tune needed.
-- **Output fraction** 1.0 (HCNN sees full state).
+- **Output fraction** **0.125** (default; configurable knob). See
+  "Output fraction & sub-hypercube subsampling" below.
 - **Seed** — **single seed, all phases, no survey.** At DIM 12 both the
   reservoir-seed lottery and the CNN-init-seed lottery are nearly
   cosmetic (per `diagnostics/NARMA10.md`'s dispersion-collapse table —
@@ -266,6 +267,48 @@ the output space.
 
 Reservoir state steps once per input character. HCNN sees raw reservoir
 state; no translation layer (HCNN always bypasses it).
+
+### Output fraction & sub-hypercube subsampling
+
+The reservoir runs at full DIM=12 (4096 vertices) for dynamics, but the
+CNN readout operates on a **stride-selected sub-hypercube** of the
+state. This is how feature dim is kept manageable without sacrificing
+reservoir capacity.
+
+HypercubeCNN's convolution uses XOR-neighbor masks, so the subsample
+**must preserve hypercube structure** — equivalently, the stride must
+be a power of 2. A stride of `2^k` takes vertices at indices
+`0, 2^k, 2·2^k, 3·2^k, ...`, which form a valid sub-hypercube of
+effective dimension `DIM − k`.
+
+| output_fraction | stride | effective CNN DIM | N at CNN | FLATTEN feat dim (nl=1, ch=8) | Reduction |
+|---|---|---|---|---|---|
+| 1.0 | 1 | 12 | 4096 | 16,384 | 1× |
+| 0.5 | 2 | 11 | 2048 | 8,192 | 2× |
+| 0.25 | 4 | 10 | 1024 | 4,096 | 4× |
+| **0.125 (default)** | **8** | **9** | **512** | **2,048** | **8×** |
+| 0.0625 | 16 | 8 | 256 | 1,024 | 16× |
+
+**Why 0.125 is the default:** lands feature dim in the ~2k range,
+which is the sweet spot for our 5k-expression training budget (200k
+positions) — head params ~41k, sample/param ratio ~5:1, well
+out of memorization-risk territory. Up or down one power of 2 is a
+cheap sweep if v1 underfits or overfits. Non-power-of-2 values are
+**unsafe for HCNN** (they break the XOR-neighbor spatial assumption
+inside HypercubeCNN); the driver will validate and refuse them.
+
+**Why this is safe for reservoir capacity:** the 4096-vertex reservoir
+still runs in full. The CNN just sees every 8th vertex's state. Since
+per-vertex `W_in` is random and reservoir dynamics mix rapidly across
+neighbors, the sampled 512 vertices still carry a rich compression of
+the full-state signal — not 512/4096 of the information, but
+considerably more than that ratio would suggest.
+
+Historical note: ESN used to force `output_fraction = 1.0` when the
+readout was HCNN. That forcing has been relaxed — HCNN callers are
+now responsible for choosing a power-of-2-aligned subsample, and the
+`HRCCNN_LLM_Math` driver drives `Reservoir + CNNReadout` directly
+anyway (bypassing ESN's generic pipeline).
 
 ## Readout
 
@@ -281,38 +324,46 @@ state; no translation layer (HCNN always bypasses it).
 - **Inference decode**: **argmax** over the 20 probabilities. Picks
   the single strongest token per step.
 
-Starting architecture: `HRCCNNBaseline<12>()` backbone (nl=2, ch=16,
-lr=0.0015) with **training overrides: ep=1000, bs=4096**.
+Starting architecture: `HRCCNNBaseline<12>()` backbone (**nl=1, ch=8**
+per `readout/HCNNPresets.h`; FLATTEN head; lr=0.0015) with **training
+overrides: ep=1000, bs=4096**. The CNN sees the stride-8 sub-hypercube
+of the reservoir (effective DIM=9, N=512 at the CNN input) per the
+output_fraction=0.125 default; see the Reservoir section's
+subsampling table.
 
-**Head choice: start with GAP, fall back to FLATTEN.** The CNN stack's
-flattened feature dim at DIM 12 with 2 conv+pool pairs is ~1024
-surviving vertices × 16 channels = **16,384**. That makes the final
-linear head parameter count:
+**Head: FLATTEN.** After one conv+pool pair operating on the
+sub-hypercube: 256 surviving vertices × 8 channels = **2,048
+features**. Linear head projecting 2048 → 20 logits = **~41k head
+params** (plus ~a few hundred conv params, negligible in comparison).
 
-| Head | Feature dim | Head params (×20 logits) |
-|---|---|---|
-| **GAP** (global average over vertices) | 16 | **320** |
-| FLATTEN (per-vertex features kept) | 16,384 | **~328k** |
+Vertex identity is load-bearing on this task — the hypercube
+reservoir's random per-vertex `W_in` means every (sampled) vertex
+encodes a different linear combination of the input character's bits,
+so `'5'` and `'6'` land very differently across the state. A
+per-vertex FLATTEN head preserves that structure end-to-end. (The
+sub-hypercube subsampling trades away 7/8 of the vertices but the
+remaining 512 still carry diffuse character-bit information — any
+pooling-over-vertices operation that destroys per-vertex identity
+defeats the purpose of a hypercube reservoir for this task.)
 
-At our v1 scale of 5k expressions × ~40 positions = 200k training
-samples, GAP's 320 head params give a wide sample/parameter margin
-(~600:1), while FLATTEN's 328k puts us into the underfit-by-overparam
-regime (~0.6:1). GAP is the correct starting point. If GAP *underfits*
-(character accuracy climbs but plateaus low), move to FLATTEN — or
-to an intermediate (e.g., FLATTEN with a hidden layer between) — as a
-Phase 3 experiment. Unlike in Mackey-Glass tuning where vertex
-identity carries task-relevant signal, here the reservoir sees
-bit-encoded characters and GAP's translation-invariance prior is
-probably fine.
+**Sample/parameter ratio: ~5:1.** 200k training positions
+(5k expressions × ~40 chars) against ~41k head params. Healthy
+regime — well out of both memorization-risk (would be ~1:1 or lower)
+and capacity-starvation (would be 100:1 or more). Standard weight-
+decay regularization on the head is still a sensible default for
+noise tolerance, but early stopping on validation loss should be
+sufficient.
 
 **Gradient-update budget.** With 200k training positions, bs=4096, and
 ep=1000: **~49k gradient updates**, essentially 1× the NARMA
-calibration — not much headroom, but not starved either. If the
-character-level accuracy keeps climbing at the end of training without
-overfitting, that's our signal to raise the epoch count.
+calibration — not much headroom but not starved. If character-level
+accuracy keeps climbing at end-of-training without overfitting, raise
+the epoch count.
 
-Expect further retuning — deeper `nl` or wider `ch` may be needed if
-the readout's expressivity caps out despite enough gradient updates.
+Expect further retuning if FLATTEN underfits the arithmetic semantics
+despite the parameter budget — the natural knobs are (in order):
+bumping `output_fraction` to 0.25 or higher (more vertices → more
+features), widening `ch`, or deepening `nl`.
 
 **Decode knobs deferred until v1 works:**
 
@@ -506,7 +557,8 @@ head is under-tuned — diagnose before scaling.
   this passes at 100%.
 
 **Phase 2 — DIM 12 v1.**
-- DIM 12, full vocab, full grammar, GAP head.
+- DIM 12, full vocab, full grammar, FLATTEN head (HRCCNNBaseline<12>
+  nl=1/ch=8 with the training overrides from the Readout section).
 - **5k independent training expressions**, 2k validation.
 - Target: format accuracy > 90% and any non-trivial exact-match. The
   goal is to confirm the approach converges at all, not to maximize.
@@ -535,10 +587,17 @@ head is under-tuned — diagnose before scaling.
   (`p_argmax - p_second`), and distribution entropy. Surfaces where
   the model is confident-and-wrong vs. uncertain-and-wrong — very
   different failure modes that call for different fixes.
-- Head architecture swap (GAP → FLATTEN, or GAP+hidden) if
-  expressivity looks like the cap.
-- `nl` / `ch` sweep only if the head swap doesn't help. Single seed
-  throughout — no seed survey.
+- **`output_fraction` sweep** (0.25 → 0.125 → 0.0625): measures how
+  much reservoir signal the CNN can actually exploit. Going up one
+  power of 2 doubles feature dim and doubles head params; going down
+  halves both. If v1 accuracy keeps climbing as we expose more of the
+  reservoir, that's a sign we're in capacity-starvation; if accuracy
+  is flat across the sweep, 0.125 is fine and feature dim isn't the
+  bottleneck.
+- Head architecture variations if FLATTEN underfits (e.g., FLATTEN +
+  hidden layer between conv features and softmax).
+- `nl` / `ch` sweep only if the output_fraction sweep and head
+  variations don't help. Single seed throughout — no seed survey.
 
 **Phase 5 — scale out / generalize if needed.**
 - If DIM 12 caps below, say, 80% exact-match despite Phase 4, try
@@ -636,9 +695,12 @@ struct ModelFile {
   load time. This is tiny in storage but costs an `Initialize()` call
   on load (~100ms at DIM 12, fine).
 - CNN weights are the only training product that needs to persist.
-  At nl=2/ch=16/GAP/DIM 12, that's ~320 floats for the linear head
-  plus the conv weights (a few hundred more) — well under a kilobyte.
-  Under FLATTEN it balloons to ~328k floats (~1.3 MB) — still tiny.
+  At the default config (output_fraction=0.125, nl=1/ch=8, FLATTEN),
+  the head is 2048 × 20 + 20 ≈ **41k floats** plus a few hundred
+  conv params — roughly **165 KB** per checkpoint. Trivial in disk
+  terms. A Phase 4 output_fraction=0.25 sweep would double this to
+  ~330 KB, still trivial; output_fraction=1.0 (no subsampling) would
+  land at ~1.3 MB.
 - Saving the full training config inside the file (not just the
   weights) means a single `.bin` is fully self-contained for `infer`
   — you don't need to remember what hyperparameters a given checkpoint
