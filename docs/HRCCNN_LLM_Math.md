@@ -304,11 +304,14 @@ neighbors, the sampled 512 vertices still carry a rich compression of
 the full-state signal — not 512/4096 of the information, but
 considerably more than that ratio would suggest.
 
-Historical note: ESN used to force `output_fraction = 1.0` when the
-readout was HCNN. That forcing has been relaxed — HCNN callers are
-now responsible for choosing a power-of-2-aligned subsample, and the
-`HRCCNN_LLM_Math` driver drives `Reservoir + CNNReadout` directly
-anyway (bypassing ESN's generic pipeline).
+ESN applies the subsample automatically for HCNN callers: it reads
+`output_fraction` from `ReservoirConfig`, validates that the resulting
+stride is a power of 2 at construction (rejecting other values so the
+XOR-neighbor assumption holds), and subsamples the cached state onto
+the sub-hypercube before every `Train` / `PredictRaw` / `R2` / `NRMSE`
+/ `Accuracy` / `PredictLiveRaw` call. The `HRCCNN_LLM_Math` driver
+talks to `ESN` alone — it never touches `Reservoir` or `CNNReadout`
+directly.
 
 ## Readout
 
@@ -384,23 +387,29 @@ features), widening `ch`, or deepening `nl`.
 **Per-expression reset + LHS priming.** Each expression is an
 independent training unit. Before feeding an expression's data:
 
-1. `reservoir.Reset()` (zero the state — library semantics settled as
-   Option 1, nothing else).
-2. Prime: feed the LHS through the reservoir **twice**, discarding all
-   states. Each priming pass runs only the hypercube update — the CNN
-   readout is not invoked. This washes out the zero-init transient
-   (at SR=0.90 the zero-state contribution decays to ~4% after ~30
+1. `esn.ResetReservoirOnly()` — zeros the reservoir state while
+   preserving the cumulative training buffer (`states_`) built up
+   from prior expressions.
+2. Prime: feed the LHS through the reservoir **twice** via
+   `esn.Warmup(lhs_bits, 2 * L_lhs)`. `Warmup` steps the reservoir
+   without collecting states or invoking the readout, so priming is
+   essentially free. This washes out the zero-init transient (at
+   SR=0.90 the zero-state contribution decays to ~4% after ~30
    character steps, so two LHS passes lands the reservoir firmly in
    echo-state territory before the collecting pass begins).
-3. Collecting pass: feed the full expression (LHS + RHS), collecting
-   `(state, next-char target)` pairs at every position for teacher-
-   forced training.
+3. Collecting pass: feed the full expression (LHS + RHS) via
+   `esn.Run(expr_bits, L_expr)`, which appends one state snapshot per
+   character to the cumulative buffer. Teacher-forced targets are
+   assembled in parallel (position `t`'s target is `char(t+1)`).
 
-Priming is applied identically at inference time so that train-state
-≡ inference-state when predictions are correct (standard teacher-
-forcing guarantee). The protocol belongs in the `HRCCNN_LLM_Math`
-driver, not in the Reservoir class — `Reset()` stays minimal,
-priming is the caller's job.
+After all N expressions have been through reset → prime → collect, a
+single `esn.Train(targets, total_positions, cnn_cfg)` trains the CNN
+on the whole buffer. Priming is applied identically at inference time
+so that train-state ≡ inference-state when predictions are correct
+(standard teacher-forcing guarantee). The two-pass-LHS-priming
+convention is task-specific and belongs in the driver —
+`ResetReservoirOnly()` / `Warmup()` / `Run()` are general ESN
+primitives that the driver composes.
 
 `#` is a pure EOS marker with no dual purpose. This aligns training
 exactly with the inference regime (the user presents one equation;
@@ -417,9 +426,12 @@ sample: "0.25 * 0.4 = 0.1#"                    # small operands, canonicalized r
 ...
 ```
 
-- Before each expression: `reservoir.Reset()` (zero the state), then
-  two priming passes over the LHS (no readout, no state collection).
-- Collecting pass: feed the full expression character by character.
+- Before each expression: `esn.ResetReservoirOnly()` (zeros reservoir,
+  preserves cumulative training buffer), then two priming passes over
+  the LHS via `esn.Warmup(lhs_bits, 2 * L_lhs)` (no readout, no state
+  collection).
+- Collecting pass: feed the full expression via `esn.Run(expr_bits,
+  L_expr)` (appends `L_expr` state snapshots to the training buffer).
 - Teacher forcing: at position `t`, input = char(t), target = char(t+1).
   Every position contributes a training example.
 - **State indexing convention:** the reservoir state the readout sees
@@ -477,15 +489,15 @@ decimal-placement errors dominate.
 ## Inference
 
 ```
-1. reservoir.Reset()                          # zero the state
-2. Prime: feed LHS twice (reservoir-only, no readout).
-3. Final LHS pass: feed "5.00 + 3.00 = " one char at a time.
+1. esn.ResetReservoirOnly()                   # zero reservoir state
+2. Prime: esn.Warmup(lhs_bits, 2 * L_lhs)     # two LHS passes, no readout
+3. Final LHS pass: esn.Warmup(lhs_bits, L_lhs)  # collecting not needed
 4. Generation loop:
-     p ← softmax(CNNReadout(state))
-     c ← argmax(p)                            # argmax first; sampling later
+     esn.PredictLiveRaw(logits)               # 20 floats from live state
+     c ← argmax(softmax(logits))              # argmax first; sampling later
      emit c
      if c == '#': break
-     state ← reservoir.step(bipolar_bits(c))  # 8-dim ±1 from ASCII byte
+     esn.Warmup(bipolar_bits(c), 1)           # step with emitted char
 5. Concatenated emitted chars = predicted RHS.
 ```
 
@@ -670,10 +682,18 @@ struct ModelFile {
     ReservoirConfig  reservoir_cfg;
     CNNReadoutConfig cnn_cfg;
 
-    // CNN weights — flat float32 array in the same layout as
-    // CNNReadout::GetWeights() returns. Size is determined by cnn_cfg.
+    // Readout payload — mirrors ESN<DIM>::ReadoutState exactly:
+    //   weights: CNN weight/bias blob (doubles, opaque to the driver)
+    //   bias: scalar bias (for HCNN: target-mean for de-centering)
+    //   feature_mean / feature_scale: per-input standardization vectors
+    //     (feature_scale stores 1/std). Length = num_output_verts_ =
+    //     2^(DIM - log2(stride)), computed from reservoir_cfg.output_fraction.
     uint64_t weights_count;
-    float    weights[weights_count];
+    double   weights[weights_count];
+    double   bias;
+    uint64_t standardize_count;          // expected: num_output_verts_
+    float    feature_mean[standardize_count];
+    float    feature_scale[standardize_count];
 };
 ```
 
@@ -682,11 +702,13 @@ struct ModelFile {
 1. Read header; verify magic, format_version, and `dim` matches the
    binary's compile-time DIM (fail loudly if not — DIM is a template
    parameter, not a runtime choice).
-2. Reconstruct `Reservoir<DIM>` from `reservoir_cfg` (same seed →
-   same recurrent weights + W_in).
-3. Reconstruct `CNNReadout<DIM>` from `cnn_cfg` (empty weights).
-4. Call `CNNReadout::SetWeights(weights)` to restore the trained head.
-5. Model is ready for `eval` or `infer`.
+2. Construct `ESN<DIM>(reservoir_cfg, ReadoutType::HCNN, FeatureMode::Raw)`.
+   The reservoir's recurrent weights and `W_in` are regenerated
+   deterministically from `reservoir_cfg.seed`.
+3. Assemble an `ESN<DIM>::ReadoutState` from the persisted weights blob
+   and standardization vectors, then call `esn.SetReadoutState(state)`
+   to restore the trained CNN head.
+4. Model is ready for `eval` or `infer`.
 
 **Design notes:**
 
@@ -714,5 +736,3 @@ struct ModelFile {
 - Keep or drop space from the vocab. Default keep; revisit at phase 3.
 - Per-class loss weighting (uniform vs inverse-frequency). Default
   uniform; switch to inverse-frequency if operators/EOS under-train.
-- Reservoir `Reset()` semantics — see task #1.
-- v1 training-set size given 64 GB RAM budget — see task #2.
