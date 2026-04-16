@@ -70,6 +70,29 @@ so rejection sampling is nearly free.
 bound is 4 atomic operands. That's fine; no explicit cap needed beyond
 the depth constraint. Worst-case line length is roughly 40–50 characters.
 
+**Generator distribution policy:**
+
+- **Operator mix:** uniform across `+ - * /`. Do not inherit natural-text
+  operator frequencies — they would starve `/` relative to `+`. Uniform
+  keeps each operator class well-represented in the training target
+  distribution.
+- **Depth mix:** 50/50 between depth-1 (`a op b`) and depth-2
+  (`(a op b) op c` or `a op (b op c)`). A model trained on
+  depth-1-dominated data will fail at depth-2 inference; balanced
+  sampling forces the model to handle both from the start.
+- **Operand distribution:** uniform in `[-100.00, 100.00]` at 2-decimal
+  resolution (20,001 discrete values per operand slot). Note that
+  **value-clipped rejection is asymmetric across operators** —
+  multiplicative depth-2 expressions reject far more often than
+  additive ones, so the *effective* operand distribution seen by the
+  model at multiplicative positions is narrower than at additive
+  positions. Watching for this bias is a Phase 4 diagnostic.
+- **Division by zero:** generator rejects any expression whose grammar
+  would force a `0.00` divisor at any `/` position. Rejection sampling.
+- **Unary minus frequency:** any generated `number` carries a leading
+  `-` with 50% probability (independent of position), subject to the
+  `[-100.00, 100.00]` range constraint.
+
 ## Number Format & Division Policy
 
 All numbers printed with exactly 2 decimal places. `5` becomes `"5.00"`,
@@ -98,11 +121,16 @@ bipolar-encoded:
 
 - `ReservoirConfig::num_inputs = 8`.
 - Channel `b` (0 ≤ b ≤ 7) carries bit `b` of the current character's
-  ASCII byte: `+1.0` if the bit is set, `-1.0` if cleared.
+  ASCII byte, **LSB = bit 0** (standard C convention `(c >> b) & 1`):
+  `+1.0` if the bit is set, `-1.0` if cleared.
 - `Reservoir`'s per-vertex channel routing (channel `k` owns vertices
   `k, k+K, 2K, ...`, `Reservoir.h:18`) gives each of the 8 channels
   **512 vertices at DIM 12** — a substantial random-projection slice
   per bit.
+
+The LSB=bit-0 convention is load-bearing for the "low nibble of a
+digit *is* its value" claim below — bits 0–3 of `'0'..'9'` = 0x30..0x39
+carry the digit value 0..9 directly.
 
 No character embedding layer; no vocab↔index table on the input side.
 The reservoir's random per-vertex `W_in` *is* the embedding.
@@ -128,6 +156,10 @@ The reservoir's random per-vertex `W_in` *is* the embedding.
   Those channels act as a constant bias — harmless (the reservoir
   absorbs it) but wasted. Kept for encoding simplicity; revisit only
   if input bandwidth becomes a bottleneck.
+- **Space (`' '` = 0x20) is the coldest input in the vocab** — only
+  bit 5 is set; 7 channels drive at −1, 1 at +1. That's a feature,
+  not a bug: spaces act as low-drive separators that let the reservoir
+  briefly relax between tokens without resetting.
 - ASCII Hamming structure is a *prior* the reservoir cannot see past.
   For our vocab it clusters mostly usefully (digits tight, symbols
   tight), but some semantically-paired operators are not Hamming-close
@@ -146,8 +178,11 @@ the output space.
 - **Spectral radius** 0.90, **input scaling** 0.02 — scale-invariant
   defaults for the hypercube topology; no per-size re-tune needed.
 - **Output fraction** 1.0 (HCNN sees full state).
-- **Seed** — **single seed, all phases, no survey.** Uses the DIM 9
-  NARMA winner as a proxy. Multi-seed averaging is explicitly out of
+- **Seed** — **single seed, all phases, no survey.** At DIM 12 both the
+  reservoir-seed lottery and the CNN-init-seed lottery are nearly
+  cosmetic (per `diagnostics/NARMA10.md`'s dispersion-collapse table —
+  CV 1.5% at DIM 9, shrinking further at DIM 12). Pick any seed once
+  and lock it in the driver. Multi-seed averaging is explicitly out of
   scope for this example.
 
 Reservoir state steps once per input character. HCNN sees raw reservoir
@@ -168,15 +203,37 @@ state; no translation layer (HCNN always bypasses it).
   the single strongest token per step.
 
 Starting architecture: `HRCCNNBaseline<12>()` backbone (nl=2, ch=16,
-FLATTEN, lr=0.0015) with **task-specific training overrides: ep=1000,
-bs=4096**. The baseline `ep=2000, bs=2048` is calibrated for ~50k
-gradient updates on regression over NARMA's small dataset. This task
-has ~10× more training positions, so we halve epochs and double batch
-size to land at a reasonable update budget (~250k gradient updates,
-~5× the NARMA calibration — more than baseline, appropriate for the
-richer per-position classification objective). Expect further
-retuning — deeper `nl` and wider `ch` may be needed because the
-readout's job here is far more complex than one regression scalar.
+lr=0.0015) with **training overrides: ep=1000, bs=4096**.
+
+**Head choice: start with GAP, fall back to FLATTEN.** The CNN stack's
+flattened feature dim at DIM 12 with 2 conv+pool pairs is ~1024
+surviving vertices × 16 channels = **16,384**. That makes the final
+linear head parameter count:
+
+| Head | Feature dim | Head params (×20 logits) |
+|---|---|---|
+| **GAP** (global average over vertices) | 16 | **320** |
+| FLATTEN (per-vertex features kept) | 16,384 | **~328k** |
+
+At our v1 scale of 5k expressions × ~40 positions = 200k training
+samples, GAP's 320 head params give a wide sample/parameter margin
+(~600:1), while FLATTEN's 328k puts us into the underfit-by-overparam
+regime (~0.6:1). GAP is the correct starting point. If GAP *underfits*
+(character accuracy climbs but plateaus low), move to FLATTEN — or
+to an intermediate (e.g., FLATTEN with a hidden layer between) — as a
+Phase 3 experiment. Unlike in Mackey-Glass tuning where vertex
+identity carries task-relevant signal, here the reservoir sees
+bit-encoded characters and GAP's translation-invariance prior is
+probably fine.
+
+**Gradient-update budget.** With 200k training positions, bs=4096, and
+ep=1000: **~49k gradient updates**, essentially 1× the NARMA
+calibration — not much headroom, but not starved either. If the
+character-level accuracy keeps climbing at the end of training without
+overfitting, that's our signal to raise the epoch count.
+
+Expect further retuning — deeper `nl` or wider `ch` may be needed if
+the readout's expressivity caps out despite enough gradient updates.
 
 **Decode knobs deferred until v1 works:**
 
@@ -220,9 +277,12 @@ exactly with the inference regime (the user presents one equation;
 we reset, prime, generate).
 
 ```
-sample: "5.00 + 3.00 = 8.00#"
-sample: "-2.50 * 4.00 = -10.00#"
-sample: "(1.00 + 2.00) / 3.00 = 1.00#"
+sample: "5.00 + 3.00 = 8.00#"                  # depth-1, plain
+sample: "-2.50 * 4.00 = -10.00#"               # depth-1, unary-minus operand
+sample: "(1.00 + 2.00) * 3.00 = 9.00#"         # depth-2, paren on left
+sample: "5.00 * (2.00 - -3.00) = 25.00#"       # depth-2, unary minus inside parens
+sample: "10.00 / -4.00 = -2.50#"               # depth-1, rounded division
+sample: "(2.50 + 7.50) / 3.00 = 3.33#"         # depth-2, rounded division
 ...
 ```
 
@@ -236,6 +296,10 @@ sample: "(1.00 + 2.00) / 3.00 = 1.00#"
   Scale up (10k → 25k → larger) as results warrant.
 - Validation: independently-generated 2k-expression set (sized to
   match the v1 training scale; scales up alongside training).
+- **State buffer storage:** `float32` (matches the rest of the
+  library's conventions; the 3.2 GB figure assumes this). `float16`
+  is a lever available later if training-set upscaling ever hits the
+  64 GB ceiling.
 
 **Implications of the reset:**
 
@@ -324,31 +388,40 @@ head is under-tuned — diagnose before scaling.
 ## Phased Delivery
 
 **Phase 1 — scaffold (no HRC).**
-- Expression generator: grammar, value clipping, division rounding.
+- Expression generator: grammar (with the distribution policy above),
+  value clipping, division rounding, division-by-zero rejection.
 - 8-bit bipolar **input** encoder (char → 8-dim ±1 vector for the
   reservoir).
 - Vocab ↔ class-index tables for the **output** side (20-way target
   labels during training + argmax decode at inference).
-- Verify 1k generated samples parse and evaluate correctly with an
-  independent reference evaluator (e.g., `std::stod` on reshaped
-  infix, or a tiny shunting-yard parser).
+- **Verification acceptance criterion**: generate 1k samples; for each
+  line `L`, parse the LHS with an independent shunting-yard evaluator,
+  round-to-2dp per the division policy, and compare to the printed
+  RHS. Any mismatch is a fail-fast generator bug. Phase 1 ships when
+  this passes at 100%.
 
-**Phase 2 — smallest viable model.**
-- DIM 8 (N=256), not 12. Iteration speed matters for the scaffold.
-- Restrict grammar to depth 0, operators `+ -` only, operands in
-  `[-10.00, 10.00]`.
-- Target: exact-match > 50% on held-out `+ -` single-op expressions.
-- If this fails, DIM 12 won't rescue the approach — something
-  structural is wrong. Diagnose before scaling up.
+**Phase 2 — DIM 12 v1.**
+- DIM 12, full vocab, full grammar, GAP head.
+- **5k independent training expressions**, 2k validation.
+- Target: format accuracy > 90% and any non-trivial exact-match. The
+  goal is to confirm the approach converges at all, not to maximize.
+- If format accuracy saturates well below 90% or character accuracy
+  plateaus near chance (~5%, i.e. 1/20), the approach has a structural
+  problem — diagnose (Phase 4 tools) before pushing more data at it.
+- If v1 looks promising but capped, **upscale training to 10k** within
+  this phase and rerun.
 
-**Phase 3 — scale to target.**
-- DIM 12, full vocab, full grammar.
-- **5k independent training expressions** (v1). Upscale in 2× steps
-  only if v1 accuracy is promising but capped.
+**Phase 3 — further scale-up (only if Phase 2 warrants).**
+- Same config as Phase 2; push training to 25k → 50k expressions.
+- Goal: drive exact-match toward the Phase 5 threshold (~80%).
 - Track all three metrics (format, character, exact-match) across
   epochs.
 
 **Phase 4 — diagnostics & tuning.**
+- **Entry criterion**: format accuracy has saturated above 90% and
+  either character accuracy has plateaued over 5 consecutive
+  checkpoints, or exact-match is climbing but operator/magnitude bias
+  is suspected. Don't enter Phase 4 to chase a still-improving loss.
 - Operator-stratified accuracy (where does it fail?).
 - Operand-magnitude-stratified accuracy (does performance degrade
   for `|x| > 50`?).
@@ -357,12 +430,15 @@ head is under-tuned — diagnose before scaling.
   (`p_argmax - p_second`), and distribution entropy. Surfaces where
   the model is confident-and-wrong vs. uncertain-and-wrong — very
   different failure modes that call for different fixes.
-- Head architecture sweep if exact-match stalls (probe `nl`, `ch`).
-  Single seed throughout — no seed survey.
+- Head architecture swap (GAP → FLATTEN, or GAP+hidden) if
+  expressivity looks like the cap.
+- `nl` / `ch` sweep only if the head swap doesn't help. Single seed
+  throughout — no seed survey.
 
 **Phase 5 — scale out if needed.**
-- If DIM 12 caps below, say, 80% exact-match, try DIM 14 (N=16k,
-  ~4× training cost). DIM 16 is the hard ceiling (library-supported).
+- If DIM 12 caps below, say, 80% exact-match despite Phase 4, try
+  DIM 14 (N=16k, ~4× training cost). DIM 16 is the hard ceiling
+  (library-supported).
 
 ## Open Decisions
 
