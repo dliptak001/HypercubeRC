@@ -99,6 +99,19 @@ public:
     /// @param input    Scalar value. Clamped to [-1, 1].
     void InjectInput(size_t channel, float input);
 
+    /// @brief Zero the reservoir state. Equivalent to "return to quiescence".
+    ///
+    /// Clears both state buffers (`vtx_state_` and `vtx_output_`). The
+    /// recurrent weights, W_in, seed, and hyperparameters are left untouched
+    /// — only the time-varying state is wiped. After Reset() the reservoir
+    /// behaves as if it had just been constructed, with zero prior history.
+    ///
+    /// Intended for episodic tasks where each episode should start from a
+    /// fixed, history-free state (e.g., per-expression reset in char-level
+    /// sequence tasks). For stream tasks that rely on continuous dynamics
+    /// across many inputs, do not call this.
+    void Reset();
+
     [[nodiscard]] const float* Outputs() const { return vtx_output_; }
     [[nodiscard]] float GetAlpha() const { return alpha_; }
     [[nodiscard]] uint64_t GetSeed() const { return rng_seed_; }

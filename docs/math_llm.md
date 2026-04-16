@@ -88,10 +88,17 @@ the depth constraint. Worst-case line length is roughly 40–50 characters.
   operator frequencies — they would starve `/` relative to `+`. Uniform
   keeps each operator class well-represented in the training target
   distribution.
-- **Depth mix:** 50/50 between depth-1 (`a op b`) and depth-2
-  (`(a op b) op c` or `a op (b op c)`). A model trained on
-  depth-1-dominated data will fail at depth-2 inference; balanced
-  sampling forces the model to handle both from the start.
+- **Depth mix:** 50/50 between depth-1 (`a op b`) and depth-2. Within
+  the depth-2 bucket, the three structural forms are sampled uniformly
+  at 1/3 each:
+  - `(a op b) op c` (left-paren)
+  - `a op (b op c)` (right-paren)
+  - `(a op b) op (c op d)` (both-paren, 4 atoms)
+
+  Balanced sampling forces the model to handle all three structures;
+  a model trained on depth-1-dominated data will fail at depth-2
+  inference, and a model trained on only left-paren will fail on
+  right- or both-paren forms.
 - **Operand distribution:** uniform in `[-100, 100]` at ≤2-decimal
   resolution (20,001 discrete values per operand slot).
 - **Training-data RHS filter (v1 only):** after rounding/canonicalizing,
@@ -153,6 +160,38 @@ the model should learn it. Both the rounding and the canonicalization
 are applied **only during training-dataset construction** — the model
 just sees the canonical target string. Revisit if training stalls
 specifically on division.
+
+**Canonicalization algorithm** (pseudocode, applied to any numeric
+value before stringifying):
+
+```
+canonicalize(v: double) -> string:
+    # 1. Round to 2 decimals (half-away-from-zero).
+    r = std::round(v * 100.0) / 100.0
+
+    # 2. Collapse -0 and ±0.00 to "0".
+    if r == 0.0:
+        return "0"
+
+    # 3. Split sign, integer part, and fractional cents.
+    sign       = (r < 0) ? "-" : ""
+    r_abs      = |r|
+    int_part   = (int) floor(r_abs)
+    frac_cents = (int) round((r_abs - int_part) * 100)   // 0..99
+
+    # 4. Drop trailing zeros in the fractional part.
+    if frac_cents == 0:
+        return sign + to_string(int_part)            // e.g., "5"
+    if frac_cents % 10 == 0:
+        return sign + to_string(int_part) + "." +
+               to_string(frac_cents / 10)            // e.g., "5.5"
+    return sign + to_string(int_part) + "." +
+           zero_pad_2(frac_cents)                    // e.g., "5.25"
+```
+
+Edge cases this handles correctly: `-0.00` → `"0"`, `5.004` → `"5"`
+(rounds to 5.00, then strips), `5.005` → `"5.01"` (half-away-from-zero
+at the 3rd decimal), `100.0` → `"100"`, `-99.9` → `"-99.9"`.
 
 ## Input Encoding
 
@@ -308,9 +347,9 @@ independent training unit. Before feeding an expression's data:
 
 Priming is applied identically at inference time so that train-state
 ≡ inference-state when predictions are correct (standard teacher-
-forcing guarantee). The protocol belongs in the math_llm driver, not
-in the Reservoir class — `Reset()` stays minimal, priming is the
-caller's job.
+forcing guarantee). The protocol belongs in the `HRCCNN_LLM_Math`
+driver, not in the Reservoir class — `Reset()` stays minimal,
+priming is the caller's job.
 
 `#` is a pure EOS marker with no dual purpose. This aligns training
 exactly with the inference regime (the user presents one equation;
@@ -332,6 +371,13 @@ sample: "0.25 * 0.4 = 0.1#"                    # small operands, canonicalized r
 - Collecting pass: feed the full expression character by character.
 - Teacher forcing: at position `t`, input = char(t), target = char(t+1).
   Every position contributes a training example.
+- **State indexing convention:** the reservoir state the readout sees
+  when predicting char(t+1) is the state **after consuming char(t)**
+  (i.e., after `InjectInput` + `Step`). This is the standard ESN
+  teacher-forcing convention; stating it explicitly so nobody writes
+  an off-by-one collection loop. For an expression of `L` characters,
+  a collecting pass yields `L−1` (state, target) pairs: positions 0
+  through L−2, with char(L−1) = `#` as the final target.
 - Target training-set size: **5k independent expressions** for the v1
   first pass — ~3.2 GB of reservoir states at DIM 12, fast iteration.
   Scale up (10k → 25k → larger) as results warrant.
@@ -503,6 +549,103 @@ head is under-tuned — diagnose before scaling.
   grammar-permitted RHS range (~1e8). Expect a drop; the magnitude
   of the drop measures how much of v1's success was within-bounds
   pattern-matching vs. genuine multi-digit integer-emission skill.
+
+## Deliverable Structure
+
+**Location:** `examples/HRCCNN_LLM_Math/`. Single binary
+`HRCCNN_LLM_Math.exe` with subcommand-style invocation — this is the
+first of what may become several *LLM-style* example tasks (math is
+the quasi-LLM proving ground; text / code / other symbolic streams
+could follow if the approach pans out).
+
+**Subcommands:**
+
+```
+HRCCNN_LLM_Math train --output <model.bin> [--samples N] [--seed S]
+    Generate training data on the fly, run the full reset/prime/collect/
+    train loop, and serialize the resulting model to <model.bin>.
+
+HRCCNN_LLM_Math eval --model <model.bin> [--samples N]
+    Load a serialized model; generate a fresh held-out set; report
+    format / character / exact-match accuracy.
+
+HRCCNN_LLM_Math infer --model <model.bin> --input "<LHS string>"
+    Load a serialized model; run the inference protocol (reset, prime
+    LHS twice, argmax-generate RHS) on a single user-supplied LHS.
+    Prints the emitted RHS.
+```
+
+`main.cpp` is thin — it parses the subcommand, dispatches to one of
+three top-level functions (`RunTrain`, `RunEval`, `RunInfer`), each
+of which lives in its own `.cpp` alongside `main.cpp`. The expression
+generator, encoder/decoder tables, and canonical formatter are their
+own compilation units.
+
+## Serialization
+
+**Critical requirement**, not an afterthought. Training at DIM 12
+with 5k+ expressions is expected to be slow enough that no experiment
+should be run twice. Every trained model persists to disk at the end
+of `train`, and every subsequent `eval` / `infer` invocation loads
+from disk.
+
+**On-disk format** (binary, little-endian, single file):
+
+```
+struct ModelFile {
+    // Header
+    char     magic[8];          // "HCNNLLMM"
+    uint32_t format_version;    // 1 for v1
+    uint32_t dim;               // must match the compile-time DIM
+                                // the binary was built against
+
+    // Reproducibility metadata (informational; not required to
+    // reconstruct the model, but helps with audit)
+    uint64_t training_seed;
+    uint32_t training_samples;
+    uint32_t training_epochs;
+    char     git_sha[40];       // git HEAD at training time
+
+    // Configs — verbatim struct copies, so any schema change bumps
+    // format_version
+    ReservoirConfig  reservoir_cfg;
+    CNNReadoutConfig cnn_cfg;
+
+    // CNN weights — flat float32 array in the same layout as
+    // CNNReadout::GetWeights() returns. Size is determined by cnn_cfg.
+    uint64_t weights_count;
+    float    weights[weights_count];
+};
+```
+
+**Load protocol:**
+
+1. Read header; verify magic, format_version, and `dim` matches the
+   binary's compile-time DIM (fail loudly if not — DIM is a template
+   parameter, not a runtime choice).
+2. Reconstruct `Reservoir<DIM>` from `reservoir_cfg` (same seed →
+   same recurrent weights + W_in).
+3. Reconstruct `CNNReadout<DIM>` from `cnn_cfg` (empty weights).
+4. Call `CNNReadout::SetWeights(weights)` to restore the trained head.
+5. Model is ready for `eval` or `infer`.
+
+**Design notes:**
+
+- Reservoir weights are *not* serialized — they're fully determined
+  by `reservoir_cfg` (seed + hyperparameters) and are recomputed at
+  load time. This is tiny in storage but costs an `Initialize()` call
+  on load (~100ms at DIM 12, fine).
+- CNN weights are the only training product that needs to persist.
+  At nl=2/ch=16/GAP/DIM 12, that's ~320 floats for the linear head
+  plus the conv weights (a few hundred more) — well under a kilobyte.
+  Under FLATTEN it balloons to ~328k floats (~1.3 MB) — still tiny.
+- Saving the full training config inside the file (not just the
+  weights) means a single `.bin` is fully self-contained for `infer`
+  — you don't need to remember what hyperparameters a given checkpoint
+  used.
+- `git_sha` is captured at train time from `git rev-parse HEAD` via a
+  helper. Makes it trivial to correlate a saved checkpoint with the
+  exact source it was trained under.
 
 ## Open Decisions
 
