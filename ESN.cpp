@@ -2,7 +2,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstring>
 #include <limits>
+#include <stdexcept>
 #include <type_traits>
 
 template <size_t DIM>
@@ -14,13 +16,9 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
     num_inputs_      = cfg.num_inputs;
     output_fraction_ = cfg.output_fraction;
 
-    // HCNN readout cannot consume translation features — force Raw mode.
-    // (output_fraction is NOT forced here; callers driving CNNReadout
-    // directly may use stride-of-power-of-2 subsampling to present the
-    // CNN with a sub-hypercube of reduced effective DIM. Arbitrary strides
-    // still break HypercubeCNN's XOR-neighbor assumptions, so non-power-
-    // of-2 values remain risky for HCNN users and are the caller's
-    // responsibility.)
+    // HCNN operates directly on reservoir state (optionally stride-subsampled
+    // onto a sub-hypercube) — it never consumes TranslationLayer features.
+    // Force Raw so GetFeatureMode() reports something honest.
     if (readout_type_ == ReadoutType::HCNN)
     {
         feature_mode_    = FeatureMode::Raw;
@@ -30,6 +28,19 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
     size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * output_fraction_)));
     output_stride_ = std::max<size_t>(1, N / M);
     num_output_verts_ = (N + output_stride_ - 1) / output_stride_;
+
+    // HCNN subsamples reservoir state onto a sub-hypercube via stride selection.
+    // HypercubeCNN's convolution uses XOR-neighbor masks (hypercube topology),
+    // so the stride MUST be a power of 2 — arbitrary strides produce a subset
+    // with no coherent hypercube structure.
+    if (readout_type_ == ReadoutType::HCNN &&
+        (output_stride_ & (output_stride_ - 1)) != 0)
+    {
+        throw std::invalid_argument(
+            "ESN<HCNN>: output_fraction must yield a power-of-2 stride "
+            "(1, 2, 4, 8, 16, ...). Use output_fraction in "
+            "{1.0, 0.5, 0.25, 0.125, 0.0625, ...}.");
+    }
 
     if (readout_type_ == ReadoutType::HCNN)
         readout_ = CNNReadout{};
@@ -78,12 +89,28 @@ void ESN<DIM>::ClearStates()
 }
 
 template <size_t DIM>
+void ESN<DIM>::Reset()
+{
+    reservoir_->Reset();
+    ClearStates();
+}
+
+template <size_t DIM>
+void ESN<DIM>::ResetReservoirOnly()
+{
+    reservoir_->Reset();
+}
+
+template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size)
 {
     if (readout_type_ == ReadoutType::HCNN) {
         // CNN readout uses raw state directly -- no feature pipeline.
+        // Subsample to the sub-hypercube (stride-selected vertices) before
+        // handing off; CNN sees an effective-DIM hypercube of width num_output_verts_.
+        auto sub = HCNNStates(0, train_size);
         std::get<CNNReadout>(readout_).Train(
-            states_.data(), targets, train_size, DIM);
+            sub.data(), targets, train_size, EffectiveDIM());
         return;
     }
     EnsureFeatures();
@@ -122,8 +149,9 @@ void ESN<DIM>::Train(const float* targets, size_t train_size,
                      const CNNReadoutConfig& config)
 {
     assert(readout_type_ == ReadoutType::HCNN);
+    auto sub = HCNNStates(0, train_size);
     std::get<CNNReadout>(readout_).Train(
-        states_.data(), targets, train_size, DIM, config);
+        sub.data(), targets, train_size, EffectiveDIM(), config);
 }
 
 template <size_t DIM>
@@ -144,8 +172,7 @@ float ESN<DIM>::PredictRaw(size_t timestep) const
 {
     assert(timestep < num_collected_);
     if (readout_type_ == ReadoutType::HCNN) {
-        const float* s = states_.data() + timestep * N;
-        return std::get<CNNReadout>(readout_).PredictRaw(s);
+        return std::get<CNNReadout>(readout_).PredictRaw(HCNNState(timestep));
     }
     EnsureFeatures();
     size_t nf = NumFeatures();
@@ -158,8 +185,7 @@ void ESN<DIM>::PredictRaw(size_t timestep, float* output) const
 {
     assert(timestep < num_collected_);
     if (readout_type_ == ReadoutType::HCNN) {
-        const float* s = states_.data() + timestep * N;
-        std::get<CNNReadout>(readout_).PredictRaw(s, output);
+        std::get<CNNReadout>(readout_).PredictRaw(HCNNState(timestep), output);
         return;
     }
     // Linear/Ridge: single scalar output.
@@ -170,13 +196,43 @@ void ESN<DIM>::PredictRaw(size_t timestep, float* output) const
 }
 
 template <size_t DIM>
+float ESN<DIM>::PredictLiveRaw() const
+{
+    const float* res_out = reservoir_->Outputs();
+
+    if (readout_type_ == ReadoutType::HCNN) {
+        return std::get<CNNReadout>(readout_).PredictRaw(SubsampleIntoScratch(res_out));
+    }
+
+    // Linear/Ridge: one-sample feature vector from the live state.
+    if (feature_mode_ == FeatureMode::Translated) {
+        auto feat = TranslationTransformSelected<DIM>(res_out, 1, output_stride_, num_output_verts_);
+        return std::visit([&](const auto& r) { return r.PredictRaw(feat.data()); }, readout_);
+    }
+    const float* feat = SubsampleIntoScratch(res_out);
+    return std::visit([&](const auto& r) { return r.PredictRaw(feat); }, readout_);
+}
+
+template <size_t DIM>
+void ESN<DIM>::PredictLiveRaw(float* output) const
+{
+    if (readout_type_ == ReadoutType::HCNN) {
+        std::get<CNNReadout>(readout_).PredictRaw(
+            SubsampleIntoScratch(reservoir_->Outputs()), output);
+        return;
+    }
+    // Linear/Ridge: single scalar output — delegate to scalar overload.
+    output[0] = PredictLiveRaw();
+}
+
+template <size_t DIM>
 double ESN<DIM>::R2(const float* targets, size_t start, size_t count) const
 {
     assert(start + count <= num_collected_);
     if (readout_type_ == ReadoutType::HCNN) {
         const auto& cnn = std::get<CNNReadout>(readout_);
-        const float* s = states_.data() + start * N;
-        return cnn.R2(s, targets + start * cnn.NumOutputs(), count);
+        auto sub = HCNNStates(start, count);
+        return cnn.R2(sub.data(), targets + start * cnn.NumOutputs(), count);
     }
     EnsureFeatures();
     size_t nf = NumFeatures();
@@ -195,10 +251,11 @@ double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
         const size_t K = cnn.NumOutputs();
         const float* tgt = targets + start * K;
 
-        // Predict all samples once, cache results.
+        // Predict all samples once, cache results. Subsample per sample into
+        // the scratch buffer; cheap relative to the CNN forward pass.
         std::vector<float> preds(count * K);
         for (size_t s = 0; s < count; ++s)
-            cnn.PredictRaw(states_.data() + (start + s) * N, preds.data() + s * K);
+            cnn.PredictRaw(HCNNState(start + s), preds.data() + s * K);
 
         // Average NRMSE across outputs.
         double nrmse_sum = 0.0;
@@ -249,8 +306,8 @@ double ESN<DIM>::Accuracy(const float* labels, size_t start, size_t count) const
 {
     assert(start + count <= num_collected_);
     if (readout_type_ == ReadoutType::HCNN) {
-        const float* s = states_.data() + start * N;
-        return std::get<CNNReadout>(readout_).Accuracy(s, labels + start, count);
+        auto sub = HCNNStates(start, count);
+        return std::get<CNNReadout>(readout_).Accuracy(sub.data(), labels + start, count);
     }
     EnsureFeatures();
     size_t nf = NumFeatures();
@@ -269,21 +326,16 @@ size_t ESN<DIM>::NumOutputs() const
 template <size_t DIM>
 std::vector<float> ESN<DIM>::SelectedStates() const
 {
-    std::vector<float> selected(num_collected_ * num_output_verts_);
-    for (size_t s = 0; s < num_collected_; ++s)
-    {
-        const float* src = states_.data() + s * N;
-        float* dst = selected.data() + s * num_output_verts_;
-        size_t j = 0;
-        for (size_t v = 0; v < N; v += output_stride_)
-            dst[j++] = src[v];
-    }
-    return selected;
+    return HCNNStates(0, num_collected_);
 }
 
 template <size_t DIM>
 void ESN<DIM>::EnsureFeatures() const
 {
+    // HCNN bypasses the feature cache — it consumes subsampled states
+    // directly via HCNNStates(). Skip to avoid wasting memory on a
+    // duplicate copy of what HCNNStates() already produces on demand.
+    if (readout_type_ == ReadoutType::HCNN) return;
     if (features_computed_ == num_collected_) return;
     size_t nf = NumFeatures();
     size_t old_count = features_computed_;
@@ -313,7 +365,7 @@ template <size_t DIM>
 size_t ESN<DIM>::NumFeatures() const
 {
     if (readout_type_ == ReadoutType::HCNN)
-        return N;  // CNN operates on full raw state
+        return num_output_verts_;  // CNN operates on stride-selected sub-hypercube
     if (feature_mode_ == FeatureMode::Translated)
         return TranslationFeatureCountSelected(num_output_verts_);
     return num_output_verts_;
@@ -364,6 +416,53 @@ void ESN<DIM>::SetReadoutState(const ReadoutState& state)
                        state.feature_mean, state.feature_scale);
         }
     }, readout_);
+}
+
+// ---------------------------------------------------------------
+//  HCNN sub-hypercube subsampling helpers
+// ---------------------------------------------------------------
+
+template <size_t DIM>
+size_t ESN<DIM>::EffectiveDIM() const
+{
+    // num_output_verts_ is always a power of 2 when readout_type_ == HCNN
+    // (constructor rejects non-power-of-2 strides). For other readouts the
+    // value is still meaningful but not necessarily used.
+    size_t d = 0;
+    for (size_t n = num_output_verts_; n > 1; n >>= 1)
+        ++d;
+    return d;
+}
+
+template <size_t DIM>
+const float* ESN<DIM>::SubsampleIntoScratch(const float* src) const
+{
+    scratch_subsampled_.resize(num_output_verts_);
+    size_t j = 0;
+    for (size_t v = 0; v < N; v += output_stride_)
+        scratch_subsampled_[j++] = src[v];
+    return scratch_subsampled_.data();
+}
+
+template <size_t DIM>
+const float* ESN<DIM>::HCNNState(size_t timestep) const
+{
+    return SubsampleIntoScratch(states_.data() + timestep * N);
+}
+
+template <size_t DIM>
+std::vector<float> ESN<DIM>::HCNNStates(size_t start, size_t count) const
+{
+    std::vector<float> buf(count * num_output_verts_);
+    for (size_t s = 0; s < count; ++s)
+    {
+        const float* src = states_.data() + (start + s) * N;
+        float* dst = buf.data() + s * num_output_verts_;
+        size_t j = 0;
+        for (size_t v = 0; v < N; v += output_stride_)
+            dst[j++] = src[v];
+    }
+    return buf;
 }
 
 // Explicit template instantiations (DIM 5-16)

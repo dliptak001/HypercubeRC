@@ -62,8 +62,34 @@ public:
     /// @param inputs  Pointer to num_steps * num_inputs floats, row-major.
     void Run(const float* inputs, size_t num_steps);
 
-    /// @brief Clear collected states and cached features.
+    /// @brief State management — three reset scopes.
+    ///
+    /// | Method               | Reservoir | Cache |
+    /// |----------------------|-----------|-------|
+    /// | `ClearStates()`      |   keep    | clear |
+    /// | `ResetReservoirOnly()`|  clear   | keep  |
+    /// | `Reset()`            |   clear   | clear |
+    ///
+    /// "Reservoir" here means the live reservoir state (`vtx_state_` /
+    /// `vtx_output_`); recurrent and input weights are always preserved.
+    /// "Cache" means `states_` + `features_` (the training buffer).
+    ///
+    /// Pick the one that matches the episode boundary:
+    ///   - `ClearStates()`: drop training samples, keep dynamics going
+    ///     (e.g. sliding-window retraining on continuous data).
+    ///   - `ResetReservoirOnly()`: episodic reservoir, cumulative buffer
+    ///     (e.g. HRCCNN_LLM_Math per-expression reset + priming).
+    ///   - `Reset()`: completely fresh start (e.g. new validation run).
+
+    /// @brief Clear collected states and cached features; reservoir state untouched.
     void ClearStates();
+
+    /// @brief Zero reservoir state AND clear collected states/features.
+    /// Equivalent to `ResetReservoirOnly() + ClearStates()`.
+    void Reset();
+
+    /// @brief Zero only the reservoir state; cache (states_, features_) preserved.
+    void ResetReservoirOnly();
 
     // ---------------------------------------------------------------
     //  Training
@@ -101,6 +127,16 @@ public:
     /// For HCNN readout with num_outputs > 1; for Linear/Ridge writes 1 float.
     void PredictRaw(size_t timestep, float* output) const;
 
+    /// @brief Predict from the reservoir's CURRENT output, bypassing the
+    /// cached states_ buffer. Intended for autoregressive / streaming
+    /// inference loops that step the reservoir and immediately predict
+    /// without snapshotting state. Scalar overload (num_outputs must be 1).
+    [[nodiscard]] float PredictLiveRaw() const;
+
+    /// @brief Multi-output live predict: writes NumOutputs() floats to output.
+    /// See scalar overload for semantics.
+    void PredictLiveRaw(float* output) const;
+
     /// @brief R² on a slice of collected states [start, start+count).
     /// targets layout: count * NumOutputs() floats (row-major) for HCNN,
     /// count floats for Linear/Ridge.  Indexed from `start`.
@@ -130,7 +166,10 @@ public:
     /// Only computes features for states added since the last call.
     void EnsureFeatures() const;
 
-    /// @brief Number of features per timestep (M for Raw, 2.5M for Translated).
+    /// @brief Size of the per-timestep vector the readout consumes.
+    ///   Linear/Ridge + Raw        : M = num_output_verts_
+    ///   Linear/Ridge + Translated : 2.5 * M
+    ///   HCNN                      : M (CNN operates on the subsampled sub-hypercube)
     [[nodiscard]] size_t NumFeatures() const;
 
     // --- Accessors ---
@@ -181,4 +220,20 @@ private:
 
     mutable std::vector<float> features_;    // flat: num_collected_ * NumFeatures() floats
     mutable size_t features_computed_ = 0;   // incremental: features valid for [0, features_computed_)
+
+    // Sub-hypercube subsampling helpers. Reservoir state is N = 2^DIM floats;
+    // consumers (HCNN's CNN and Raw-mode Linear/Ridge live inference) see
+    // num_output_verts_ = 2^EffectiveDIM() floats by taking every
+    // output_stride_'th vertex. output_stride_ is validated power-of-2 at
+    // construction when readout_type_ == HCNN.
+    [[nodiscard]] size_t EffectiveDIM() const;
+    const float* SubsampleIntoScratch(const float* src) const; // fills scratch_subsampled_
+    const float* HCNNState(size_t timestep) const;             // delegates to SubsampleIntoScratch
+    [[nodiscard]] std::vector<float> HCNNStates(size_t start, size_t count) const;
+
+    // Per-prediction scratch for one-at-a-time subsampling.
+    // NOT thread-safe: concurrent const calls (e.g. parallel PredictRaw over
+    // timesteps) would race on this buffer. Use per-thread ESN instances
+    // when parallelizing prediction.
+    mutable std::vector<float> scratch_subsampled_;
 };
