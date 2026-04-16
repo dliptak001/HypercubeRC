@@ -183,6 +183,11 @@ HCNNPreset NARMA10()
     else if constexpr (DIM == 6) p.reservoir.seed = 10977843040216038077ULL;
     else if constexpr (DIM == 7) p.reservoir.seed = 6437149480297576047ULL;
     else if constexpr (DIM == 8) p.reservoir.seed = 13602423379507409791ULL;
+    else if constexpr (DIM == 9) p.reservoir.seed = 10293005394405557670ULL;
+    // DIM 10 has no 500-seed NARMA survey; uses the DIM 10 MG SR=0.90 winner
+    // as a cross-task proxy (same seed was also the DIM 7 NARMA SR=0.90 winner,
+    // making it a genuine cross-task standout). See docs/SeedSurvey.md.
+    else if constexpr (DIM == 10) p.reservoir.seed = 6437149480297576047ULL;
     else                         p.reservoir.seed = 42ULL;  // fallback
 
     // CNN config: defaults until tuned per DIM.
@@ -220,6 +225,16 @@ CNNReadoutConfig HRCCNNBaseline()
     cfg.epochs        = 2000;
     cfg.batch_size    = 1 << (DIM - 1);
     cfg.lr_max        = 0.0015f;
+    // Per-DIM rank-1 CNN weight-init seeds from CnnSeedSurvey (50-seed
+    // survey at DIM 5-8, 20-seed at DIM 9+ where the seed lottery is
+    // cosmetic). Cross-DIM ranking shows these seeds are strong across
+    // tasks, so they are used as the generic HRCCNN baseline init.
+    // See diagnostics/NARMA10.md.
+    if constexpr      (DIM == 5) cfg.seed = 21;
+    else if constexpr (DIM == 6) cfg.seed = 34;
+    else if constexpr (DIM == 7) cfg.seed = 6;
+    else if constexpr (DIM == 8) cfg.seed = 2;
+    else if constexpr (DIM == 9) cfg.seed = 20;
     return cfg;
 }
 

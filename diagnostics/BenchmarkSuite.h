@@ -116,8 +116,8 @@ struct BenchmarkSuite
         RunAndPrintMG<6>(output_fraction, config, run_hcnn);
         RunAndPrintMG<7>(output_fraction, config, run_hcnn);
         RunAndPrintMG<8>(output_fraction, config, run_hcnn);
-        RunAndPrintMG<9>(output_fraction, config, run_hcnn);
-        RunAndPrintMG<10>(output_fraction, config, run_hcnn);
+        //RunAndPrintMG<9>(output_fraction, config, run_hcnn);
+        //RunAndPrintMG<10>(output_fraction, config, run_hcnn);
 
         std::cout << "\n--- NARMA-10 (NRMSE, lower is better) ---\n";
         std::cout << "Nonlinear autoregressive benchmark requiring both memory (10-step\n";
@@ -132,8 +132,8 @@ struct BenchmarkSuite
         RunAndPrintNARMA<6>(output_fraction, config, run_hcnn);
         RunAndPrintNARMA<7>(output_fraction, config, run_hcnn);
         RunAndPrintNARMA<8>(output_fraction, config, run_hcnn);
-        RunAndPrintNARMA<9>(output_fraction, config, run_hcnn);
-        RunAndPrintNARMA<10>(output_fraction, config, run_hcnn);
+        //RunAndPrintNARMA<9>(output_fraction, config, run_hcnn);
+        //RunAndPrintNARMA<10>(output_fraction, config, run_hcnn);
     }
 
 private:

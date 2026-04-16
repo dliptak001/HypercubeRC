@@ -60,7 +60,7 @@ struct CnnSeedResult
 // =====================================================================
 // Configuration — change these and rebuild
 // =====================================================================
-static constexpr size_t   NUM_CNN_SEEDS = 50;    ///< Seeds per DIM.
+static constexpr size_t   NUM_CNN_SEEDS = 20;    ///< Seeds per DIM.
 static constexpr unsigned SEED_BASE     = 1;     ///< First cnn_cfg.seed value.
 static constexpr size_t   TOP_K         = 10;    ///< Top-N seeds tracked per DIM.
 // =====================================================================
@@ -438,11 +438,14 @@ int main()
     std::iota(seeds.begin(), seeds.end(), SEED_BASE);
 
     std::vector<DimSurvey> all;
-    all.reserve(4);
+    /*all.reserve(4);
     all.push_back(SurveyOne<5>(seeds));
     all.push_back(SurveyOne<6>(seeds));
     all.push_back(SurveyOne<7>(seeds));
-    all.push_back(SurveyOne<8>(seeds));
+    all.push_back(SurveyOne<8>(seeds));*/
+
+    all.reserve(1);
+    all.push_back(SurveyOne<10>(seeds));
 
     PrintTopKPerDim(all, TOP_K);
     PrintTopKOverlap(all, TOP_K);
