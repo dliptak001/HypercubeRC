@@ -34,7 +34,10 @@ cycles without earning its keep.
 
 ## Expression Grammar
 
-- Nesting depth ≤ 2 (at most one level of parentheses).
+- Nesting depth ≤ 2. **Depth definition by example:**
+  - `a op b` → depth 1.
+  - `(a op b) op c` → depth 2 (one level of parens).
+  - `(c op (a op b)) op d` → depth 3 (two levels; out of scope).
 - Operand values in `[-100.00, 100.00]`, always printed with exactly 2
   decimal places.
 - Answer printed with exactly 2 decimal places followed by `#`.
@@ -48,6 +51,13 @@ operand := number | '(' expr ')'
 number  := [ '-' ] digit{1,3} '.' digit digit
 op      := '+' | '-' | '*' | '/'
 ```
+
+**Unary minus.** A leading `-` may prefix any `number` in any position
+— after `=`, after `(`, after a binary operator, or at the start of a
+bare expression. Parentheses are **not** required to wrap a negative
+operand (e.g., `3.00 * -5.00 = -15.00#` is well-formed). The model is
+expected to infer operator precedence from context; unary vs. binary
+`-` is disambiguated by position, not grammar.
 
 **Value-range risk.** Depth-2 multiplication permits results like
 `100.00 * 100.00 * 100.00 = 1e6` — blows the 2-decimal output format and
@@ -71,13 +81,15 @@ policies:
 
 | Option | Meaning | Tradeoff |
 |---|---|---|
-| A | Round true result to 2 decimals | Target is approximate; model learns rounding |
+| A | Round true result to 2 decimals via `std::round` (half-away-from-zero) | Target is approximate; model learns rounding |
 | B | Reject expressions whose result isn't exactly 2-decimal | Aggressive filter; starves grammar diversity |
 | C | Restrict divisor to clean values (integers, powers of 10) | Narrows grammar, cleanly preserves format |
 
-**Default: Option A.** Rounding is a legitimate "do the math" skill and
-the model should learn it. Revisit if training stalls specifically on
-division.
+**Default: Option A** with `std::round` (half-away-from-zero). Rounding
+is a legitimate "do the math" skill and the model should learn it. This
+rounding is applied **only during training-dataset construction** — the
+model just sees the final 2-decimal target. Revisit if training stalls
+specifically on division.
 
 ## Input Encoding
 
@@ -134,9 +146,9 @@ the output space.
 - **Spectral radius** 0.90, **input scaling** 0.02 — scale-invariant
   defaults for the hypercube topology; no per-size re-tune needed.
 - **Output fraction** 1.0 (HCNN sees full state).
-- **Seed** — no task-specific survey exists yet. First pass uses the
-  DIM 9 NARMA winner as a proxy, or falls back to 42. A dedicated
-  seed survey at DIM 12 on this task is a phase-4 item.
+- **Seed** — **single seed, all phases, no survey.** Uses the DIM 9
+  NARMA winner as a proxy. Multi-seed averaging is explicitly out of
+  scope for this example.
 
 Reservoir state steps once per input character. HCNN sees raw reservoir
 state; no translation layer (HCNN always bypasses it).
@@ -155,11 +167,16 @@ state; no translation layer (HCNN always bypasses it).
 - **Inference decode**: **argmax** over the 20 probabilities. Picks
   the single strongest token per step.
 
-Starting architecture: `HRCCNNBaseline<12>()` (nl=2, ch=16, FLATTEN,
-ep=2000, bs=2048, lr=0.0015). That baseline is calibrated for
-regression on NARMA, not 20-way classification on arithmetic. Expect
-per-task retuning — deeper `nl` and wider `ch` may be needed because
-the readout's job here is far more complex than one regression scalar.
+Starting architecture: `HRCCNNBaseline<12>()` backbone (nl=2, ch=16,
+FLATTEN, lr=0.0015) with **task-specific training overrides: ep=1000,
+bs=4096**. The baseline `ep=2000, bs=2048` is calibrated for ~50k
+gradient updates on regression over NARMA's small dataset. This task
+has ~10× more training positions, so we halve epochs and double batch
+size to land at a reasonable update budget (~250k gradient updates,
+~5× the NARMA calibration — more than baseline, appropriate for the
+richer per-position classification objective). Expect further
+retuning — deeper `nl` and wider `ch` may be needed because the
+readout's job here is far more complex than one regression scalar.
 
 **Decode knobs deferred until v1 works:**
 
@@ -177,11 +194,30 @@ the readout's job here is far more complex than one regression scalar.
 
 ## Training Regime
 
-**Per-expression reset.** Each expression is an independent training
-unit. Before feeding an expression's LHS, the reservoir state is reset
-to zero; `#` is a pure EOS marker with no dual purpose. This aligns
-training exactly with the inference regime (the user presents one
-equation; we reset and generate).
+**Per-expression reset + LHS priming.** Each expression is an
+independent training unit. Before feeding an expression's data:
+
+1. `reservoir.Reset()` (zero the state — library semantics settled as
+   Option 1, nothing else).
+2. Prime: feed the LHS through the reservoir **twice**, discarding all
+   states. Each priming pass runs only the hypercube update — the CNN
+   readout is not invoked. This washes out the zero-init transient
+   (at SR=0.90 the zero-state contribution decays to ~4% after ~30
+   character steps, so two LHS passes lands the reservoir firmly in
+   echo-state territory before the collecting pass begins).
+3. Collecting pass: feed the full expression (LHS + RHS), collecting
+   `(state, next-char target)` pairs at every position for teacher-
+   forced training.
+
+Priming is applied identically at inference time so that train-state
+≡ inference-state when predictions are correct (standard teacher-
+forcing guarantee). The protocol belongs in the math_llm driver, not
+in the Reservoir class — `Reset()` stays minimal, priming is the
+caller's job.
+
+`#` is a pure EOS marker with no dual purpose. This aligns training
+exactly with the inference regime (the user presents one equation;
+we reset, prime, generate).
 
 ```
 sample: "5.00 + 3.00 = 8.00#"
@@ -190,13 +226,16 @@ sample: "(1.00 + 2.00) / 3.00 = 1.00#"
 ...
 ```
 
-- Before each expression: `reservoir.Reset()` (zero the state vector).
-- Feed the full expression character by character.
+- Before each expression: `reservoir.Reset()` (zero the state), then
+  two priming passes over the LHS (no readout, no state collection).
+- Collecting pass: feed the full expression character by character.
 - Teacher forcing: at position `t`, input = char(t), target = char(t+1).
   Every position contributes a training example.
-- Target training-set size: **~25k independent expressions** for first
-  pass. Scale up if accuracy plateaus without overfitting.
-- Validation: independently-generated 10k-expression set.
+- Target training-set size: **5k independent expressions** for the v1
+  first pass — ~3.2 GB of reservoir states at DIM 12, fast iteration.
+  Scale up (10k → 25k → larger) as results warrant.
+- Validation: independently-generated 2k-expression set (sized to
+  match the v1 training scale; scales up alongside training).
 
 **Implications of the reset:**
 
@@ -209,14 +248,9 @@ sample: "(1.00 + 2.00) / 3.00 = 1.00#"
   "answer is complete" signal, not "new context begins."
 - **No cross-expression carryover.** The reservoir never sees a
   previous expression's residual state, so training samples are IID.
-- **Transient-washout cost.** Spectral radius 0.90 means zero-init
-  state decays toward its input-driven trajectory over ~5-10 steps.
-  The first few character positions per expression operate on weak
-  state. For v1 we accept this: training sees it consistently, so
-  the model learns to bootstrap from cold-start. If early-position
-  accuracy materially lags late-position accuracy in phase 2
-  diagnostics, prepend a short fixed priming prefix (e.g., `"##"`)
-  to each expression at train and inference time.
+- **Transient washout is handled by priming**, not accepted. See
+  the LHS-priming protocol above. Priming is free (reservoir-only,
+  no readout), so there is no reason to tolerate weak-state positions.
 
 **Should LHS positions contribute loss?** At deployment the model only
 emits RHS characters; LHS is always given. Two views:
@@ -238,14 +272,15 @@ frequency loss reweighting in the softmax head is the first lever.
 
 ```
 1. reservoir.Reset()                          # zero the state
-2. Feed LHS one char at a time: "5.00 + 3.00 = "
-3. Loop:
+2. Prime: feed LHS twice (reservoir-only, no readout).
+3. Final LHS pass: feed "5.00 + 3.00 = " one char at a time.
+4. Generation loop:
      p ← softmax(CNNReadout(state))
      c ← argmax(p)                            # argmax first; sampling later
      emit c
      if c == '#': break
      state ← reservoir.step(bipolar_bits(c))  # 8-dim ±1 from ASCII byte
-4. Concatenated emitted chars = predicted RHS.
+5. Concatenated emitted chars = predicted RHS.
 ```
 
 Hard output-length cap of ~12 chars prevents runaway generation when
@@ -290,7 +325,10 @@ head is under-tuned — diagnose before scaling.
 
 **Phase 1 — scaffold (no HRC).**
 - Expression generator: grammar, value clipping, division rounding.
-- Vocab ↔ index tables; one-hot encoder/decoder.
+- 8-bit bipolar **input** encoder (char → 8-dim ±1 vector for the
+  reservoir).
+- Vocab ↔ class-index tables for the **output** side (20-way target
+  labels during training + argmax decode at inference).
 - Verify 1k generated samples parse and evaluate correctly with an
   independent reference evaluator (e.g., `std::stod` on reshaped
   infix, or a tiny shunting-yard parser).
@@ -305,13 +343,12 @@ head is under-tuned — diagnose before scaling.
 
 **Phase 3 — scale to target.**
 - DIM 12, full vocab, full grammar.
-- 25k independent training expressions (scale up if plateau without
-  overfit).
+- **5k independent training expressions** (v1). Upscale in 2× steps
+  only if v1 accuracy is promising but capped.
 - Track all three metrics (format, character, exact-match) across
   epochs.
 
 **Phase 4 — diagnostics & tuning.**
-- Seed survey at DIM 12 on this task (reservoir and CNN-init seeds).
 - Operator-stratified accuracy (where does it fail?).
 - Operand-magnitude-stratified accuracy (does performance degrade
   for `|x| > 50`?).
@@ -321,6 +358,7 @@ head is under-tuned — diagnose before scaling.
   the model is confident-and-wrong vs. uncertain-and-wrong — very
   different failure modes that call for different fixes.
 - Head architecture sweep if exact-match stalls (probe `nl`, `ch`).
+  Single seed throughout — no seed survey.
 
 **Phase 5 — scale out if needed.**
 - If DIM 12 caps below, say, 80% exact-match, try DIM 14 (N=16k,
@@ -328,10 +366,8 @@ head is under-tuned — diagnose before scaling.
 
 ## Open Decisions
 
-- DIM 12 seed: use DIM 9 NARMA winner as proxy until a task-specific
-  survey runs.
 - Keep or drop space from the vocab. Default keep; revisit at phase 3.
 - Per-class loss weighting (uniform vs inverse-frequency). Default
   uniform; switch to inverse-frequency if operators/EOS under-train.
-- Sampling vs. argmax at inference. Start argmax; sampling only if
-  we want diversity metrics.
+- Reservoir `Reset()` semantics — see task #1.
+- v1 training-set size given 64 GB RAM budget — see task #2.
