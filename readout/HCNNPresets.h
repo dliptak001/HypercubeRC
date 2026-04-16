@@ -235,6 +235,7 @@ CNNReadoutConfig HRCCNNBaseline()
     else if constexpr (DIM == 7) cfg.seed = 6;
     else if constexpr (DIM == 8) cfg.seed = 2;
     else if constexpr (DIM == 9) cfg.seed = 20;
+    else if constexpr (DIM == 10) cfg.seed = 2;
     return cfg;
 }
 

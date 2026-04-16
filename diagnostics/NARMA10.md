@@ -88,27 +88,29 @@ the rank-1 reservoir from the 500-seed survey: 50 CNN seeds at DIM 5-8,
 20 CNN seeds at DIM 9+ (where the seed lottery is effectively cosmetic).
 The dispersion collapses monotonically as the reservoir grows:
 
-| DIM | N   | mean   | std     | range   | CV     | best seed |
-|-----|-----|--------|---------|---------|--------|-----------|
-| 5   | 32  | 0.4075 | 0.02319 | 0.08953 | 5.69%  | 21        |
-| 6   | 64  | 0.3511 | 0.01849 | 0.08448 | 5.27%  | 34        |
-| 7   | 128 | 0.2329 | 0.00768 | 0.03091 | 3.30%  | 6         |
-| 8   | 256 | 0.1603 | 0.00414 | 0.01738 | 2.58%  | 2         |
-| 9   | 512 | 0.1368 | 0.00209 | 0.00689 | 1.53%  | 20        |
+| DIM | N    | mean   | std     | range   | CV     | best seed |
+|-----|------|--------|---------|---------|--------|-----------|
+| 5   | 32   | 0.4075 | 0.02319 | 0.08953 | 5.69%  | 21        |
+| 6   | 64   | 0.3511 | 0.01849 | 0.08448 | 5.27%  | 34        |
+| 7   | 128  | 0.2329 | 0.00768 | 0.03091 | 3.30%  | 6         |
+| 8   | 256  | 0.1603 | 0.00414 | 0.01738 | 2.58%  | 2         |
+| 9   | 512  | 0.1368 | 0.00209 | 0.00689 | 1.53%  | 20        |
+| 10  | 1024 | 0.1239 | 0.00132 | 0.00440 | 1.06%  | 2         |
 
 Trends:
 
 - **Std roughly halves per DIM step at the larger sizes** (0.0185 → 0.0077
-  → 0.0041 → 0.0021). The steepest drop is 6 → 7 (−58%); the halving rule
-  holds cleanly from DIM 7 onward.
+  → 0.0041 → 0.0021 → 0.0013). The steepest drop is 6 → 7 (−58%); the
+  halving rule holds cleanly from DIM 7 onward, attenuating slightly at
+  9 → 10 (−37%, not quite a halving).
 - **Range tracks std**: nearly flat from DIM 5 → 6, then ~3× tighter at
-  DIM 7, ~5× tighter at DIM 8, and ~13× tighter at DIM 9.
-- **CV (std / mean) also shrinks** from 5.7% to 1.5%, so the tightening is
+  DIM 7, ~5× tighter at DIM 8, ~13× tighter at DIM 9, ~20× tighter at DIM 10.
+- **CV (std / mean) also shrinks** from 5.7% to 1.1%, so the tightening is
   not just a mean-scaling artifact — NRMSE falls, and spread around that
   smaller mean falls faster.
 - **Mean NRMSE gains per DIM step are shrinking**: 7→8 improved −31%,
-  8→9 improved −15%. The architecture is approaching an asymptote for
-  NARMA under this baseline.
+  8→9 improved −15%, 9→10 improved −9.5%. The architecture is approaching
+  an asymptote for NARMA under this baseline.
 
 **Interpretation.** The CNN-init seed lottery dominates at small
 reservoirs: at DIM 5 the best seed is ~24% better (relative NRMSE) than
