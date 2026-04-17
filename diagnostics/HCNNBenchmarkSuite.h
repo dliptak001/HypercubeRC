@@ -61,16 +61,16 @@ struct HCNNBenchmarkSuite
         std::cout << "\n--- NARMA-10 (NRMSE, lower is better) ---\n";
         std::cout << "  DIM |     N |    NRMSE |  time(s)\n";
         std::cout << "  ----+-------+----------+---------\n" << std::flush;
-        /*RunAndPrintNARMA<5>(output_fraction, config);
-        RunAndPrintNARMA<6>(output_fraction, config);
+        //RunAndPrintNARMA<5>(output_fraction, config);
+        //RunAndPrintNARMA<6>(output_fraction, config);
         RunAndPrintNARMA<7>(output_fraction, config);
         RunAndPrintNARMA<8>(output_fraction, config);
         RunAndPrintNARMA<9>(output_fraction, config);
-        RunAndPrintNARMA<10>(output_fraction, config);*/
-        RunAndPrintNARMA<11>(output_fraction, config);
+        RunAndPrintNARMA<10>(output_fraction, config);
+        /*RunAndPrintNARMA<11>(output_fraction, config);
         RunAndPrintNARMA<12>(output_fraction, config);
         RunAndPrintNARMA<13>(output_fraction, config);
-        RunAndPrintNARMA<14>(output_fraction, config);
+        RunAndPrintNARMA<14>(output_fraction, config);*/
     }
 
 private:
