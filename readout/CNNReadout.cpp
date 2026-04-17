@@ -66,12 +66,12 @@ void CNNReadout::build_architecture()
     const size_t n = 1ULL << dim_;
     const int d = static_cast<int>(dim_);
 
-    // Auto-size layers: min(DIM - 3, 4), at least 1.
+    // Auto-size layers: min(DIM - 2, 4), at least 1.
     int layers = (config_.num_layers > 0)
                      ? config_.num_layers
-                     : std::min(d - 3, 4);
+                     : std::min(d - 2, 4);
     layers = std::max(layers, 1);
-    assert(layers <= d - 3);
+    assert(layers <= d - 2);
 
     auto task_type = (config_.task == HCNNTask::Classification)
                          ? hcnn::TaskType::Classification
