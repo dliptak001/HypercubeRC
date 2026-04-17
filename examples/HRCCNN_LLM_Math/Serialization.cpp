@@ -4,11 +4,25 @@
 #include <cstring>
 #include <fstream>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace hrccnn_llm_math {
 
+// Serialization POD-dumps ReservoirConfig and CNNReadoutConfig directly.
+// Adding any non-trivially-copyable member (std::string, std::vector, etc.)
+// to either struct would silently break save/load — catch it at compile time.
+static_assert(std::is_trivially_copyable_v<ReservoirConfig>,
+              "ReservoirConfig must stay trivially copyable for POD serialization");
+static_assert(std::is_trivially_copyable_v<CNNReadoutConfig>,
+              "CNNReadoutConfig must stay trivially copyable for POD serialization");
+
 namespace {
+
+// Upper bound for any serialized vector payload. 1 GiB is orders of magnitude
+// beyond any readout state this library produces; trips only on a corrupt or
+// hostile file.
+constexpr std::uint64_t kMaxVecBytes = 1ULL << 30;
 
 template <typename T>
 void WritePOD(std::ostream& os, const T& v)
@@ -36,6 +50,7 @@ bool ReadVec(std::istream& is, std::vector<T>& v)
 {
     std::uint64_t n = 0;
     if (!ReadPOD(is, n)) return false;
+    if (n > kMaxVecBytes / sizeof(T)) return false;
     v.resize(static_cast<std::size_t>(n));
     if (n > 0) {
         is.read(reinterpret_cast<char*>(v.data()),
@@ -107,10 +122,10 @@ bool LoadModelFile(const std::string& path, ModelFile& mf, std::string* err)
     if (!ReadPOD(is, mf.reservoir_cfg)) return fail("short read (reservoir_cfg)");
     if (!ReadPOD(is, mf.cnn_cfg))       return fail("short read (cnn_cfg)");
 
-    if (!ReadVec(is, mf.readout.weights))      return fail("short read (weights)");
+    if (!ReadVec(is, mf.readout.weights))      return fail("short read or oversized (weights)");
     if (!ReadPOD(is, mf.readout.bias))         return fail("short read (bias)");
-    if (!ReadVec(is, mf.readout.feature_mean)) return fail("short read (feature_mean)");
-    if (!ReadVec(is, mf.readout.feature_scale))return fail("short read (feature_scale)");
+    if (!ReadVec(is, mf.readout.feature_mean)) return fail("short read or oversized (feature_mean)");
+    if (!ReadVec(is, mf.readout.feature_scale))return fail("short read or oversized (feature_scale)");
 
     return true;
 }

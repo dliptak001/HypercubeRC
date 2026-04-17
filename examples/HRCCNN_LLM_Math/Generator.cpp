@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 #include "NumberFormat.h"
@@ -157,10 +158,16 @@ std::string Generator::TryOne()
 
 std::string Generator::Sample()
 {
-    while (true) {
+    // Pathological configs shouldn't spin forever. The grammar's rejection
+    // rate in practice is a few percent, so 10k is comfortably beyond any
+    // legitimate streak.
+    constexpr int kMaxRetries = 10000;
+    for (int i = 0; i < kMaxRetries; ++i) {
         std::string line = TryOne();
         if (!line.empty()) return line;
     }
+    throw std::runtime_error(
+        "Generator::Sample exceeded kMaxRetries rejections — check config");
 }
 
 }  // namespace hrccnn_llm_math

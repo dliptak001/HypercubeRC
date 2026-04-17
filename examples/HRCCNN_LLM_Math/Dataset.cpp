@@ -1,6 +1,5 @@
 #include "Dataset.h"
 
-#include <cassert>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -37,11 +36,19 @@ void TeacherForceOne(ESN<DIM>& esn,
                      const LineSplit& split,
                      std::vector<float>& targets_out)
 {
-    ResetAndPrime(esn, split.lhs);
-
     const std::string& full = split.full;
     const std::size_t  L    = full.size();
     if (L < 2) return;  // nothing to train on
+
+    // Validate every character is in the vocab BEFORE touching the reservoir.
+    // Silently skipping bad lines here keeps train targets aligned with
+    // collected snapshots downstream (asserts are stripped in Release, so
+    // any escaped bad char would otherwise produce target=-1 garbage).
+    for (std::size_t t = 1; t < L; ++t) {
+        if (CharToClass(full[t]) < 0) return;
+    }
+
+    ResetAndPrime(esn, split.lhs);
 
     // Run for (L - 1) steps so snapshot[t] = state-after-char(t), paired with
     // target char(t + 1). We feed char(0)..char(L-2) into the reservoir; the
@@ -54,9 +61,7 @@ void TeacherForceOne(ESN<DIM>& esn,
 
     targets_out.reserve(targets_out.size() + (L - 1));
     for (std::size_t t = 1; t < L; ++t) {
-        int cls = CharToClass(full[t]);
-        assert(cls >= 0 && "non-vocab character in full expression");
-        targets_out.push_back(static_cast<float>(cls));
+        targets_out.push_back(static_cast<float>(CharToClass(full[t])));
     }
 }
 
@@ -93,9 +98,9 @@ std::string GenerateRHS(ESN<DIM>& esn,
         out.push_back(c);
         if (c == '#') break;
 
-        float bits[kInputBits];
-        BipolarBits(c, bits);
-        esn.Warmup(bits, 1);
+        float step_bits[kInputBits];
+        BipolarBits(c, step_bits);
+        esn.Warmup(step_bits, 1);
     }
     return out;
 }

@@ -39,6 +39,19 @@ bool Tokenize(const std::string& s, std::vector<Token>& out, std::string* reason
         bool is_digit = (c >= '0' && c <= '9');
         bool is_minus = (c == '-');
 
+        // Scan one numeric token: digits with at most one '.'. Rejects
+        // malformed "3.14.5" etc. that strtod would silently truncate.
+        auto scan_number = [&](std::size_t start) -> bool {
+            bool saw_dot = false;
+            while (i < n) {
+                char d = s[i];
+                if (d >= '0' && d <= '9') { ++i; continue; }
+                if (d == '.' && !saw_dot)  { saw_dot = true; ++i; continue; }
+                break;
+            }
+            return i > start;
+        };
+
         if (is_minus && prior_allows_unary()) {
             // Unary minus: must be followed by a digit.
             if (i + 1 >= n || !(s[i + 1] >= '0' && s[i + 1] <= '9')) {
@@ -47,7 +60,10 @@ bool Tokenize(const std::string& s, std::vector<Token>& out, std::string* reason
             }
             ++i;  // consume '-'
             std::size_t start = i;
-            while (i < n && ((s[i] >= '0' && s[i] <= '9') || s[i] == '.')) ++i;
+            if (!scan_number(start)) {
+                if (reason) *reason = "empty number after unary minus";
+                return false;
+            }
             double v = -std::strtod(s.c_str() + start, nullptr);
             out.push_back({Tok::NUM, v, 0});
             continue;
@@ -55,7 +71,7 @@ bool Tokenize(const std::string& s, std::vector<Token>& out, std::string* reason
 
         if (is_digit) {
             std::size_t start = i;
-            while (i < n && ((s[i] >= '0' && s[i] <= '9') || s[i] == '.')) ++i;
+            scan_number(start);
             double v = std::strtod(s.c_str() + start, nullptr);
             out.push_back({Tok::NUM, v, 0});
             continue;

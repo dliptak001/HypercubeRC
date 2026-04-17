@@ -1,14 +1,13 @@
-#include <algorithm>
 #include <cstdint>
-#include <cstdlib>
 #include <iostream>
 #include <random>
-#include <regex>
 #include <string>
 #include <vector>
 
+#include "Config.h"
 #include "Dataset.h"
 #include "ESN.h"
+#include "FormatCheck.h"
 #include "Generator.h"
 #include "Serialization.h"
 #include "Vocab.h"
@@ -20,54 +19,16 @@ namespace {
 constexpr std::size_t kDIM = 12;
 constexpr std::size_t kMaxOutputChars = 16;
 
-struct EvalArgs
-{
-    std::string      model_path;
-    std::size_t      samples   = 2000;
-    std::uint64_t    seed      = 0;
-    bool             seed_set  = false;
-    bool             skip_char_accuracy = false;  ///< Skip the teacher-forced pass (saves memory/time).
-};
-
-bool ParseArgs(int argc, char** argv, EvalArgs& a)
-{
-    for (int i = 1; i < argc; ++i) {
-        std::string f = argv[i];
-        auto next = [&](const char* name) -> const char* {
-            if (i + 1 >= argc) {
-                std::cerr << "error: " << name << " requires a value\n";
-                return nullptr;
-            }
-            return argv[++i];
-        };
-        if      (f == "--model")   { auto v = next(f.c_str()); if (!v) return false; a.model_path = v; }
-        else if (f == "--samples") { auto v = next(f.c_str()); if (!v) return false; a.samples = std::strtoull(v, nullptr, 10); }
-        else if (f == "--seed")    { auto v = next(f.c_str()); if (!v) return false; a.seed = std::strtoull(v, nullptr, 10); a.seed_set = true; }
-        else if (f == "--no-char") { a.skip_char_accuracy = true; }
-        else {
-            std::cerr << "error: unknown flag '" << f << "'\n";
-            return false;
-        }
-    }
-    if (a.model_path.empty()) {
-        std::cerr << "error: --model <path> is required\n";
-        return false;
-    }
-    return true;
-}
-
-bool IsValidFormat(const std::string& emitted)
-{
-    static const std::regex re(R"(^-?(0|[1-9]\d{0,8})(\.\d|\.\d[1-9])?#$)");
-    return std::regex_match(emitted, re);
-}
-
 }  // namespace
 
-int RunEval(int argc, char** argv)
+int RunEval()
 {
-    EvalArgs args;
-    if (!ParseArgs(argc, argv, args)) return 1;
+    const config::EvalCfg& args = config::kEval;
+
+    if (args.model_path.empty()) {
+        std::cerr << "error: config::kEval.model_path is empty\n";
+        return 1;
+    }
 
     std::string err;
     ModelFile mf;
@@ -81,9 +42,10 @@ int RunEval(int argc, char** argv)
         return 4;
     }
 
-    if (!args.seed_set) {
+    std::uint64_t seed = args.seed;
+    if (!args.use_fixed_seed) {
         std::random_device rd;
-        args.seed = (static_cast<std::uint64_t>(rd()) << 32) ^ rd();
+        seed = (static_cast<std::uint64_t>(rd()) << 32) ^ rd();
     }
 
     std::cerr << "[eval] model=" << args.model_path
@@ -93,7 +55,7 @@ int RunEval(int argc, char** argv)
     if (!mf.meta.git_sha.empty()) std::cerr << " git=" << mf.meta.git_sha;
     std::cerr << ")\n";
     std::cerr << "[eval] eval_samples=" << args.samples
-              << " eval_seed=" << args.seed << "\n";
+              << " eval_seed=" << seed << "\n";
 
     ESN<kDIM> esn(mf.reservoir_cfg, ReadoutType::HCNN, FeatureMode::Raw);
     // Bootstrap the CNN topology. CNNReadout builds its architecture lazily
@@ -117,7 +79,7 @@ int RunEval(int argc, char** argv)
     gcfg.rhs_filter_999 = true;
 
     // --- Generate eval lines. ---
-    Generator gen(args.seed, gcfg);
+    Generator gen(seed, gcfg);
     std::vector<std::string> eval_lines;
     eval_lines.reserve(args.samples);
     for (std::size_t i = 0; i < args.samples; ++i) eval_lines.push_back(gen.Sample());

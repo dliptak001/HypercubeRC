@@ -1,15 +1,15 @@
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <iostream>
 #include <random>
-#include <regex>
 #include <string>
 #include <vector>
 
+#include "Config.h"
 #include "Dataset.h"
 #include "ESN.h"
+#include "FormatCheck.h"
 #include "Generator.h"
 #include "NumberFormat.h"
 #include "Serialization.h"
@@ -23,85 +23,28 @@ namespace {
 constexpr std::size_t kDIM = 12;
 constexpr std::size_t kMaxOutputChars = 16;
 
-struct TrainArgs
-{
-    std::string      output_path;
-    std::size_t      samples        = 5000;
-    std::size_t      val_samples    = 2000;
-    std::uint64_t    gen_seed       = 0;
-    bool             gen_seed_set   = false;
-    std::uint64_t    reservoir_seed = 0;
-    bool             reservoir_seed_set = false;
-    int              epochs         = 1000;
-    int              batch_size     = 4096;
-    float            output_fraction = 0.125f;
-    std::size_t      autoreg_samples = 64;   ///< val lines to autoregressively score
-    std::string      git_sha;
-    bool             verbose        = false;
-    bool             rhs_filter_999 = true;
-};
-
-bool ParseArgs(int argc, char** argv, TrainArgs& a)
-{
-    for (int i = 1; i < argc; ++i) {
-        std::string f = argv[i];
-        auto next = [&](const char* name) -> const char* {
-            if (i + 1 >= argc) {
-                std::cerr << "error: " << name << " requires a value\n";
-                return nullptr;
-            }
-            return argv[++i];
-        };
-        if      (f == "--output")          { auto v = next(f.c_str()); if (!v) return false; a.output_path = v; }
-        else if (f == "--samples")         { auto v = next(f.c_str()); if (!v) return false; a.samples        = std::strtoull(v, nullptr, 10); }
-        else if (f == "--val-samples")     { auto v = next(f.c_str()); if (!v) return false; a.val_samples    = std::strtoull(v, nullptr, 10); }
-        else if (f == "--seed")            { auto v = next(f.c_str()); if (!v) return false; a.gen_seed = std::strtoull(v, nullptr, 10); a.gen_seed_set = true; }
-        else if (f == "--reservoir-seed")  { auto v = next(f.c_str()); if (!v) return false; a.reservoir_seed = std::strtoull(v, nullptr, 10); a.reservoir_seed_set = true; }
-        else if (f == "--epochs")          { auto v = next(f.c_str()); if (!v) return false; a.epochs = std::atoi(v); }
-        else if (f == "--batch-size")      { auto v = next(f.c_str()); if (!v) return false; a.batch_size = std::atoi(v); }
-        else if (f == "--output-fraction") { auto v = next(f.c_str()); if (!v) return false; a.output_fraction = std::strtof(v, nullptr); }
-        else if (f == "--autoreg-samples") { auto v = next(f.c_str()); if (!v) return false; a.autoreg_samples = std::strtoull(v, nullptr, 10); }
-        else if (f == "--git-sha")         { auto v = next(f.c_str()); if (!v) return false; a.git_sha = v; }
-        else if (f == "--no-filter")       { a.rhs_filter_999 = false; }
-        else if (f == "--verbose")         { a.verbose = true; }
-        else {
-            std::cerr << "error: unknown flag '" << f << "'\n";
-            return false;
-        }
-    }
-    if (a.output_path.empty()) {
-        std::cerr << "error: --output <path> is required\n";
-        return false;
-    }
-    return true;
-}
-
-// Format-accuracy regex: optional sign, 1-9 integer digits (allow the full
-// grammar range, not just v1 filter), optional .1-2 frac digits, then '#'.
-// Rejects trailing '.' and trailing-zero fractions like ".20".
-bool IsValidFormat(const std::string& emitted)
-{
-    static const std::regex re(R"(^-?(0|[1-9]\d{0,8})(\.\d|\.\d[1-9])?#$)");
-    return std::regex_match(emitted, re);
-}
-
 }  // namespace
 
-int RunTrain(int argc, char** argv)
+int RunTrain()
 {
-    TrainArgs args;
-    if (!ParseArgs(argc, argv, args)) return 1;
+    const config::TrainCfg& args = config::kTrain;
 
-    if (!args.gen_seed_set) {
+    if (args.output_path.empty()) {
+        std::cerr << "error: config::kTrain.output_path is empty\n";
+        return 1;
+    }
+
+    std::uint64_t gen_seed = args.gen_seed;
+    if (!args.use_fixed_gen_seed) {
         std::random_device rd;
-        args.gen_seed = (static_cast<std::uint64_t>(rd()) << 32) ^ rd();
+        gen_seed = (static_cast<std::uint64_t>(rd()) << 32) ^ rd();
     }
-    if (!args.reservoir_seed_set) {
-        args.reservoir_seed = args.gen_seed ^ 0x9E3779B97F4A7C15ULL;
-    }
+    std::uint64_t reservoir_seed = args.use_fixed_reservoir_seed
+                                       ? args.reservoir_seed
+                                       : (gen_seed ^ 0x9E3779B97F4A7C15ULL);
 
     ReservoirConfig rcfg;
-    rcfg.seed            = args.reservoir_seed;
+    rcfg.seed            = reservoir_seed;
     rcfg.num_inputs      = kInputBits;
     rcfg.output_fraction = args.output_fraction;
 
@@ -112,7 +55,7 @@ int RunTrain(int argc, char** argv)
               << " reservoir_seed=" << rcfg.seed << "\n";
     std::cerr << "[train] samples=" << args.samples
               << " val_samples=" << args.val_samples
-              << " gen_seed=" << args.gen_seed
+              << " gen_seed=" << gen_seed
               << " epochs=" << args.epochs
               << " batch_size=" << args.batch_size << "\n";
 
@@ -120,7 +63,7 @@ int RunTrain(int argc, char** argv)
 
     GeneratorConfig gcfg;
     gcfg.rhs_filter_999 = args.rhs_filter_999;
-    Generator gen(args.gen_seed, gcfg);
+    Generator gen(gen_seed, gcfg);
 
     // --- Collect training + validation states under teacher forcing. ---
     std::vector<std::string> train_lines;
@@ -204,7 +147,6 @@ int RunTrain(int argc, char** argv)
         bool stopped_on_hash = !emitted.empty() && emitted.back() == '#';
         if (!stopped_on_hash) ++non_stop;
         if (IsValidFormat(emitted)) ++format_ok;
-        // Compare generated RHS (sans '#') to expected.
         std::string emitted_rhs =
             stopped_on_hash ? emitted.substr(0, emitted.size() - 1) : emitted;
         if (emitted_rhs == sp.rhs && stopped_on_hash) ++exact;
@@ -219,7 +161,7 @@ int RunTrain(int argc, char** argv)
     // --- Save model. ---
     ModelFile mf;
     mf.dim                 = static_cast<std::uint32_t>(kDIM);
-    mf.meta.training_seed  = args.gen_seed;
+    mf.meta.training_seed  = gen_seed;
     mf.meta.training_samples = static_cast<std::uint32_t>(args.samples);
     mf.meta.training_epochs  = static_cast<std::uint32_t>(args.epochs);
     mf.meta.git_sha        = args.git_sha;
