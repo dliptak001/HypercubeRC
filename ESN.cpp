@@ -157,7 +157,7 @@ void ESN<DIM>::Train(const float* targets, size_t train_size,
 template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size,
                      const CNNReadoutConfig& config,
-                     const CNNTrainHooks& hooks)
+                     CNNTrainHooks& hooks)
 {
     assert(readout_type_ == ReadoutType::HCNN);
     auto sub = HCNNStates(0, train_size);

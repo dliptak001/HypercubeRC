@@ -54,6 +54,7 @@ struct CNNTrainHooks {
     int eval_every_epochs = 0;  ///< 0 disables mid-training callbacks.
     std::function<void(int epoch_done_1based, int total_epochs, float lr)>
         epoch_callback;
+    bool stop_requested = false; ///< Callback sets this to end training early.
 };
 
 /// @brief HypercubeCNN-based readout for reservoir computing.
@@ -101,8 +102,12 @@ public:
     /// @param config     Architecture and training hyperparameters.
     void Train(const float* states, const float* targets,
                size_t num_samples, size_t dim,
-               const CNNReadoutConfig& config = {},
-               const CNNTrainHooks& hooks = {});
+               const CNNReadoutConfig& config,
+               CNNTrainHooks& hooks);
+
+    void Train(const float* states, const float* targets,
+               size_t num_samples, size_t dim,
+               const CNNReadoutConfig& config = {});
 
     /// @brief Multi-output prediction: writes num_outputs floats to output.
     /// For regression: de-centered predictions.  For classification: raw logits.

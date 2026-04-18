@@ -47,6 +47,9 @@ target_include_directories(HypercubeRCCore
 target_link_libraries(HypercubeRCCore PUBLIC HypercubeCNNCore)
 
 # ——— Optimization and warning flags (library) ———
+# Note: -flto is unavailable here — CLion 2024.3.2's bundled MinGW gcc 13.1
+# was built without LTO support (cc1plus: "LTO support has not been enabled
+# in this configuration").  Would need a different MinGW distribution.
 target_compile_options(HypercubeRCCore PRIVATE
         $<$<CONFIG:Release>:-O3 -march=native -mtune=native -ffast-math>
         $<$<CONFIG:Debug>:-O0 -g>
@@ -65,6 +68,8 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp)
     file(GLOB HRCCNN_LLM_MATH_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/examples/HRCCNN_LLM_Math/*.cpp)
     add_executable(HRCCNN_LLM_Math ${HRCCNN_LLM_MATH_SOURCES})
+    file(GLOB HRCCNN_LM_TEXT_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/examples/HRCCNN_LM_Text/*.cpp)
+    add_executable(HRCCNN_LM_Text ${HRCCNN_LM_TEXT_SOURCES})
     add_executable(StandaloneESNSweep diagnostics/StandaloneESNSweep.cpp)
     add_executable(SeedSurvey diagnostics/SeedSurvey.cpp)
     add_executable(OptimizeHRCCNNForMG diagnostics/OptimizeHRCCNNForMG.cpp)
@@ -73,7 +78,7 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     add_executable(CoreSmokeTest tests/CoreSmokeTest.cpp)
 
     set(DIAGNOSTIC_TARGETS HypercubeRC StandaloneESNSweep SeedSurvey OptimizeHRCCNNForMG HCNNProfileDriver CnnSeedSurvey)
-    set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly HRCCNN_LLM_Math)
+    set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly HRCCNN_LLM_Math HRCCNN_LM_Text)
     set(TEST_TARGETS CoreSmokeTest)
     set(EXE_TARGETS ${DIAGNOSTIC_TARGETS} ${EXAMPLE_TARGETS} ${TEST_TARGETS})
 
@@ -111,6 +116,14 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
 
         if(MINGW)
             target_link_options(${tgt} PRIVATE -static-libgcc -static-libstdc++)
+            # Workaround for a gcc 13.1 MinGW bug where
+            # `std::type_info::operator==` in <typeinfo> is emitted out-of-line
+            # at -O0 (Debug) and collides with libstdc++.a(tinfo.o). Release
+            # (-O3) inlines it and is unaffected. Fixed upstream in gcc 13.2,
+            # but CLion 2024.3.2 / 2026.1 both still bundle 13.1. Debug-only
+            # so we don't mask real multi-def bugs in Release.
+            target_link_options(${tgt} PRIVATE
+                $<$<CONFIG:Debug>:-Wl,--allow-multiple-definition>)
         endif()
     endforeach()
 endif()

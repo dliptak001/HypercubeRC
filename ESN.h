@@ -114,7 +114,7 @@ public:
     /// See CNNTrainHooks in CNNReadout.h for semantics.
     void Train(const float* targets, size_t train_size,
                const CNNReadoutConfig& config,
-               const CNNTrainHooks& hooks);
+               CNNTrainHooks& hooks);
 
     /// @brief Incremental training for streaming (Linear readout only).
     void TrainIncremental(const float* targets, size_t train_size,

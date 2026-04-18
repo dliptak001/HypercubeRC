@@ -103,8 +103,16 @@ void CNNReadout::build_architecture()
 
 void CNNReadout::Train(const float* states, const float* targets,
                        size_t num_samples, size_t dim,
+                       const CNNReadoutConfig& config)
+{
+    CNNTrainHooks no_hooks;
+    Train(states, targets, num_samples, dim, config, no_hooks);
+}
+
+void CNNReadout::Train(const float* states, const float* targets,
+                       size_t num_samples, size_t dim,
                        const CNNReadoutConfig& config,
-                       const CNNTrainHooks& hooks)
+                       CNNTrainHooks& hooks)
 {
     config_ = config;
     dim_ = dim;
@@ -203,6 +211,7 @@ void CNNReadout::Train(const float* states, const float* targets,
             }
 
             fire_hook(e + 1, lr);
+            if (hooks.stop_requested) break;
         }
     } else {
         // Regression: per-output target centering.
@@ -236,6 +245,7 @@ void CNNReadout::Train(const float* states, const float* targets,
                 /*shuffle_seed=*/static_cast<unsigned>(e + 1));
 
             fire_hook(e + 1, lr);
+            if (hooks.stop_requested) break;
         }
     }
 
