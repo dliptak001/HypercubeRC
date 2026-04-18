@@ -4,6 +4,7 @@
 #include <iostream>
 #include <random>
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "Config.h"
@@ -106,11 +107,13 @@ int RunTrain()
 
     // --- CNN readout config: HRCCNNBaseline + classification overrides. ---
     CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<kDIM>();
-    cnn_cfg.task        = HCNNTask::Classification;
-    cnn_cfg.num_outputs = static_cast<int>(kVocabSize);
-    cnn_cfg.epochs      = args.epochs;
-    cnn_cfg.batch_size  = args.batch_size;
-    cnn_cfg.verbose     = args.verbose;
+    cnn_cfg.task          = HCNNTask::Classification;
+    cnn_cfg.num_outputs   = static_cast<int>(kVocabSize);
+    cnn_cfg.num_layers    = args.cnn_num_layers;
+    cnn_cfg.conv_channels = args.cnn_conv_channels;
+    cnn_cfg.epochs        = args.epochs;
+    cnn_cfg.batch_size    = args.batch_size;
+    cnn_cfg.verbose       = args.verbose;
 
     std::cerr << "[train] CNN cfg: nl=" << cnn_cfg.num_layers
               << " ch=" << cnn_cfg.conv_channels
@@ -140,6 +143,9 @@ int RunTrain()
     // --- Autoregressive sanity check on a subset of validation lines. ---
     const std::size_t n_auto = std::min(args.autoreg_samples, val_lines.size());
     std::size_t exact = 0, format_ok = 0, non_stop = 0;
+    constexpr std::size_t kShowSamples = 25;
+    std::vector<std::tuple<std::string, std::string, std::string>> samples;
+    samples.reserve(kShowSamples);
     for (std::size_t i = 0; i < n_auto; ++i) {
         LineSplit sp;
         if (!SplitLine(val_lines[i], sp)) continue;
@@ -150,12 +156,19 @@ int RunTrain()
         std::string emitted_rhs =
             stopped_on_hash ? emitted.substr(0, emitted.size() - 1) : emitted;
         if (emitted_rhs == sp.rhs && stopped_on_hash) ++exact;
+        if (samples.size() < kShowSamples) {
+            samples.emplace_back(sp.lhs, sp.rhs, emitted);
+        }
     }
     if (n_auto > 0) {
         std::cerr << "[train] autoregressive (" << n_auto << " val lines):"
                   << " exact=" << exact << "/" << n_auto
                   << " format_ok=" << format_ok << "/" << n_auto
                   << " non_stop=" << non_stop << "/" << n_auto << "\n";
+        for (const auto& [lhs, expected, got] : samples) {
+            std::cerr << "  " << lhs << " = " << expected
+                      << "   ->   " << got << "\n";
+        }
     }
 
     // --- Save model. ---

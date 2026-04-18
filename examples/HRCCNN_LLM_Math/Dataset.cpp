@@ -72,13 +72,17 @@ std::string GenerateRHS(ESN<DIM>& esn,
 {
     ResetAndPrime(esn, lhs);
 
-    // Final LHS pass (the generation protocol primes 2x and then does one
-    // collecting-less final pass so the reservoir is at "just consumed the
-    // last LHS char" when the argmax loop begins).
-    if (!lhs.empty()) {
-        std::vector<float> bits(lhs.size() * kInputBits);
-        BipolarEncode(lhs, bits.data());
-        esn.Warmup(bits.data(), lhs.size());
+    // Final pass through "lhs = " (no collection). During training, the
+    // reservoir was run continuously over the full line including the " = "
+    // separator, so the state at the point of the first RHS prediction is
+    // the one reached after processing "lhs" + " = ". Feeding only "lhs"
+    // here would leave the argmax loop emitting " = " before the first RHS
+    // digit, breaking both format checking and exact-match scoring.
+    const std::string prefix = lhs + " = ";
+    if (!prefix.empty()) {
+        std::vector<float> bits(prefix.size() * kInputBits);
+        BipolarEncode(prefix, bits.data());
+        esn.Warmup(bits.data(), prefix.size());
     }
 
     const std::size_t num_outputs = esn.NumOutputs();

@@ -38,19 +38,25 @@ inline const GenerateCfg kGenerate;
 struct TrainCfg
 {
     std::string   output_path        = "C:\\temp\\math_v1.bin";
-    std::size_t   samples            = 5000;
+    std::size_t   samples            = 15000;
     std::size_t   val_samples        = 2000;
     std::uint64_t gen_seed           = 12345;
     bool          use_fixed_gen_seed = true;     ///< false → random
     std::uint64_t reservoir_seed     = 0;        ///< 0 + !use_fixed → derived from gen_seed
     bool          use_fixed_reservoir_seed = false;
-    int           epochs             = 1000;
+    int           epochs             = 200;
     int           batch_size         = 4096;
-    float         output_fraction    = 0.125f;
+    float         output_fraction    = 0.5f;
     std::size_t   autoreg_samples    = 64;       ///< val lines to autoregressively score
     std::string   git_sha            = "";
     bool          verbose            = true;
     bool          rhs_filter_999     = true;
+
+    // CNN capacity overrides (applied on top of HRCCNNBaseline<DIM>). The
+    // baseline is nl=1/ch=8 — too small for arithmetic; nl=2/ch=16 is the
+    // first capacity-bump probe.
+    int           cnn_num_layers     = 2;
+    int           cnn_conv_channels  = 16;
 };
 
 inline const TrainCfg kTrain;
