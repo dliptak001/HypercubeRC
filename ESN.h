@@ -110,6 +110,12 @@ public:
     void Train(const float* targets, size_t train_size,
                const CNNReadoutConfig& config);
 
+    /// @brief Train CNN readout with runtime hooks (mid-training eval callback).
+    /// See CNNTrainHooks in CNNReadout.h for semantics.
+    void Train(const float* targets, size_t train_size,
+               const CNNReadoutConfig& config,
+               const CNNTrainHooks& hooks);
+
     /// @brief Incremental training for streaming (Linear readout only).
     void TrainIncremental(const float* targets, size_t train_size,
                           float blend = 0.1f,

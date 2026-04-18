@@ -44,7 +44,7 @@ struct TrainCfg
     bool          use_fixed_gen_seed = true;     ///< false → random
     std::uint64_t reservoir_seed     = 0;        ///< 0 + !use_fixed → derived from gen_seed
     bool          use_fixed_reservoir_seed = false;
-    int           epochs             = 200;
+    int           epochs             = 100;
     int           batch_size         = 4096;
     float         output_fraction    = 0.5f;
     std::size_t   autoreg_samples    = 64;       ///< val lines to autoregressively score
@@ -57,6 +57,28 @@ struct TrainCfg
     // first capacity-bump probe.
     int           cnn_num_layers     = 2;
     int           cnn_conv_channels  = 16;
+
+    // Mid-training eval cadence. 0 disables periodic eval; >0 prints a full
+    // teacher-forced + autoregressive report every N completed epochs.
+    int           eval_every_epochs  = 25;
+    std::size_t   eval_show_samples  = 25;
+
+    // Cosine LR decay horizon (epochs). Lets us shorten a run for wall-clock
+    // (epochs=100) without compressing the decay; training stops after
+    // `epochs` but lr traces only the first `epochs/lr_decay_epochs` of the
+    // curve. Set to 0 to collapse back to `epochs`.
+    int           lr_decay_epochs    = 200;
+
+    // Per-epoch training-accuracy logging. Pricey — a full forward pass over
+    // the training set every epoch. The eval hook already reports accuracy
+    // every `eval_every_epochs`, so leave this off unless you truly need
+    // every-epoch acc.
+    bool          verbose_train_acc  = false;
+
+    // Line-generation cache.  Hits disk at {output_path}.lines.bin; lets
+    // subsequent runs skip the expensive generator rejection-sampling loop
+    // when gen_seed / samples / val_samples / rhs_filter_999 match.
+    bool          use_line_cache     = true;
 };
 
 inline const TrainCfg kTrain;

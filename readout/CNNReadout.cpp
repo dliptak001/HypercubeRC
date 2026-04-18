@@ -103,7 +103,8 @@ void CNNReadout::build_architecture()
 
 void CNNReadout::Train(const float* states, const float* targets,
                        size_t num_samples, size_t dim,
-                       const CNNReadoutConfig& config)
+                       const CNNReadoutConfig& config,
+                       const CNNTrainHooks& hooks)
 {
     config_ = config;
     dim_ = dim;
@@ -124,6 +125,23 @@ void CNNReadout::Train(const float* states, const float* targets,
     build_architecture();
     net_->SetOptimizer(hcnn::OptimizerType::ADAM);
 
+    // Allow mid-training Predict*/Accuracy/R2 from the hook callback.
+    // Weights are fresh but the network is usable; weights_blob_ stays empty
+    // until flatten_weights() at the end (only matters for serialization).
+    trained_ = true;
+
+    auto fire_hook = [&](int epoch_done_1based, float lr) {
+        if (!hooks.epoch_callback || hooks.eval_every_epochs <= 0) return;
+        const bool at_interval = (epoch_done_1based % hooks.eval_every_epochs) == 0;
+        const bool at_final    = epoch_done_1based == config.epochs;
+        if (at_interval || at_final) {
+            // Sync weights_blob_ to the live net_ so the callback can
+            // snapshot via GetReadoutState()/Weights() if desired.
+            flatten_weights();
+            hooks.epoch_callback(epoch_done_1based, config.epochs, lr);
+        }
+    };
+
     // --- Cosine LR annealing with floor ---
     const float lr_min = config.lr_max * config.lr_min_frac;
     const auto pi = static_cast<float>(std::numbers::pi);
@@ -136,13 +154,19 @@ void CNNReadout::Train(const float* states, const float* targets,
 
         target_mean_.clear();  // no centering for classification
 
-        // Verbose: preallocate buffer for training-set forward pass.
+        // verbose_train_acc: preallocate buffer for per-epoch training-set
+        // forward pass. This is the expensive path; verbose alone (no
+        // train-acc) is effectively free.
         std::vector<float> verbose_logits;
-        if (config.verbose)
+        if (config.verbose && config.verbose_train_acc)
             verbose_logits.resize(num_samples * num_outputs_);
 
         for (int e = 0; e < config.epochs; ++e) {
-            float progress = static_cast<float>(e) / static_cast<float>(config.epochs);
+            const int horizon = (config.lr_decay_epochs > 0)
+                                    ? config.lr_decay_epochs
+                                    : config.epochs;
+            float progress = static_cast<float>(e) / static_cast<float>(horizon);
+            if (progress > 1.0f) progress = 1.0f;  // floor lr at lr_min past horizon
             float lr = lr_min + 0.5f * (config.lr_max - lr_min) *
                        (1.0f + std::cos(pi * progress));
 
@@ -155,24 +179,30 @@ void CNNReadout::Train(const float* states, const float* targets,
                 /*shuffle_seed=*/static_cast<unsigned>(e + 1));
 
             if (config.verbose) {
-                // Compute training accuracy after this epoch.
-                net_->ForwardBatch(std_states.data(), static_cast<int>(n),
-                                   static_cast<int>(num_samples),
-                                   verbose_logits.data());
-                size_t correct = 0;
-                for (size_t s = 0; s < num_samples; ++s) {
-                    const float* row = verbose_logits.data() + s * num_outputs_;
-                    size_t pred = 0;
-                    float best = row[0];
-                    for (size_t k = 1; k < num_outputs_; ++k)
-                        if (row[k] > best) { best = row[k]; pred = k; }
-                    if (static_cast<int>(pred) == int_targets[s]) ++correct;
+                if (config.verbose_train_acc) {
+                    net_->ForwardBatch(std_states.data(), static_cast<int>(n),
+                                       static_cast<int>(num_samples),
+                                       verbose_logits.data());
+                    size_t correct = 0;
+                    for (size_t s = 0; s < num_samples; ++s) {
+                        const float* row = verbose_logits.data() + s * num_outputs_;
+                        size_t pred = 0;
+                        float best = row[0];
+                        for (size_t k = 1; k < num_outputs_; ++k)
+                            if (row[k] > best) { best = row[k]; pred = k; }
+                        if (static_cast<int>(pred) == int_targets[s]) ++correct;
+                    }
+                    double acc = 100.0 * correct / num_samples;
+                    std::printf("  epoch %3d/%d  lr=%.5f  train_acc=%.2f%%\n",
+                                e + 1, config.epochs, lr, acc);
+                } else {
+                    std::printf("  epoch %3d/%d  lr=%.5f\n",
+                                e + 1, config.epochs, lr);
                 }
-                double acc = 100.0 * correct / num_samples;
-                std::printf("  epoch %3d/%d  lr=%.5f  train_acc=%.2f%%\n",
-                            e + 1, config.epochs, lr, acc);
                 std::fflush(stdout);
             }
+
+            fire_hook(e + 1, lr);
         }
     } else {
         // Regression: per-output target centering.
@@ -190,7 +220,11 @@ void CNNReadout::Train(const float* states, const float* targets,
                     targets[s * num_outputs_ + k] - static_cast<float>(target_mean_[k]);
 
         for (int e = 0; e < config.epochs; ++e) {
-            float progress = static_cast<float>(e) / static_cast<float>(config.epochs);
+            const int horizon = (config.lr_decay_epochs > 0)
+                                    ? config.lr_decay_epochs
+                                    : config.epochs;
+            float progress = static_cast<float>(e) / static_cast<float>(horizon);
+            if (progress > 1.0f) progress = 1.0f;  // floor lr at lr_min past horizon
             float lr = lr_min + 0.5f * (config.lr_max - lr_min) *
                        (1.0f + std::cos(pi * progress));
 
@@ -200,6 +234,8 @@ void CNNReadout::Train(const float* states, const float* targets,
                 static_cast<int>(num_samples), config.batch_size,
                 lr, /*momentum=*/0.0f, config.weight_decay,
                 /*shuffle_seed=*/static_cast<unsigned>(e + 1));
+
+            fire_hook(e + 1, lr);
         }
     }
 

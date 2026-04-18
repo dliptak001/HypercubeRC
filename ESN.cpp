@@ -155,6 +155,17 @@ void ESN<DIM>::Train(const float* targets, size_t train_size,
 }
 
 template <size_t DIM>
+void ESN<DIM>::Train(const float* targets, size_t train_size,
+                     const CNNReadoutConfig& config,
+                     const CNNTrainHooks& hooks)
+{
+    assert(readout_type_ == ReadoutType::HCNN);
+    auto sub = HCNNStates(0, train_size);
+    std::get<CNNReadout>(readout_).Train(
+        sub.data(), targets, train_size, EffectiveDIM(), config, hooks);
+}
+
+template <size_t DIM>
 void ESN<DIM>::TrainIncremental(const float* targets, size_t train_size,
                                 float blend,
                                 float lr, size_t epochs,

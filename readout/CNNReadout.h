@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -26,9 +27,33 @@ struct CNNReadoutConfig {
     int batch_size    = 32;       ///< Mini-batch size.
     float lr_max      = 0.005f;   ///< Peak learning rate (cosine annealing).
     float lr_min_frac = 0.1f;     ///< lr_min = lr_max * lr_min_frac.
+    int   lr_decay_epochs = 0;    ///< Cosine decay horizon. 0 = use `epochs`.
+                                  ///< Set > epochs to trace only a prefix of
+                                  ///< the cosine curve (keeps lr high when
+                                  ///< shortening a run for wall-clock).
     float weight_decay = 0.0f;    ///< L2 weight decay.
     unsigned seed     = 42;       ///< Weight initialization seed.
-    bool verbose      = false;    ///< Print per-epoch training progress to stdout.
+    bool verbose      = false;    ///< Print per-epoch lr line to stdout.
+    bool verbose_train_acc = false;///< When true, also compute + print training
+                                   ///< accuracy each epoch. Costs one extra
+                                   ///< forward pass over the full training set
+                                   ///< per epoch — disable when using a hook
+                                   ///< that already reports accuracy.
+};
+
+/// Runtime-only training hooks.  Kept out of CNNReadoutConfig because the
+/// config must stay POD for the checkpoint format (see Serialization.cpp's
+/// static_assert).  The callback fires after every `eval_every_epochs`
+/// completed epoch and unconditionally after the final epoch.
+///
+/// When the callback runs, CNNReadout's `net_` holds the weights produced
+/// by the just-completed epoch and `trained_` is already true, so the
+/// client can call Predict*/Accuracy/R2 directly (typically via the
+/// enclosing ESN) for a mid-training eval.
+struct CNNTrainHooks {
+    int eval_every_epochs = 0;  ///< 0 disables mid-training callbacks.
+    std::function<void(int epoch_done_1based, int total_epochs, float lr)>
+        epoch_callback;
 };
 
 /// @brief HypercubeCNN-based readout for reservoir computing.
@@ -76,7 +101,8 @@ public:
     /// @param config     Architecture and training hyperparameters.
     void Train(const float* states, const float* targets,
                size_t num_samples, size_t dim,
-               const CNNReadoutConfig& config = {});
+               const CNNReadoutConfig& config = {},
+               const CNNTrainHooks& hooks = {});
 
     /// @brief Multi-output prediction: writes num_outputs floats to output.
     /// For regression: de-centered predictions.  For classification: raw logits.
