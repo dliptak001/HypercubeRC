@@ -13,7 +13,7 @@ namespace hrccnn_lm_text {
 struct TrainingMetadata
 {
     std::uint64_t training_seed    = 0;
-    std::uint32_t training_chunks  = 0;
+    std::uint32_t training_positions = 0;
     std::uint32_t training_epochs  = 0;
     std::string   git_sha;           ///< up to 40 chars; truncated on save
 };

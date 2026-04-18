@@ -11,11 +11,7 @@
 
 namespace hrccnn_lm_text {
 
-namespace {
-
-constexpr std::size_t kDIM = 12;
-
-}  // namespace
+using config::kDIM;
 
 int RunInfer()
 {

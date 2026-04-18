@@ -33,6 +33,7 @@ std::string GenerateText(ESN<DIM>& esn,
     out.reserve(num_chars);
 
     std::mt19937 rng(seed);
+    std::vector<float> probs(num_outputs);
 
     float step_bits[kInputBits];
     for (std::size_t i = 0; i < num_chars; ++i) {
@@ -47,7 +48,6 @@ std::string GenerateText(ESN<DIM>& esn,
             }
         } else {
             float max_logit = *std::max_element(logits.begin(), logits.end());
-            std::vector<float> probs(num_outputs);
             float sum = 0.0f;
             for (std::size_t k = 0; k < num_outputs; ++k) {
                 probs[k] = std::exp((logits[k] - max_logit) / temperature);

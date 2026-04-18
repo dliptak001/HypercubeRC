@@ -1,8 +1,7 @@
 #include "Corpus.h"
 
-#include <algorithm>
+#include <cstdio>
 #include <fstream>
-#include <set>
 #include <sstream>
 
 namespace hrccnn_lm_text {
@@ -18,7 +17,23 @@ void BuildCharTable(Corpus& c)
     }
 }
 
+std::string MakeFixedVocab()
+{
+    std::string v;
+    v.reserve(kVocabSize);
+    v += '\n';                        // 0x0A — newline
+    for (char c = 0x20; c <= 0x7E; ++c)  // printable ASCII
+        v += c;
+    return v;
+}
+
 }  // namespace
+
+const std::string& FixedVocab()
+{
+    static const std::string v = MakeFixedVocab();
+    return v;
+}
 
 bool LoadCorpus(const std::string& path, Corpus& out)
 {
@@ -30,9 +45,17 @@ bool LoadCorpus(const std::string& path, Corpus& out)
     out.text = buf.str();
     if (out.text.empty()) return false;
 
-    std::set<char> unique(out.text.begin(), out.text.end());
-    out.vocab.assign(unique.begin(), unique.end());
+    out.vocab = FixedVocab();
     BuildCharTable(out);
+
+    for (std::size_t i = 0; i < out.text.size(); ++i) {
+        if (CharToClass(out, out.text[i]) < 0) {
+            std::fprintf(stderr, "error: corpus byte 0x%02X at offset %zu "
+                         "is outside the fixed 96-token vocab\n",
+                         static_cast<unsigned char>(out.text[i]), i);
+            return false;
+        }
+    }
     return true;
 }
 

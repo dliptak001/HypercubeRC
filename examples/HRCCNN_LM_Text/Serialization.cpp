@@ -1,6 +1,8 @@
 #include "Serialization.h"
+#include "Corpus.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <string>
@@ -85,7 +87,7 @@ bool SaveModelFile(const std::string& path, const ModelFile& mf)
     WriteStr(os, mf.vocab);
 
     WritePOD(os, mf.meta.training_seed);
-    WritePOD(os, mf.meta.training_chunks);
+    WritePOD(os, mf.meta.training_positions);
     WritePOD(os, mf.meta.training_epochs);
 
     char sha[40] = {};
@@ -126,7 +128,7 @@ bool LoadModelFile(const std::string& path, ModelFile& mf, std::string* err)
     if (!ReadStr(is, mf.vocab))  return fail("short read (vocab)");
 
     if (!ReadPOD(is, mf.meta.training_seed))   return fail("short read (seed)");
-    if (!ReadPOD(is, mf.meta.training_chunks)) return fail("short read (chunks)");
+    if (!ReadPOD(is, mf.meta.training_positions)) return fail("short read (chunks)");
     if (!ReadPOD(is, mf.meta.training_epochs)) return fail("short read (epochs)");
 
     char sha[40] = {};
@@ -141,6 +143,12 @@ bool LoadModelFile(const std::string& path, ModelFile& mf, std::string* err)
     if (!ReadPOD(is, mf.readout.bias))          return fail("short read (bias)");
     if (!ReadVec(is, mf.readout.feature_mean))  return fail("short read or oversized (feature_mean)");
     if (!ReadVec(is, mf.readout.feature_scale)) return fail("short read or oversized (feature_scale)");
+
+    if (mf.vocab != FixedVocab()) {
+        std::fprintf(stderr, "warning: model vocab (%zu tokens) differs from "
+                     "fixed vocab (%zu tokens)\n",
+                     mf.vocab.size(), kVocabSize);
+    }
 
     return true;
 }

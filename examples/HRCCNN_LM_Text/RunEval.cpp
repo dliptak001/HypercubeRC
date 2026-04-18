@@ -11,11 +11,7 @@
 
 namespace hrccnn_lm_text {
 
-namespace {
-
-constexpr std::size_t kDIM = 12;
-
-}  // namespace
+using config::kDIM;
 
 int RunEval()
 {
@@ -57,7 +53,7 @@ int RunEval()
     }
 
     std::cerr << "[eval] model=" << args.model_path
-              << " (trained chunks=" << mf.meta.training_chunks
+              << " (trained positions=" << mf.meta.training_positions
               << " epochs=" << mf.meta.training_epochs
               << " seed=" << mf.meta.training_seed << ")\n";
     std::cerr << "[eval] warmup=" << args.warmup_chars

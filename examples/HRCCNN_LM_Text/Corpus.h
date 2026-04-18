@@ -8,10 +8,14 @@
 namespace hrccnn_lm_text {
 
 inline constexpr std::size_t kInputBits  = 8;    ///< bipolar ASCII input width
-inline constexpr std::size_t kVocabCap   = 128;  ///< upper bound on ASCII vocab
+inline constexpr std::size_t kVocabCap   = 128;  ///< ASCII lookup table size
+inline constexpr std::size_t kVocabSize  = 96;   ///< newline + printable ASCII 0x20-0x7E
 
-/// Text corpus + derived vocabulary.  `vocab` is the sorted unique-char
-/// string from `text`; a char's class index is its position in `vocab`.
+/// Return the fixed 96-token vocabulary string (sorted by byte value).
+const std::string& FixedVocab();
+
+/// Text corpus + fixed vocabulary.  `vocab` is always the fixed 96-token
+/// set; a char's class index is its position in `vocab`.
 struct Corpus
 {
     std::string text;
@@ -19,15 +23,13 @@ struct Corpus
     std::array<int, kVocabCap> char_to_class{};  ///< ASCII lookup, -1 if not in vocab
 };
 
-/// Load a plain-text corpus from disk and derive the vocab.  Returns false
-/// on missing file or empty corpus.  Populates `out.text`, `out.vocab`,
-/// `out.char_to_class`.
+/// Load a plain-text corpus from disk with the fixed vocab.  Returns false
+/// on missing file, empty corpus, or any byte outside the fixed vocab.
+/// Populates `out.text`, `out.vocab`, `out.char_to_class`.
 bool LoadCorpus(const std::string& path, Corpus& out);
 
-/// Build a Corpus over an already-loaded `text` string with a fixed vocab.
-/// Used by eval/infer where the vocab comes from the saved model (so a
-/// char that never appeared in training stays unmappable even if it
-/// appears in a fresh corpus).
+/// Build a Corpus over an already-loaded `text` string with a given vocab.
+/// Used by eval/infer where the vocab comes from the saved model file.
 void AttachCorpus(const std::string& text, const std::string& vocab, Corpus& out);
 
 /// Character -> class index ([0, vocab.size())), or -1 if not in vocab.

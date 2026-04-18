@@ -19,9 +19,9 @@
 
 namespace hrccnn_lm_text {
 
-namespace {
+using config::kDIM;
 
-constexpr std::size_t kDIM = 12;
+namespace {
 
 std::string EscapeText(const std::string& s)
 {
@@ -185,10 +185,6 @@ int RunTrain()
                   << " (warmup+train+val+1)\n";
         return 2;
     }
-    if (corpus.vocab.size() < 2) {
-        std::cerr << "error: vocab too small (need >= 2 chars)\n"; return 2;
-    }
-
     const std::size_t N = (1ULL << kDIM);
     const std::size_t positions = args.train_chars + args.val_chars;
     const double states_gib =
@@ -230,16 +226,8 @@ int RunTrain()
     ESN<kDIM> esn(rcfg, ReadoutType::HCNN, FeatureMode::Raw);
 
     std::vector<float> bits(total_chars * kInputBits);
-    for (std::size_t t = 0; t < total_chars; ++t) {
-        const char c = corpus.text[t];
-        if (CharToClass(corpus, c) < 0) {
-            std::cerr << "error: corpus char at offset " << t
-                      << " (byte " << static_cast<int>(static_cast<unsigned char>(c))
-                      << ") not in vocab\n";
-            return 2;
-        }
-        BipolarBits(c, bits.data() + t * kInputBits);
-    }
+    for (std::size_t t = 0; t < total_chars; ++t)
+        BipolarBits(corpus.text[t], bits.data() + t * kInputBits);
 
     auto t_start = std::chrono::steady_clock::now();
 
@@ -269,7 +257,7 @@ int RunTrain()
 
     CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<kDIM>();
     cnn_cfg.task              = HCNNTask::Classification;
-    cnn_cfg.num_outputs       = static_cast<int>(corpus.vocab.size());
+    cnn_cfg.num_outputs       = static_cast<int>(kVocabSize);
     cnn_cfg.num_layers        = args.cnn_num_layers;
     cnn_cfg.conv_channels     = args.cnn_conv_channels;
     cnn_cfg.epochs            = args.epochs;
@@ -291,7 +279,7 @@ int RunTrain()
     int    evals_without_improvement = 0;
 
     // --- Eval reporter. ---
-    const std::size_t num_classes = corpus.vocab.size();
+    const std::size_t num_classes = kVocabSize;
 
     auto run_eval_report = [&](const std::string& tag) {
         const double train_top1 = esn.Accuracy(targets.data(), 0, train_positions);
@@ -354,7 +342,7 @@ int RunTrain()
         ckpt.dim                  = static_cast<std::uint32_t>(kDIM);
         ckpt.vocab                = corpus.vocab;
         ckpt.meta.training_seed   = gen_seed;
-        ckpt.meta.training_chunks = static_cast<std::uint32_t>(args.train_chars);
+        ckpt.meta.training_positions = static_cast<std::uint32_t>(args.train_chars);
         ckpt.meta.training_epochs = static_cast<std::uint32_t>(epoch_done);
         ckpt.meta.git_sha         = args.git_sha;
         ckpt.reservoir_cfg        = esn.GetConfig();
@@ -387,7 +375,7 @@ int RunTrain()
     mf.dim                   = static_cast<std::uint32_t>(kDIM);
     mf.vocab                 = corpus.vocab;
     mf.meta.training_seed    = gen_seed;
-    mf.meta.training_chunks  = static_cast<std::uint32_t>(args.train_chars);
+    mf.meta.training_positions = static_cast<std::uint32_t>(args.train_chars);
     mf.meta.training_epochs  = static_cast<std::uint32_t>(args.epochs);
     mf.meta.git_sha          = args.git_sha;
     mf.reservoir_cfg         = esn.GetConfig();
