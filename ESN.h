@@ -221,6 +221,10 @@ public:
     /// @brief Restore a previously trained readout state (from deserialization).
     void SetReadoutState(const ReadoutState& state);
 
+    /// @brief Pre-set CNN architecture config before restoring weights.
+    /// Call before SetReadoutState when loading a saved HCNN model.
+    void SetCNNConfig(const CNNReadoutConfig& cfg);
+
 private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
     ReadoutType readout_type_;

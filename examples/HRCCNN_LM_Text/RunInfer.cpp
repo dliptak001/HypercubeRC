@@ -50,16 +50,7 @@ int RunInfer()
 
     // --- ESN construction + weight restore. ---
     ESN<kDIM> esn(mf.reservoir_cfg, ReadoutType::HCNN, FeatureMode::Raw);
-    {
-        std::vector<float> dummy_bits(kInputBits, 0.0f);
-        esn.Run(dummy_bits.data(), 1);
-        float dummy_target = 0.0f;
-        CNNReadoutConfig bootstrap = mf.cnn_cfg;
-        bootstrap.epochs  = 0;
-        bootstrap.verbose = false;
-        esn.Train(&dummy_target, 1, bootstrap);
-        esn.ClearStates();
-    }
+    esn.SetCNNConfig(mf.cnn_cfg);
     esn.SetReadoutState(FromSerial<kDIM>(mf.readout));
 
     std::cerr << "[infer] model=" << args.model_path

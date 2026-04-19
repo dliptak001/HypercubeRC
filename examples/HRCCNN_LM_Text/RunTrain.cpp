@@ -317,7 +317,7 @@ int RunTrain()
     mf.vocab                 = corpus.vocab;
     mf.meta.training_seed    = gen_seed;
     mf.meta.training_positions = static_cast<std::uint32_t>(args.train_chars);
-    mf.meta.training_epochs  = 1;
+    mf.meta.training_passes  = static_cast<std::uint32_t>(args.num_passes);
     mf.meta.git_sha          = args.git_sha;
     mf.reservoir_cfg         = esn.GetConfig();
     mf.cnn_cfg               = cnn_cfg;

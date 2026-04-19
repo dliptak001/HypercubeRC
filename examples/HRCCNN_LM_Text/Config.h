@@ -45,7 +45,7 @@ struct TrainCfg
     std::size_t   warmup_chars       = 64;      ///< transient warmup before training
     std::size_t   warmup_train_chars = 32768;   ///< states collected for CNN standardization
     std::size_t   train_chars        = 900000;  ///< chars streamed for online CNN training
-    int           num_passes         = 1;       ///< corpus passes (reservoir continues, no reset)
+    int           num_passes         = 3;       ///< corpus passes (reservoir continues, no reset)
     std::size_t   val_chars          = 100000;  ///< chars streamed for evaluation
 
     // CNN architecture + training.
@@ -73,17 +73,18 @@ struct TrainCfg
 inline const TrainCfg kTrain;
 
 // -----------------------------------------------------------------------------
-// Eval — reload saved model, score teacher-forced char accuracy on held-out region.
+// Eval — reload saved model, stream through corpus, score teacher-forced accuracy.
 // -----------------------------------------------------------------------------
 struct EvalCfg
 {
     std::string   model_path       = "C:\\temp\\text_v1.bin";
     std::string   corpus_path      = "C:\\temp\\tinyshakespeare.txt";
-    // Must match train's warmup+train_chars offset to score the same val
-    // region — corpus is deterministic and positional.
+    // Streaming eval: drive reservoir one char at a time, predict at each step.
+    // warmup_chars + skip_chars positions corpus_pos to the eval region.
     std::size_t   warmup_chars     = 64;
-    std::size_t   skip_chars       = 900000;  ///< chars to drive past before scoring
+    std::size_t   skip_chars       = 900000;  ///< chars to stream past before scoring
     std::size_t   eval_chars       = 100000;  ///< positions scored
+    std::size_t   eval_worst_classes = 5;     ///< per-class confusion: show N worst
 };
 
 inline const EvalCfg kEval;

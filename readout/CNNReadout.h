@@ -161,6 +161,11 @@ public:
     void SetState(std::vector<double> weights, double bias,
                   std::vector<float> feature_mean, std::vector<float> feature_scale);
 
+    /// @brief Pre-set architecture config before restoring weights via SetState.
+    /// Required when loading a saved model without training — SetState's
+    /// rebuild_from_blob() needs config_ to reconstruct the CNN.
+    void SetConfig(const CNNReadoutConfig& cfg);
+
     /// @brief Check if the readout has been trained.
     [[nodiscard]] bool IsTrained() const { return trained_; }
 

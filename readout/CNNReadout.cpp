@@ -453,3 +453,9 @@ void CNNReadout::SetState(std::vector<double> weights, double bias,
         trained_ = true;
     }
 }
+
+void CNNReadout::SetConfig(const CNNReadoutConfig& cfg)
+{
+    config_ = cfg;
+    num_outputs_ = static_cast<size_t>(cfg.num_outputs);
+}

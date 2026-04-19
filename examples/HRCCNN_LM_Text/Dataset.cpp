@@ -69,7 +69,7 @@ std::string GenerateText(ESN<DIM>& esn,
     return out;
 }
 
-// DIM 12 only; add more if targeting other sizes.
+// DIM 13 only; add more if targeting other sizes.
 template void ResetAndPrime<13>(ESN<13>&, const std::string&);
 template std::string GenerateText<13>(ESN<13>&, const Corpus&,
                                       const std::string&, std::size_t,

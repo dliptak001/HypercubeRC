@@ -453,6 +453,13 @@ void ESN<DIM>::SetReadoutState(const ReadoutState& state)
     }, readout_);
 }
 
+template <size_t DIM>
+void ESN<DIM>::SetCNNConfig(const CNNReadoutConfig& cfg)
+{
+    assert(readout_type_ == ReadoutType::HCNN);
+    std::get<CNNReadout>(readout_).SetConfig(cfg);
+}
+
 // ---------------------------------------------------------------
 //  HCNN sub-hypercube subsampling helpers
 // ---------------------------------------------------------------

@@ -88,7 +88,7 @@ bool SaveModelFile(const std::string& path, const ModelFile& mf)
 
     WritePOD(os, mf.meta.training_seed);
     WritePOD(os, mf.meta.training_positions);
-    WritePOD(os, mf.meta.training_epochs);
+    WritePOD(os, mf.meta.training_passes);
 
     char sha[40] = {};
     std::size_t n = std::min(mf.meta.git_sha.size(), std::size_t{40});
@@ -128,8 +128,8 @@ bool LoadModelFile(const std::string& path, ModelFile& mf, std::string* err)
     if (!ReadStr(is, mf.vocab))  return fail("short read (vocab)");
 
     if (!ReadPOD(is, mf.meta.training_seed))   return fail("short read (seed)");
-    if (!ReadPOD(is, mf.meta.training_positions)) return fail("short read (chunks)");
-    if (!ReadPOD(is, mf.meta.training_epochs)) return fail("short read (epochs)");
+    if (!ReadPOD(is, mf.meta.training_positions)) return fail("short read (positions)");
+    if (!ReadPOD(is, mf.meta.training_passes)) return fail("short read (passes)");
 
     char sha[40] = {};
     is.read(sha, 40);
