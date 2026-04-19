@@ -190,8 +190,7 @@ int RunTrain()
     // HCNN's thread pool parallelize forward+backward across samples.
     const auto pi = static_cast<float>(std::numbers::pi);
     const float lr_min = args.lr_max * args.lr_min_frac;
-    const auto total_train_steps =
-        static_cast<float>(args.train_chars) * args.num_passes;
+    const auto steps_per_pass = static_cast<float>(args.train_chars);
     const std::size_t train_start_pos = corpus_pos;
 
     const int K = args.mini_batch_size;
@@ -205,7 +204,8 @@ int RunTrain()
     std::size_t global_step = 0;
 
     std::cerr << "[train] mini_batch_size=" << K
-              << " state_dim=" << state_dim << "\n";
+              << " state_dim=" << state_dim
+              << " lr_schedule=cosine_warm_restarts\n";
 
     for (int pass = 0; pass < args.num_passes; ++pass) {
         corpus_pos = train_start_pos;
@@ -218,7 +218,8 @@ int RunTrain()
             accum_targets[accum_count] = CharToClass(
                 corpus, corpus.text[corpus_pos + 1]);
 
-            float progress = static_cast<float>(global_step) / total_train_steps;
+            // Cosine warm restarts: LR resets to lr_max at each pass.
+            float progress = static_cast<float>(i) / steps_per_pass;
             float lr = lr_min + 0.5f * (args.lr_max - lr_min) *
                        (1.0f + std::cos(pi * progress));
             accum_lr += lr;
