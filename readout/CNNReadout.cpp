@@ -270,6 +270,7 @@ void CNNReadout::InitOnline(const float* warmup_states, size_t warmup_count,
     compute_standardization(warmup_states, warmup_count, n);
     build_architecture();
     net_->SetOptimizer(hcnn::OptimizerType::ADAM);
+    net_->PrepareBuffers();
     target_mean_.clear();
     trained_ = true;
 }
@@ -283,6 +284,24 @@ void CNNReadout::TrainOnlineStep(const float* state, int target_class,
     standardize(state, scratch_state_.data(), n);
     net_->TrainStep(scratch_state_.data(), static_cast<int>(n), target_class,
                     lr, /*momentum=*/0.0f, weight_decay);
+}
+
+void CNNReadout::TrainOnlineBatch(const float* states, const int* targets,
+                                  size_t count, float lr, float weight_decay)
+{
+    assert(trained_ && net_);
+    const size_t n = num_features_;
+    const size_t total = count * n;
+
+    if (scratch_batch_.size() < total)
+        scratch_batch_.resize(total);
+
+    for (size_t i = 0; i < count; ++i)
+        standardize(states + i * n, scratch_batch_.data() + i * n, n);
+
+    net_->TrainBatch(scratch_batch_.data(), static_cast<int>(n),
+                     targets, static_cast<int>(count),
+                     lr, /*momentum=*/0.0f, weight_decay);
 }
 
 // ---------------------------------------------------------------------------

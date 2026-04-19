@@ -203,6 +203,25 @@ void ESN<DIM>::TrainLiveStep(float target_class, float lr, float weight_decay)
 }
 
 template <size_t DIM>
+void ESN<DIM>::CopyLiveState(float* out) const
+{
+    assert(readout_type_ == ReadoutType::HCNN);
+    const float* src = reservoir_->Outputs();
+    size_t j = 0;
+    for (size_t v = 0; v < N; v += output_stride_)
+        out[j++] = src[v];
+}
+
+template <size_t DIM>
+void ESN<DIM>::TrainLiveBatch(const float* states, const int* targets,
+                              size_t count, float lr, float weight_decay)
+{
+    assert(readout_type_ == ReadoutType::HCNN);
+    std::get<CNNReadout>(readout_).TrainOnlineBatch(
+        states, targets, count, lr, weight_decay);
+}
+
+template <size_t DIM>
 float ESN<DIM>::PredictRaw(size_t timestep) const
 {
     assert(timestep < num_collected_);

@@ -55,6 +55,11 @@ struct TrainCfg
     int           cnn_conv_channels = 4;
     int           eval_every_chars  = 100000;  ///< streaming eval interval (0 = end only)
 
+    // Gradient accumulation: reservoir streams one char at a time,
+    // but CNN weight updates happen every mini_batch_size steps.
+    // Parallelized across threads via HCNN::TrainBatch.
+    int           mini_batch_size   = 32;
+
     // LR schedule: cosine decay over train_chars * num_passes steps.
     float         lr_max            = 0.0015f;
     float         lr_min_frac       = 0.1f;   ///< lr_min = lr_max * lr_min_frac

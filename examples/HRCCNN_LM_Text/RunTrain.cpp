@@ -182,15 +182,30 @@ int RunTrain()
               << " lr_max=" << args.lr_max
               << " num_outputs=" << cnn_cfg.num_outputs << "\n";
 
-    // --- Phase 3: Stream through train_chars with online CNN updates. ---
+    // --- Phase 3: Stream through train_chars with mini-batch CNN updates. ---
+    //
+    // The reservoir advances one char at a time (sequential — state at T
+    // depends on T-1).  We accumulate K subsampled states into a local
+    // buffer, then flush as a single parallel TrainBatch call.  This lets
+    // HCNN's thread pool parallelize forward+backward across samples.
     const auto pi = static_cast<float>(std::numbers::pi);
     const float lr_min = args.lr_max * args.lr_min_frac;
     const auto total_train_steps =
         static_cast<float>(args.train_chars) * args.num_passes;
     const std::size_t train_start_pos = corpus_pos;
 
+    const int K = args.mini_batch_size;
+    const std::size_t state_dim = esn.NumOutputVerts();
+    std::vector<float> accum_states(K * state_dim);
+    std::vector<int>   accum_targets(K);
+    int accum_count = 0;
+    float accum_lr = 0.0f;
+
     auto t_train_start = std::chrono::steady_clock::now();
     std::size_t global_step = 0;
+
+    std::cerr << "[train] mini_batch_size=" << K
+              << " state_dim=" << state_dim << "\n";
 
     for (int pass = 0; pass < args.num_passes; ++pass) {
         corpus_pos = train_start_pos;
@@ -199,16 +214,24 @@ int RunTrain()
             BipolarBits(corpus.text[corpus_pos], step_bits);
             esn.Warmup(step_bits, 1);
 
-            const float target = static_cast<float>(
-                CharToClass(corpus, corpus.text[corpus_pos + 1]));
+            esn.CopyLiveState(accum_states.data() + accum_count * state_dim);
+            accum_targets[accum_count] = CharToClass(
+                corpus, corpus.text[corpus_pos + 1]);
 
             float progress = static_cast<float>(global_step) / total_train_steps;
             float lr = lr_min + 0.5f * (args.lr_max - lr_min) *
                        (1.0f + std::cos(pi * progress));
-
-            esn.TrainLiveStep(target, lr);
+            accum_lr += lr;
+            ++accum_count;
             ++corpus_pos;
             ++global_step;
+
+            if (accum_count == K) {
+                esn.TrainLiveBatch(accum_states.data(), accum_targets.data(),
+                                   K, accum_lr / K);
+                accum_count = 0;
+                accum_lr = 0.0f;
+            }
 
             if (args.verbose && (global_step % 100000 == 0)) {
                 auto now = std::chrono::steady_clock::now();
@@ -219,6 +242,14 @@ int RunTrain()
                           << " lr=" << lr
                           << " elapsed=" << elapsed << "s\n";
             }
+        }
+
+        // Flush remaining accumulated samples at end of pass.
+        if (accum_count > 0) {
+            esn.TrainLiveBatch(accum_states.data(), accum_targets.data(),
+                               accum_count, accum_lr / accum_count);
+            accum_count = 0;
+            accum_lr = 0.0f;
         }
 
         std::cerr << "[train] pass " << (pass + 1) << "/" << args.num_passes

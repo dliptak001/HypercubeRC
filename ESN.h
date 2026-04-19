@@ -133,6 +133,16 @@ public:
     /// HCNN readout only.
     void TrainLiveStep(float target_class, float lr, float weight_decay = 0.0f);
 
+    /// @brief Copy the current subsampled reservoir state for external accumulation.
+    /// Writes num_output_verts_ floats to `out`.  HCNN readout only.
+    void CopyLiveState(float* out) const;
+
+    /// @brief Mini-batch gradient step on externally accumulated states.
+    /// states: count rows of num_output_verts_ floats (from CopyLiveState).
+    /// targets: count int class indices.  HCNN readout only.
+    void TrainLiveBatch(const float* states, const int* targets,
+                        size_t count, float lr, float weight_decay = 0.0f);
+
     // ---------------------------------------------------------------
     //  Prediction & evaluation
     // ---------------------------------------------------------------

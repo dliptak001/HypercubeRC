@@ -120,6 +120,13 @@ public:
     void TrainOnlineStep(const float* state, int target_class,
                          float lr, float weight_decay = 0.0f);
 
+    /// @brief Mini-batch online gradient step (classification).
+    /// states: count rows of 2^dim floats (row-major, raw — standardized internally).
+    /// targets: count int class indices.
+    /// Parallelized across threads via HCNN::TrainBatch.
+    void TrainOnlineBatch(const float* states, const int* targets,
+                          size_t count, float lr, float weight_decay = 0.0f);
+
     /// @brief Multi-output prediction: writes num_outputs floats to output.
     /// For regression: de-centered predictions.  For classification: raw logits.
     void PredictRaw(const float* state, float* output) const;
@@ -195,6 +202,7 @@ private:
     mutable std::vector<float> scratch_state_;
     mutable std::vector<float> scratch_embedded_;
     mutable std::vector<float> scratch_pred_;
+    std::vector<float> scratch_batch_;  // Persistent buffer for TrainOnlineBatch standardization.
 
     void standardize(const float* in, float* out, size_t n) const;
     void compute_standardization(const float* states, size_t num_samples, size_t n);
