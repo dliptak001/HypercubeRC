@@ -188,9 +188,7 @@ int RunTrain()
     // depends on T-1).  We accumulate K subsampled states into a local
     // buffer, then flush as a single parallel TrainBatch call.  This lets
     // HCNN's thread pool parallelize forward+backward across samples.
-    const auto pi = static_cast<float>(std::numbers::pi);
-    const auto steps_per_pass = static_cast<float>(args.train_chars);
-    const float lr_max_floor = args.lr_max * args.lr_max_floor;
+    const float lr_max_floor = args.lr_max * args.lr_floor_frac;
     const std::size_t train_start_pos = corpus_pos;
 
     const int K = args.mini_batch_size;
@@ -198,24 +196,22 @@ int RunTrain()
     std::vector<float> accum_states(K * state_dim);
     std::vector<int>   accum_targets(K);
     int accum_count = 0;
-    float accum_lr = 0.0f;
 
     auto t_train_start = std::chrono::steady_clock::now();
     std::size_t global_step = 0;
 
     std::cerr << "[train] mini_batch_size=" << K
               << " state_dim=" << state_dim
-              << " lr_schedule=cosine_warm_restarts\n";
+              << " lr_schedule=constant_per_pass\n";
 
     for (int pass = 0; pass < args.num_passes; ++pass) {
         corpus_pos = train_start_pos;
 
-        float pass_lr_max = args.lr_max * std::pow(args.lr_pass_decay, pass);
-        if (pass_lr_max < lr_max_floor) pass_lr_max = lr_max_floor;
-        float pass_lr_min = pass_lr_max * args.lr_min_frac;
+        float pass_lr = args.lr_max * std::pow(args.lr_pass_decay, pass);
+        if (pass_lr < lr_max_floor) pass_lr = lr_max_floor;
 
         std::cerr << "[train] pass " << (pass + 1) << "/" << args.num_passes
-                  << " lr_max=" << pass_lr_max << " lr_min=" << pass_lr_min << "\n";
+                  << " lr=" << pass_lr << "\n";
 
         for (std::size_t i = 0; i < args.train_chars; ++i) {
             BipolarBits(corpus.text[corpus_pos], step_bits);
@@ -224,20 +220,14 @@ int RunTrain()
             esn.CopyLiveState(accum_states.data() + accum_count * state_dim);
             accum_targets[accum_count] = CharToClass(
                 corpus, corpus.text[corpus_pos + 1]);
-
-            float progress = static_cast<float>(i) / steps_per_pass;
-            float lr = pass_lr_min + 0.5f * (pass_lr_max - pass_lr_min) *
-                       (1.0f + std::cos(pi * progress));
-            accum_lr += lr;
             ++accum_count;
             ++corpus_pos;
             ++global_step;
 
             if (accum_count == K) {
                 esn.TrainLiveBatch(accum_states.data(), accum_targets.data(),
-                                   K, accum_lr / K);
+                                   K, pass_lr);
                 accum_count = 0;
-                accum_lr = 0.0f;
             }
 
             if (args.verbose && (global_step % 100000 == 0)) {
@@ -246,17 +236,15 @@ int RunTrain()
                 std::cerr << "[train] pass " << (pass + 1) << "/" << args.num_passes
                           << " step " << (i + 1) << "/" << args.train_chars
                           << " global=" << global_step
-                          << " lr=" << lr
+                          << " lr=" << pass_lr
                           << " elapsed=" << elapsed << "s\n";
             }
         }
 
-        // Flush remaining accumulated samples at end of pass.
         if (accum_count > 0) {
             esn.TrainLiveBatch(accum_states.data(), accum_targets.data(),
-                               accum_count, accum_lr / accum_count);
+                               accum_count, pass_lr);
             accum_count = 0;
-            accum_lr = 0.0f;
         }
 
         std::cerr << "[train] pass " << (pass + 1) << "/" << args.num_passes
