@@ -105,6 +105,18 @@ void ESN<DIM>::ResetReservoirOnly()
 }
 
 template <size_t DIM>
+void ESN<DIM>::SaveReservoirState(float* state_out, float* output_out) const
+{
+    reservoir_->SaveState(state_out, output_out);
+}
+
+template <size_t DIM>
+void ESN<DIM>::RestoreReservoirState(const float* state_in, const float* output_in)
+{
+    reservoir_->RestoreState(state_in, output_in);
+}
+
+template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size)
 {
     if (readout_type_ == ReadoutType::HCNN) {

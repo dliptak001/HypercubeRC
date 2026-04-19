@@ -254,6 +254,98 @@ int RunTrain()
 
         std::cerr << "[train] pass " << (pass + 1) << "/" << args.num_passes
                   << " complete, global_steps=" << global_step << "\n";
+
+        // --- Mid-training eval: stream val region, then restore reservoir. ---
+        {
+            constexpr std::size_t NN = (1ULL << kDIM);
+            std::vector<float> saved_state(NN), saved_output(NN);
+            esn.SaveReservoirState(saved_state.data(), saved_output.data());
+
+            const std::size_t eval_start_pos = train_start_pos + args.train_chars;
+            std::size_t eval_pos = eval_start_pos;
+
+            const std::size_t num_classes = kVocabSize;
+            const std::size_t num_outputs = esn.NumOutputs();
+            std::vector<float> logits(num_outputs);
+            std::vector<std::size_t> sorted_idx(num_outputs);
+
+            EvalMetrics val_m;
+            val_m.per_class_correct.resize(num_classes, 0);
+            val_m.per_class_total.resize(num_classes, 0);
+            std::size_t correct1 = 0, correct3 = 0, correct5 = 0;
+            double total_log_loss = 0.0;
+
+            for (std::size_t i = 0; i < args.val_chars; ++i) {
+                BipolarBits(corpus.text[eval_pos], step_bits);
+                esn.Warmup(step_bits, 1);
+
+                esn.PredictLiveRaw(logits.data());
+                const int label = CharToClass(corpus, corpus.text[eval_pos + 1]);
+
+                float max_logit = *std::max_element(logits.begin(),
+                                                    logits.begin() + static_cast<long>(num_outputs));
+                double sum_exp = 0.0;
+                for (std::size_t k = 0; k < num_outputs; ++k)
+                    sum_exp += std::exp(static_cast<double>(logits[k]) - max_logit);
+                double log_prob = (logits[label] - max_logit) - std::log(sum_exp);
+                total_log_loss -= log_prob;
+
+                std::iota(sorted_idx.begin(), sorted_idx.end(), std::size_t{0});
+                std::size_t k_max = std::min<std::size_t>(5, num_outputs);
+                std::partial_sort(sorted_idx.begin(),
+                                  sorted_idx.begin() + static_cast<long>(k_max),
+                                  sorted_idx.end(),
+                                  [&](std::size_t a, std::size_t b) {
+                                      return logits[a] > logits[b];
+                                  });
+
+                for (std::size_t k = 0; k < k_max; ++k) {
+                    if (static_cast<int>(sorted_idx[k]) == label) {
+                        if (k < 1) ++correct1;
+                        if (k < 3) ++correct3;
+                        if (k < 5) ++correct5;
+                        break;
+                    }
+                }
+
+                if (label >= 0 && static_cast<std::size_t>(label) < num_classes) {
+                    val_m.per_class_total[label]++;
+                    if (static_cast<int>(sorted_idx[0]) == label)
+                        val_m.per_class_correct[label]++;
+                }
+
+                ++eval_pos;
+            }
+
+            val_m.top1 = static_cast<double>(correct1) / args.val_chars;
+            val_m.top3 = static_cast<double>(correct3) / args.val_chars;
+            val_m.top5 = static_cast<double>(correct5) / args.val_chars;
+            val_m.bpc  = total_log_loss / (args.val_chars * std::log(2.0));
+
+            std::string tag = "pass " + std::to_string(pass + 1) + "/" + std::to_string(args.num_passes);
+            PrintMetrics(tag, "val", val_m, corpus, args.eval_worst_classes);
+
+            // Text samples (only on final pass to save time).
+            if (pass == args.num_passes - 1) {
+                const std::size_t val_start = args.warmup_chars + args.warmup_train_chars + args.train_chars;
+                const std::size_t prompt_len = std::min(args.eval_prompt_len, args.val_chars);
+                for (std::size_t s = 0; s < args.eval_show_samples; ++s) {
+                    const std::size_t span = args.val_chars - prompt_len;
+                    const std::size_t offset = (args.eval_show_samples > 1)
+                        ? (s * span) / (args.eval_show_samples - 1) : 0;
+                    const std::size_t origin = val_start + offset;
+                    std::string prompt(corpus.text.data() + origin, prompt_len);
+                    std::string gen = GenerateText(esn, corpus, prompt, args.eval_gen_chars,
+                                                   args.eval_temperature,
+                                                   static_cast<unsigned>(gen_seed + s));
+                    std::cerr << "[streaming] sample " << (s + 1) << "/" << args.eval_show_samples
+                              << " prompt=\"" << EscapeText(prompt) << "\"\n"
+                              << "  -> \""    << EscapeText(gen)    << "\"\n";
+                }
+            }
+
+            esn.RestoreReservoirState(saved_state.data(), saved_output.data());
+        }
     }
 
     corpus_pos = train_start_pos + args.train_chars;
@@ -263,84 +355,6 @@ int RunTrain()
               << std::chrono::duration<double>(t_train_end - t_train_start).count()
               << "s (" << args.num_passes << " pass"
               << (args.num_passes > 1 ? "es" : "") << ")\n";
-
-    // --- Phase 4: Stream through val_chars for evaluation. ---
-    const std::size_t num_classes = kVocabSize;
-    const std::size_t num_outputs = esn.NumOutputs();
-    std::vector<float> logits(num_outputs);
-    std::vector<std::size_t> sorted_idx(num_outputs);
-
-    EvalMetrics val_m;
-    val_m.per_class_correct.resize(num_classes, 0);
-    val_m.per_class_total.resize(num_classes, 0);
-    std::size_t correct1 = 0, correct3 = 0, correct5 = 0;
-    double total_log_loss = 0.0;
-
-    for (std::size_t i = 0; i < args.val_chars; ++i) {
-        BipolarBits(corpus.text[corpus_pos], step_bits);
-        esn.Warmup(step_bits, 1);
-
-        esn.PredictLiveRaw(logits.data());
-        const int label = CharToClass(corpus, corpus.text[corpus_pos + 1]);
-
-        float max_logit = *std::max_element(logits.begin(),
-                                            logits.begin() + static_cast<long>(num_outputs));
-        double sum_exp = 0.0;
-        for (std::size_t k = 0; k < num_outputs; ++k)
-            sum_exp += std::exp(static_cast<double>(logits[k]) - max_logit);
-        double log_prob = (logits[label] - max_logit) - std::log(sum_exp);
-        total_log_loss -= log_prob;
-
-        std::iota(sorted_idx.begin(), sorted_idx.end(), std::size_t{0});
-        std::size_t k_max = std::min<std::size_t>(5, num_outputs);
-        std::partial_sort(sorted_idx.begin(),
-                          sorted_idx.begin() + static_cast<long>(k_max),
-                          sorted_idx.end(),
-                          [&](std::size_t a, std::size_t b) {
-                              return logits[a] > logits[b];
-                          });
-
-        for (std::size_t k = 0; k < k_max; ++k) {
-            if (static_cast<int>(sorted_idx[k]) == label) {
-                if (k < 1) ++correct1;
-                if (k < 3) ++correct3;
-                if (k < 5) ++correct5;
-                break;
-            }
-        }
-
-        if (label >= 0 && static_cast<std::size_t>(label) < num_classes) {
-            val_m.per_class_total[label]++;
-            if (static_cast<int>(sorted_idx[0]) == label)
-                val_m.per_class_correct[label]++;
-        }
-
-        ++corpus_pos;
-    }
-
-    val_m.top1 = static_cast<double>(correct1) / args.val_chars;
-    val_m.top3 = static_cast<double>(correct3) / args.val_chars;
-    val_m.top5 = static_cast<double>(correct5) / args.val_chars;
-    val_m.bpc  = total_log_loss / (args.val_chars * std::log(2.0));
-
-    PrintMetrics("streaming", "val", val_m, corpus, args.eval_worst_classes);
-
-    // --- Text samples from val region. ---
-    const std::size_t val_start = args.warmup_chars + args.warmup_train_chars + args.train_chars;
-    const std::size_t prompt_len = std::min(args.eval_prompt_len, args.val_chars);
-    for (std::size_t s = 0; s < args.eval_show_samples; ++s) {
-        const std::size_t span = args.val_chars - prompt_len;
-        const std::size_t offset = (args.eval_show_samples > 1)
-            ? (s * span) / (args.eval_show_samples - 1) : 0;
-        const std::size_t origin = val_start + offset;
-        std::string prompt(corpus.text.data() + origin, prompt_len);
-        std::string gen = GenerateText(esn, corpus, prompt, args.eval_gen_chars,
-                                       args.eval_temperature,
-                                       static_cast<unsigned>(gen_seed + s));
-        std::cerr << "[streaming] sample " << (s + 1) << "/" << args.eval_show_samples
-                  << " prompt=\"" << EscapeText(prompt) << "\"\n"
-                  << "  -> \""    << EscapeText(gen)    << "\"\n";
-    }
 
     // --- Phase 5: Save model. ---
     ModelFile mf;

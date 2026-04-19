@@ -91,6 +91,13 @@ public:
     /// @brief Zero only the reservoir state; cache (states_, features_) preserved.
     void ResetReservoirOnly();
 
+    /// @brief Snapshot the live reservoir state (2 * N floats).
+    /// state_out and output_out must each hold N floats.
+    void SaveReservoirState(float* state_out, float* output_out) const;
+
+    /// @brief Restore a previously saved reservoir state.
+    void RestoreReservoirState(const float* state_in, const float* output_in);
+
     // ---------------------------------------------------------------
     //  Training
     // ---------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -111,6 +112,18 @@ public:
     /// sequence tasks). For stream tasks that rely on continuous dynamics
     /// across many inputs, do not call this.
     void Reset();
+
+    /// @brief Snapshot the current reservoir state (vtx_state_ + vtx_output_).
+    void SaveState(float* state_out, float* output_out) const {
+        std::memcpy(state_out, vtx_state_, N * sizeof(float));
+        std::memcpy(output_out, vtx_output_, N * sizeof(float));
+    }
+
+    /// @brief Restore a previously saved reservoir state.
+    void RestoreState(const float* state_in, const float* output_in) {
+        std::memcpy(vtx_state_, state_in, N * sizeof(float));
+        std::memcpy(vtx_output_, output_in, N * sizeof(float));
+    }
 
     [[nodiscard]] const float* Outputs() const { return vtx_output_; }
     [[nodiscard]] float GetAlpha() const { return alpha_; }
