@@ -647,6 +647,8 @@ bias, feature mean/scale vectors).
 - **Corpus expansion**: Tiny Shakespeare is ~1M chars.  Concatenating
   additional texts (modern English, code, multilingual) is a Phase 5
   option.
-- **Multiple passes**: the corpus can be re-fed for additional
-  training.  Whether this helps or hurts (overfitting risk) is an
-  open empirical question.
+- **Number of passes**: the training loop supports multiple passes
+  over the corpus.  The reservoir continues without reset between
+  passes, so each pass sees identical text in a different dynamic
+  context.  The number of passes is a tunable (`num_passes` in
+  `TrainCfg`).
