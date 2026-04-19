@@ -109,6 +109,17 @@ public:
                size_t num_samples, size_t dim,
                const CNNReadoutConfig& config = {});
 
+    /// @brief Initialize CNN for online (streaming) training.
+    /// Computes standardization stats from a warmup buffer, builds the
+    /// architecture, and sets the optimizer.  Call before TrainOnlineStep.
+    void InitOnline(const float* warmup_states, size_t warmup_count,
+                    size_t dim, const CNNReadoutConfig& config);
+
+    /// @brief Single-sample online gradient step (classification).
+    /// State is one subsampled reservoir state (2^dim floats).
+    void TrainOnlineStep(const float* state, int target_class,
+                         float lr, float weight_decay = 0.0f);
+
     /// @brief Multi-output prediction: writes num_outputs floats to output.
     /// For regression: de-centered predictions.  For classification: raw logits.
     void PredictRaw(const float* state, float* output) const;
@@ -143,7 +154,8 @@ public:
     [[nodiscard]] const std::vector<float>& FeatureScale() const { return input_scale_; }
 
     /// @brief Flattened CNN weights (opaque blob for serialization).
-    [[nodiscard]] const std::vector<double>& Weights() const { return weights_blob_; }
+    /// Lazily syncs from the live network on first call after training.
+    [[nodiscard]] const std::vector<double>& Weights() const;
 
     /// @brief Restore a previously trained state.
     void SetState(std::vector<double> weights, double bias,
@@ -170,8 +182,9 @@ private:
     // Target centering (per-output, regression only).
     std::vector<double> target_mean_;
 
-    // Flattened weight blob for serialization (mirrors Weights() interface).
-    std::vector<double> weights_blob_;
+    // Flattened weight blob for serialization.  Lazily synced from net_
+    // on first Weights() call after training (avoids per-step overhead).
+    mutable std::vector<double> weights_blob_;
 
     // Persistent scratch buffers for prediction (zero per-call allocation).
     mutable std::vector<float> scratch_state_;

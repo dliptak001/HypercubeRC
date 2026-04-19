@@ -16,7 +16,7 @@
 
 namespace hrccnn_lm_text::config {
 
-inline constexpr std::size_t kDIM = 12;
+inline constexpr std::size_t kDIM = 13;
 
 enum class Mode { Train, Eval, Infer };
 
@@ -39,40 +39,32 @@ struct TrainCfg
     std::uint64_t reservoir_seed           = 0;
     bool          use_fixed_reservoir_seed = false;   ///< false → derive from gen_seed
 
-    // Streaming scheme: load the corpus once, drive the reservoir through
-    // one continuous span of warmup + train + val characters.  ONE state
-    // per character, nothing duplicated.
-    //
-    // Peak RAM dominated by:
-    //   esn.States()  = (train_chars + val_chars) * N * 4 bytes
-    //   CNN std copy  = same again during training
-    //   HCNNStates    = transient, half that, per eval call
-    //
-    // At DIM 12 (N=4096, 16 KiB/state) the defaults below give
-    // 1M positions × 16 KiB = 15.6 GiB states + ~2 GiB CNN copy.
-    // Peak ~18 GiB.  Requires 32 GiB system RAM.
-    std::size_t   warmup_chars     = 64;      ///< transient clear before collection
-    std::size_t   train_chars      = 900000;  ///< positions collected for training
-    std::size_t   val_chars        = 100000;  ///< positions collected for validation
+    // Streaming training: drive the reservoir one char at a time,
+    // update the CNN readout after each step.  No states buffer needed.
+    // Peak RAM: reservoir (N*4 bytes) + CNN weights — under 1 GiB.
+    std::size_t   warmup_chars       = 64;      ///< transient warmup before training
+    std::size_t   warmup_train_chars = 32768;   ///< states collected for CNN standardization
+    std::size_t   train_chars        = 900000;  ///< chars streamed for online CNN training
+    int           num_passes         = 1;       ///< corpus passes (reservoir continues, no reset)
+    std::size_t   val_chars          = 100000;  ///< chars streamed for evaluation
 
-    // CNN training.
-    int           epochs            = 100;
-    int           batch_size        = 4096;
+    // CNN architecture + training.
     float         spectral_radius   = 0.90f;
-    float         output_fraction   = 1.0f;
+    float         output_fraction   = 0.5f;
     int           cnn_num_layers    = 1;
     int           cnn_conv_channels = 4;
-    int           lr_decay_epochs   = 200;   ///< cosine decay horizon; 0 = collapse to epochs
+    int           eval_every_chars  = 100000;  ///< streaming eval interval (0 = end only)
 
-    // Verbosity / hooks.
+    // LR schedule: cosine decay over train_chars * num_passes steps.
+    float         lr_max            = 0.0015f;
+    float         lr_min_frac       = 0.1f;   ///< lr_min = lr_max * lr_min_frac
+
+    // Verbosity / eval.
     bool          verbose           = true;
-    bool          verbose_train_acc = false;  ///< per-epoch full-train forward pass (pricey)
-    int           eval_every_epochs = 10;
     std::size_t   eval_show_samples = 3;      ///< autoreg text samples printed per eval
     std::size_t   eval_prompt_len   = 64;     ///< chars from val region used as prompt
     std::size_t   eval_gen_chars    = 200;    ///< chars generated per sample
     float         eval_temperature  = 0.8f;   ///< sampling temp for autoreg (0 = greedy)
-    int           eval_patience     = 0;      ///< stop after N evals with no val improvement; 0 = off
     std::size_t   eval_worst_classes = 5;     ///< per-class confusion: show N worst
 
     std::string   git_sha           = "";

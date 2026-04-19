@@ -83,8 +83,10 @@ template <size_t DIM>
 void ESN<DIM>::ClearStates()
 {
     states_.clear();
+    states_.shrink_to_fit();
     num_collected_ = 0;
     features_.clear();
+    features_.shrink_to_fit();
     features_computed_ = 0;
 }
 
@@ -176,6 +178,27 @@ void ESN<DIM>::TrainIncremental(const float* targets, size_t train_size,
     std::get<LinearReadout>(readout_).TrainIncremental(
         features_.data(), targets, train_size, NumFeatures(),
         blend, lr, epochs, weight_decay, lr_decay);
+}
+
+template <size_t DIM>
+void ESN<DIM>::InitOnline(const float* warmup_inputs, size_t warmup_count,
+                          const CNNReadoutConfig& config)
+{
+    assert(readout_type_ == ReadoutType::HCNN);
+    Run(warmup_inputs, warmup_count);
+    auto sub = HCNNStates(0, warmup_count);
+    std::get<CNNReadout>(readout_).InitOnline(
+        sub.data(), warmup_count, EffectiveDIM(), config);
+    ClearStates();
+}
+
+template <size_t DIM>
+void ESN<DIM>::TrainLiveStep(float target_class, float lr, float weight_decay)
+{
+    assert(readout_type_ == ReadoutType::HCNN);
+    const float* sub = SubsampleIntoScratch(reservoir_->Outputs());
+    std::get<CNNReadout>(readout_).TrainOnlineStep(
+        sub, static_cast<int>(target_class), lr, weight_decay);
 }
 
 template <size_t DIM>

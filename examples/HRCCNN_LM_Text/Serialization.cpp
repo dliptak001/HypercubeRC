@@ -176,7 +176,7 @@ typename ESN<DIM>::ReadoutState FromSerial(const SerialReadoutState& s)
     return r;
 }
 
-template SerialReadoutState ToSerial<12>(const ESN<12>::ReadoutState&);
-template ESN<12>::ReadoutState FromSerial<12>(const SerialReadoutState&);
+template SerialReadoutState ToSerial<13>(const ESN<13>::ReadoutState&);
+template ESN<13>::ReadoutState FromSerial<13>(const SerialReadoutState&);
 
 }  // namespace hrccnn_lm_text

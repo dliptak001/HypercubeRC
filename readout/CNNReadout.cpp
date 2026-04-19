@@ -255,6 +255,37 @@ void CNNReadout::Train(const float* states, const float* targets,
 }
 
 // ---------------------------------------------------------------------------
+//  Online (streaming) training
+// ---------------------------------------------------------------------------
+
+void CNNReadout::InitOnline(const float* warmup_states, size_t warmup_count,
+                            size_t dim, const CNNReadoutConfig& config)
+{
+    config_ = config;
+    dim_ = dim;
+    const size_t n = 1ULL << dim;
+    num_features_ = n;
+    num_outputs_ = static_cast<size_t>(config.num_outputs);
+
+    compute_standardization(warmup_states, warmup_count, n);
+    build_architecture();
+    net_->SetOptimizer(hcnn::OptimizerType::ADAM);
+    target_mean_.clear();
+    trained_ = true;
+}
+
+void CNNReadout::TrainOnlineStep(const float* state, int target_class,
+                                 float lr, float weight_decay)
+{
+    assert(trained_ && net_);
+    const size_t n = num_features_;
+
+    standardize(state, scratch_state_.data(), n);
+    net_->TrainStep(scratch_state_.data(), static_cast<int>(n), target_class,
+                    lr, /*momentum=*/0.0f, weight_decay);
+}
+
+// ---------------------------------------------------------------------------
 //  Prediction
 // ---------------------------------------------------------------------------
 
@@ -363,6 +394,15 @@ double CNNReadout::Accuracy(const float* states, const float* labels,
 // ---------------------------------------------------------------------------
 //  Serialization
 // ---------------------------------------------------------------------------
+
+const std::vector<double>& CNNReadout::Weights() const
+{
+    if (weights_blob_.empty() && net_) {
+        auto fw = net_->GetWeights();
+        weights_blob_.assign(fw.begin(), fw.end());
+    }
+    return weights_blob_;
+}
 
 void CNNReadout::flatten_weights()
 {

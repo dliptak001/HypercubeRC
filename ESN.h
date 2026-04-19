@@ -122,6 +122,17 @@ public:
                           float lr = 0.0f, size_t epochs = 200,
                           float weight_decay = 1e-4f, float lr_decay = 0.01f);
 
+    /// @brief Initialize CNN readout for online (streaming) training.
+    /// Collects warmup_count states via Run(), computes standardization,
+    /// builds the CNN architecture.  Call before TrainLiveStep.
+    void InitOnline(const float* warmup_inputs, size_t warmup_count,
+                    const CNNReadoutConfig& config);
+
+    /// @brief Single-step online training on the live reservoir state.
+    /// Subsamples the current reservoir output and applies one gradient step.
+    /// HCNN readout only.
+    void TrainLiveStep(float target_class, float lr, float weight_decay = 0.0f);
+
     // ---------------------------------------------------------------
     //  Prediction & evaluation
     // ---------------------------------------------------------------

@@ -45,71 +45,6 @@ struct EvalMetrics {
     std::vector<std::size_t> per_class_total;
 };
 
-EvalMetrics ComputeMetrics(ESN<kDIM>& esn,
-                           const float* targets,
-                           std::size_t start,
-                           std::size_t count,
-                           std::size_t num_classes)
-{
-    EvalMetrics m;
-    m.per_class_correct.resize(num_classes, 0);
-    m.per_class_total.resize(num_classes, 0);
-
-    const std::size_t num_outputs = esn.NumOutputs();
-    std::vector<float> logits(num_outputs);
-
-    std::size_t correct1 = 0, correct3 = 0, correct5 = 0;
-    double total_log_loss = 0.0;
-
-    std::vector<std::size_t> sorted_idx(num_outputs);
-
-    for (std::size_t i = 0; i < count; ++i) {
-        esn.PredictRaw(start + i, logits.data());
-        const int label = static_cast<int>(targets[start + i]);
-
-        // Softmax for BPC.
-        float max_logit = *std::max_element(logits.begin(),
-                                            logits.begin() + static_cast<long>(num_outputs));
-        double sum_exp = 0.0;
-        for (std::size_t k = 0; k < num_outputs; ++k)
-            sum_exp += std::exp(static_cast<double>(logits[k]) - max_logit);
-        double log_prob = (logits[label] - max_logit) - std::log(sum_exp);
-        total_log_loss -= log_prob;
-
-        // Top-k: partial sort descending.
-        std::iota(sorted_idx.begin(), sorted_idx.end(), 0);
-        std::size_t k_max = std::min<std::size_t>(5, num_outputs);
-        std::partial_sort(sorted_idx.begin(),
-                          sorted_idx.begin() + static_cast<long>(k_max),
-                          sorted_idx.end(),
-                          [&](std::size_t a, std::size_t b) {
-                              return logits[a] > logits[b];
-                          });
-
-        for (std::size_t k = 0; k < k_max; ++k) {
-            if (static_cast<int>(sorted_idx[k]) == label) {
-                if (k < 1) ++correct1;
-                if (k < 3) ++correct3;
-                if (k < 5) ++correct5;
-                break;
-            }
-        }
-
-        // Per-class.
-        if (label >= 0 && static_cast<std::size_t>(label) < num_classes) {
-            m.per_class_total[label]++;
-            if (static_cast<int>(sorted_idx[0]) == label)
-                m.per_class_correct[label]++;
-        }
-    }
-
-    m.top1 = static_cast<double>(correct1) / count;
-    m.top3 = static_cast<double>(correct3) / count;
-    m.top5 = static_cast<double>(correct5) / count;
-    m.bpc  = total_log_loss / (count * std::log(2.0));
-    return m;
-}
-
 void PrintMetrics(const std::string& tag,
                   const std::string& split,
                   const EvalMetrics& m,
@@ -178,25 +113,12 @@ int RunTrain()
               << " vocab_size=" << corpus.vocab.size() << "\n";
 
     const std::size_t total_chars =
-        args.warmup_chars + args.train_chars + args.val_chars + 1;
+        args.warmup_chars + args.warmup_train_chars +
+        args.train_chars + args.val_chars + 1;
     if (corpus.text.size() < total_chars) {
         std::cerr << "error: corpus has " << corpus.text.size()
-                  << " chars, need " << total_chars
-                  << " (warmup+train+val+1)\n";
+                  << " chars, need " << total_chars << "\n";
         return 2;
-    }
-    const std::size_t N = (1ULL << kDIM);
-    const std::size_t positions = args.train_chars + args.val_chars;
-    const double states_gib =
-        static_cast<double>(positions) * N * 4.0 / (1024.0 * 1024.0 * 1024.0);
-    const double peak_gib = states_gib * 2.5;
-    std::cerr << "[train] RAM estimate: positions=" << positions
-              << " per-state=" << (N * 4 / 1024) << " KiB"
-              << " states_buf=" << states_gib << " GiB"
-              << " peak ~" << peak_gib << " GiB\n";
-    if (peak_gib > 40.0) {
-        std::cerr << "warning: estimated peak RAM > 40 GiB.  Shrink "
-                     "train_chars / val_chars before running.\n";
     }
 
     std::uint64_t gen_seed = args.gen_seed;
@@ -214,170 +136,188 @@ int RunTrain()
     rcfg.spectral_radius  = args.spectral_radius;
     rcfg.output_fraction  = args.output_fraction;
 
+    const std::size_t N = (1ULL << kDIM);
     std::cerr << "[train] DIM=" << kDIM << " N=" << N
-              << " num_inputs=" << rcfg.num_inputs
               << " output_fraction=" << rcfg.output_fraction
               << " reservoir_seed=" << rcfg.seed << "\n";
-    std::cerr << "[train] warmup_chars=" << args.warmup_chars
-              << " train_chars=" << args.train_chars
-              << " val_chars=" << args.val_chars
-              << " epochs=" << args.epochs
-              << " batch_size=" << args.batch_size << "\n";
+    std::cerr << "[train] streaming: warmup=" << args.warmup_chars
+              << " warmup_train=" << args.warmup_train_chars
+              << " train=" << args.train_chars
+              << " val=" << args.val_chars << "\n";
 
     ESN<kDIM> esn(rcfg, ReadoutType::HCNN, FeatureMode::Raw);
 
-    std::vector<float> bits(total_chars * kInputBits);
-    for (std::size_t t = 0; t < total_chars; ++t)
-        BipolarBits(corpus.text[t], bits.data() + t * kInputBits);
-
-    auto t_start = std::chrono::steady_clock::now();
+    // --- Phase 1: Reservoir warmup (no collection). ---
+    std::size_t corpus_pos = 0;
+    float step_bits[kInputBits];
 
     esn.ResetReservoirOnly();
-    if (args.warmup_chars > 0)
-        esn.Warmup(bits.data(), args.warmup_chars);
-
-    const std::size_t run_offset = args.warmup_chars;
-    esn.Run(bits.data() + run_offset * kInputBits,
-            args.train_chars + args.val_chars);
-
-    const std::size_t train_positions = args.train_chars;
-    const std::size_t val_positions   = args.val_chars;
-
-    std::vector<float> targets(train_positions + val_positions);
-    for (std::size_t i = 0; i < targets.size(); ++i) {
-        targets[i] = static_cast<float>(
-            CharToClass(corpus, corpus.text[run_offset + i + 1]));
+    for (std::size_t i = 0; i < args.warmup_chars; ++i) {
+        BipolarBits(corpus.text[corpus_pos++], step_bits);
+        esn.Warmup(step_bits, 1);
     }
 
-    auto t_collected = std::chrono::steady_clock::now();
-    std::cerr << "[train] collection: train_positions=" << train_positions
-              << " val_positions=" << val_positions
-              << " elapsed="
-              << std::chrono::duration<double>(t_collected - t_start).count()
-              << "s\n";
+    // --- Phase 2: Collect warmup_train_chars for CNN standardization. ---
+    std::vector<float> warmup_bits(args.warmup_train_chars * kInputBits);
+    for (std::size_t i = 0; i < args.warmup_train_chars; ++i)
+        BipolarBits(corpus.text[corpus_pos + i], warmup_bits.data() + i * kInputBits);
 
     CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<kDIM>();
-    cnn_cfg.task              = HCNNTask::Classification;
-    cnn_cfg.num_outputs       = static_cast<int>(kVocabSize);
-    cnn_cfg.num_layers        = args.cnn_num_layers;
-    cnn_cfg.conv_channels     = args.cnn_conv_channels;
-    cnn_cfg.epochs            = args.epochs;
-    cnn_cfg.batch_size        = args.batch_size;
-    cnn_cfg.verbose           = args.verbose;
-    cnn_cfg.verbose_train_acc = args.verbose_train_acc;
-    cnn_cfg.lr_decay_epochs   = args.lr_decay_epochs;
+    cnn_cfg.task          = HCNNTask::Classification;
+    cnn_cfg.num_outputs   = static_cast<int>(kVocabSize);
+    cnn_cfg.num_layers    = args.cnn_num_layers;
+    cnn_cfg.conv_channels = args.cnn_conv_channels;
+
+    esn.InitOnline(warmup_bits.data(), args.warmup_train_chars, cnn_cfg);
+    warmup_bits.clear();
+    warmup_bits.shrink_to_fit();
+
+    // InitOnline's Run() already advanced the reservoir through the
+    // warmup_train region.  Just advance corpus_pos to match.
+    corpus_pos += args.warmup_train_chars;
 
     std::cerr << "[train] CNN cfg: nl=" << cnn_cfg.num_layers
               << " ch=" << cnn_cfg.conv_channels
               << " head=" << (cnn_cfg.readout_type == HCNNReadoutType::FLATTEN ? "FLATTEN" : "GAP")
-              << " lr=" << cnn_cfg.lr_max
-              << " epochs=" << cnn_cfg.epochs
-              << " bs=" << cnn_cfg.batch_size
+              << " lr_max=" << args.lr_max
               << " num_outputs=" << cnn_cfg.num_outputs << "\n";
 
-    // --- Early stopping state. ---
-    double best_val_metric = -1.0;
-    int    evals_without_improvement = 0;
+    // --- Phase 3: Stream through train_chars with online CNN updates. ---
+    const auto pi = static_cast<float>(std::numbers::pi);
+    const float lr_min = args.lr_max * args.lr_min_frac;
+    const auto total_train_steps =
+        static_cast<float>(args.train_chars) * args.num_passes;
+    const std::size_t train_start_pos = corpus_pos;
 
-    // --- Eval reporter. ---
-    const std::size_t num_classes = kVocabSize;
+    auto t_train_start = std::chrono::steady_clock::now();
+    std::size_t global_step = 0;
 
-    auto run_eval_report = [&](const std::string& tag) {
-        const double train_top1 = esn.Accuracy(targets.data(), 0, train_positions);
-        std::cerr << "[" << tag << "] train: top1=" << train_top1 << "\n";
+    for (int pass = 0; pass < args.num_passes; ++pass) {
+        corpus_pos = train_start_pos;
 
-        double val_top1 = 0.0;
-        if (val_positions > 0) {
-            EvalMetrics m_val = ComputeMetrics(esn, targets.data(),
-                                               train_positions, val_positions,
-                                               num_classes);
-            PrintMetrics(tag, "val", m_val, corpus, args.eval_worst_classes);
-            val_top1 = m_val.top1;
-        }
+        for (std::size_t i = 0; i < args.train_chars; ++i) {
+            BipolarBits(corpus.text[corpus_pos], step_bits);
+            esn.Warmup(step_bits, 1);
 
-        const std::size_t prompt_len = std::min(args.eval_prompt_len, args.val_chars);
-        const std::size_t val_start  = args.warmup_chars + args.train_chars;
-        const std::size_t max_samples = args.eval_show_samples;
-        for (std::size_t s = 0; s < max_samples; ++s) {
-            const std::size_t span = args.val_chars - prompt_len;
-            const std::size_t offset = (max_samples > 1)
-                ? (s * span) / (max_samples - 1)
-                : 0;
-            const std::size_t origin = val_start + offset;
-            std::string prompt(corpus.text.data() + origin, prompt_len);
-            std::string gen = GenerateText(esn, corpus, prompt, args.eval_gen_chars,
-                                           args.eval_temperature,
-                                           static_cast<unsigned>(gen_seed + s));
-            std::cerr << "[" << tag << "] sample " << (s + 1) << "/" << max_samples
-                      << " prompt=\"" << EscapeText(prompt) << "\"\n"
-                      << "  -> \""    << EscapeText(gen)    << "\"\n";
-        }
+            const float target = static_cast<float>(
+                CharToClass(corpus, corpus.text[corpus_pos + 1]));
 
-        return val_top1;
-    };
+            float progress = static_cast<float>(global_step) / total_train_steps;
+            float lr = lr_min + 0.5f * (args.lr_max - lr_min) *
+                       (1.0f + std::cos(pi * progress));
 
-    // --- Train + checkpoint hook. ---
-    CNNTrainHooks hooks;
-    hooks.eval_every_epochs = args.eval_every_epochs;
-    hooks.epoch_callback = [&](int epoch_done, int total_epochs, float lr) {
-        std::ostringstream tag;
-        tag << "eval e=" << epoch_done << "/" << total_epochs << " lr=" << lr;
-        double val_top1 = run_eval_report(tag.str());
+            esn.TrainLiveStep(target, lr);
+            ++corpus_pos;
+            ++global_step;
 
-        // Early stopping.
-        if (args.eval_patience > 0 && val_positions > 0) {
-            if (val_top1 > best_val_metric) {
-                best_val_metric = val_top1;
-                evals_without_improvement = 0;
-            } else {
-                ++evals_without_improvement;
-                if (evals_without_improvement >= args.eval_patience) {
-                    std::cerr << "[train] early stop: val top1 has not improved for "
-                              << evals_without_improvement << " evals\n";
-                    hooks.stop_requested = true;
-                }
+            if (args.verbose && (global_step % 100000 == 0)) {
+                auto now = std::chrono::steady_clock::now();
+                double elapsed = std::chrono::duration<double>(now - t_train_start).count();
+                std::cerr << "[train] pass " << (pass + 1) << "/" << args.num_passes
+                          << " step " << (i + 1) << "/" << args.train_chars
+                          << " global=" << global_step
+                          << " lr=" << lr
+                          << " elapsed=" << elapsed << "s\n";
             }
         }
 
-        ModelFile ckpt;
-        ckpt.dim                  = static_cast<std::uint32_t>(kDIM);
-        ckpt.vocab                = corpus.vocab;
-        ckpt.meta.training_seed   = gen_seed;
-        ckpt.meta.training_positions = static_cast<std::uint32_t>(args.train_chars);
-        ckpt.meta.training_epochs = static_cast<std::uint32_t>(epoch_done);
-        ckpt.meta.git_sha         = args.git_sha;
-        ckpt.reservoir_cfg        = esn.GetConfig();
-        ckpt.cnn_cfg              = cnn_cfg;
-        ckpt.readout              = ToSerial<kDIM>(esn.GetReadoutState());
+        std::cerr << "[train] pass " << (pass + 1) << "/" << args.num_passes
+                  << " complete, global_steps=" << global_step << "\n";
+    }
 
-        char suffix[32];
-        std::snprintf(suffix, sizeof(suffix), ".e%04d.bin", epoch_done);
-        const std::string ckpt_path = args.output_path + suffix;
-        if (SaveModelFile(ckpt_path, ckpt))
-            std::cerr << "[train] checkpoint saved: " << ckpt_path << "\n";
-        else
-            std::cerr << "warning: failed to save checkpoint to " << ckpt_path << "\n";
-    };
+    corpus_pos = train_start_pos + args.train_chars;
 
-    auto t_train_start = std::chrono::steady_clock::now();
-    esn.Train(targets.data(), train_positions, cnn_cfg, hooks);
     auto t_train_end = std::chrono::steady_clock::now();
-    std::cerr << "[train] training elapsed="
+    std::cerr << "[train] streaming training elapsed="
               << std::chrono::duration<double>(t_train_end - t_train_start).count()
-              << "s\n";
+              << "s (" << args.num_passes << " pass"
+              << (args.num_passes > 1 ? "es" : "") << ")\n";
 
-    if (hooks.stop_requested)
-        std::cerr << "[train] stopped early at best_val_top1=" << best_val_metric << "\n";
+    // --- Phase 4: Stream through val_chars for evaluation. ---
+    const std::size_t num_classes = kVocabSize;
+    const std::size_t num_outputs = esn.NumOutputs();
+    std::vector<float> logits(num_outputs);
+    std::vector<std::size_t> sorted_idx(num_outputs);
 
-    if (hooks.eval_every_epochs <= 0 || cnn_cfg.epochs <= 0)
-        run_eval_report("train-final");
+    EvalMetrics val_m;
+    val_m.per_class_correct.resize(num_classes, 0);
+    val_m.per_class_total.resize(num_classes, 0);
+    std::size_t correct1 = 0, correct3 = 0, correct5 = 0;
+    double total_log_loss = 0.0;
 
+    for (std::size_t i = 0; i < args.val_chars; ++i) {
+        BipolarBits(corpus.text[corpus_pos], step_bits);
+        esn.Warmup(step_bits, 1);
+
+        esn.PredictLiveRaw(logits.data());
+        const int label = CharToClass(corpus, corpus.text[corpus_pos + 1]);
+
+        float max_logit = *std::max_element(logits.begin(),
+                                            logits.begin() + static_cast<long>(num_outputs));
+        double sum_exp = 0.0;
+        for (std::size_t k = 0; k < num_outputs; ++k)
+            sum_exp += std::exp(static_cast<double>(logits[k]) - max_logit);
+        double log_prob = (logits[label] - max_logit) - std::log(sum_exp);
+        total_log_loss -= log_prob;
+
+        std::iota(sorted_idx.begin(), sorted_idx.end(), std::size_t{0});
+        std::size_t k_max = std::min<std::size_t>(5, num_outputs);
+        std::partial_sort(sorted_idx.begin(),
+                          sorted_idx.begin() + static_cast<long>(k_max),
+                          sorted_idx.end(),
+                          [&](std::size_t a, std::size_t b) {
+                              return logits[a] > logits[b];
+                          });
+
+        for (std::size_t k = 0; k < k_max; ++k) {
+            if (static_cast<int>(sorted_idx[k]) == label) {
+                if (k < 1) ++correct1;
+                if (k < 3) ++correct3;
+                if (k < 5) ++correct5;
+                break;
+            }
+        }
+
+        if (label >= 0 && static_cast<std::size_t>(label) < num_classes) {
+            val_m.per_class_total[label]++;
+            if (static_cast<int>(sorted_idx[0]) == label)
+                val_m.per_class_correct[label]++;
+        }
+
+        ++corpus_pos;
+    }
+
+    val_m.top1 = static_cast<double>(correct1) / args.val_chars;
+    val_m.top3 = static_cast<double>(correct3) / args.val_chars;
+    val_m.top5 = static_cast<double>(correct5) / args.val_chars;
+    val_m.bpc  = total_log_loss / (args.val_chars * std::log(2.0));
+
+    PrintMetrics("streaming", "val", val_m, corpus, args.eval_worst_classes);
+
+    // --- Text samples from val region. ---
+    const std::size_t val_start = args.warmup_chars + args.warmup_train_chars + args.train_chars;
+    const std::size_t prompt_len = std::min(args.eval_prompt_len, args.val_chars);
+    for (std::size_t s = 0; s < args.eval_show_samples; ++s) {
+        const std::size_t span = args.val_chars - prompt_len;
+        const std::size_t offset = (args.eval_show_samples > 1)
+            ? (s * span) / (args.eval_show_samples - 1) : 0;
+        const std::size_t origin = val_start + offset;
+        std::string prompt(corpus.text.data() + origin, prompt_len);
+        std::string gen = GenerateText(esn, corpus, prompt, args.eval_gen_chars,
+                                       args.eval_temperature,
+                                       static_cast<unsigned>(gen_seed + s));
+        std::cerr << "[streaming] sample " << (s + 1) << "/" << args.eval_show_samples
+                  << " prompt=\"" << EscapeText(prompt) << "\"\n"
+                  << "  -> \""    << EscapeText(gen)    << "\"\n";
+    }
+
+    // --- Phase 5: Save model. ---
     ModelFile mf;
     mf.dim                   = static_cast<std::uint32_t>(kDIM);
     mf.vocab                 = corpus.vocab;
     mf.meta.training_seed    = gen_seed;
     mf.meta.training_positions = static_cast<std::uint32_t>(args.train_chars);
-    mf.meta.training_epochs  = static_cast<std::uint32_t>(args.epochs);
+    mf.meta.training_epochs  = 1;
     mf.meta.git_sha          = args.git_sha;
     mf.reservoir_cfg         = esn.GetConfig();
     mf.cnn_cfg               = cnn_cfg;
