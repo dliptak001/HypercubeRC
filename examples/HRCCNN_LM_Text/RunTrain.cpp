@@ -209,9 +209,10 @@ int RunTrain()
                                              : (gen_seed ^ 0x9E3779B97F4A7C15ULL);
 
     ReservoirConfig rcfg;
-    rcfg.seed            = reservoir_seed;
-    rcfg.num_inputs      = kInputBits;
-    rcfg.output_fraction = args.output_fraction;
+    rcfg.seed             = reservoir_seed;
+    rcfg.num_inputs       = kInputBits;
+    rcfg.spectral_radius  = args.spectral_radius;
+    rcfg.output_fraction  = args.output_fraction;
 
     std::cerr << "[train] DIM=" << kDIM << " N=" << N
               << " num_inputs=" << rcfg.num_inputs

@@ -58,9 +58,10 @@ struct TrainCfg
     // CNN training.
     int           epochs            = 100;
     int           batch_size        = 4096;
-    float         output_fraction   = 0.125f;
+    float         spectral_radius   = 0.90f;
+    float         output_fraction   = 1.0f;
     int           cnn_num_layers    = 1;
-    int           cnn_conv_channels = 8;
+    int           cnn_conv_channels = 4;
     int           lr_decay_epochs   = 200;   ///< cosine decay horizon; 0 = collapse to epochs
 
     // Verbosity / hooks.
