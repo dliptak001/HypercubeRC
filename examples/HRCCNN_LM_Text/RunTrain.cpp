@@ -189,8 +189,8 @@ int RunTrain()
     // buffer, then flush as a single parallel TrainBatch call.  This lets
     // HCNN's thread pool parallelize forward+backward across samples.
     const auto pi = static_cast<float>(std::numbers::pi);
-    const float lr_min = args.lr_max * args.lr_min_frac;
     const auto steps_per_pass = static_cast<float>(args.train_chars);
+    const float lr_max_floor = args.lr_max * args.lr_max_floor;
     const std::size_t train_start_pos = corpus_pos;
 
     const int K = args.mini_batch_size;
@@ -210,6 +210,13 @@ int RunTrain()
     for (int pass = 0; pass < args.num_passes; ++pass) {
         corpus_pos = train_start_pos;
 
+        float pass_lr_max = args.lr_max * std::pow(args.lr_pass_decay, pass);
+        if (pass_lr_max < lr_max_floor) pass_lr_max = lr_max_floor;
+        float pass_lr_min = pass_lr_max * args.lr_min_frac;
+
+        std::cerr << "[train] pass " << (pass + 1) << "/" << args.num_passes
+                  << " lr_max=" << pass_lr_max << " lr_min=" << pass_lr_min << "\n";
+
         for (std::size_t i = 0; i < args.train_chars; ++i) {
             BipolarBits(corpus.text[corpus_pos], step_bits);
             esn.Warmup(step_bits, 1);
@@ -218,9 +225,8 @@ int RunTrain()
             accum_targets[accum_count] = CharToClass(
                 corpus, corpus.text[corpus_pos + 1]);
 
-            // Cosine warm restarts: LR resets to lr_max at each pass.
             float progress = static_cast<float>(i) / steps_per_pass;
-            float lr = lr_min + 0.5f * (args.lr_max - lr_min) *
+            float lr = pass_lr_min + 0.5f * (pass_lr_max - pass_lr_min) *
                        (1.0f + std::cos(pi * progress));
             accum_lr += lr;
             ++accum_count;

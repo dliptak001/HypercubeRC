@@ -60,9 +60,12 @@ struct TrainCfg
     // Parallelized across threads via HCNN::TrainBatch.
     int           mini_batch_size   = 32;
 
-    // LR schedule: cosine decay over train_chars * num_passes steps.
+    // LR schedule: cosine warm restarts per pass.
+    // lr_max decays by lr_pass_decay per pass, floored at lr_max * lr_max_floor.
     float         lr_max            = 0.0015f;
-    float         lr_min_frac       = 0.1f;   ///< lr_min = lr_max * lr_min_frac
+    float         lr_min_frac       = 0.1f;    ///< lr_min = lr_max * lr_min_frac
+    float         lr_pass_decay     = 0.95f;   ///< lr_max multiplier per pass
+    float         lr_max_floor      = 0.5f;    ///< lr_max never drops below lr_max * lr_max_floor
 
     // Verbosity / eval.
     bool          verbose           = true;
