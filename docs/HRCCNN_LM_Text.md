@@ -2,7 +2,7 @@
 
 ## Goal
 
-Train a DIM 12 HRCCNN to predict the next character of natural English
+Train a DIM 13 HRCCNN to predict the next character of natural English
 text, one character at a time. The model is shown a continuous stream of
 text (initial corpus: Tiny Shakespeare, ~1.1 MB) and must predict
 `char(t+1)` given the reservoir state after consuming `char(t)`.
@@ -10,7 +10,7 @@ Inference is autoregressive: each predicted character is fed back as the
 reservoir's next input.
 
 This is an ESN language model, not a "large" language model. The
-reservoir is 4096 neurons with a small CNN readout head. The question
+reservoir is 8192 neurons with a small CNN readout head. The question
 is whether hypercube reservoir dynamics plus a learned convolutional
 readout can capture enough sequential structure in natural text to
 produce coherent character-level predictions — bigrams, trigrams,
@@ -127,7 +127,7 @@ Natural English text has implicit structure at multiple scales:
 - **Verse structure**: iambic pentameter creates rhythmic patterns in
   line length and stress. Whether the reservoir can encode anything
   about this is an open question — it would require ~40-character
-  memory (one line of verse), which is at the edge of DIM 12's echo
+  memory (one line of verse), which is at the edge of DIM 13's echo
   state horizon.
 
 The model does not need to learn any of these structures explicitly.
@@ -143,7 +143,7 @@ byte, bipolar-encoded.
 - `ReservoirConfig::num_inputs = 8`.
 - Channel `b` (0 <= b <= 7) carries bit `b` of the current character's
   ASCII byte, **LSB = bit 0**: `+1.0` if set, `-1.0` if cleared.
-- At DIM 12, each of the 8 channels owns **512 vertices** via
+- At DIM 13, each of the 8 channels owns **1024 vertices** via
   `Reservoir`'s modular channel routing.
 
 ### ASCII bit structure for the text vocabulary
@@ -228,8 +228,8 @@ Bits 4–0: Within each group, bits 4–0 encode the letter identity.
 ### Why not a learned embedding?
 
 Same reasoning as HRCCNN_LLM_Math: the reservoir's random per-vertex
-`W_in` *is* the embedding. Each of 512 vertices per channel sees a
-different random projection of the 8-bit input, creating a 4096-dim
+`W_in` *is* the embedding. Each of 1024 vertices per channel sees a
+different random projection of the 8-bit input, creating an 8192-dim
 distributed representation without any trainable embedding layer.
 Adding a learned embedding would require backpropagation through
 the reservoir, which violates the ESN paradigm.
@@ -267,35 +267,36 @@ consistency verification.
 
 ## Reservoir
 
-- **DIM 12** (N = 4096).
+- **DIM 13** (N = 8192).
 - **Spectral radius** 0.90, **input scaling** 0.02 — scale-invariant
-  defaults.
-- **Output fraction** **0.125** (default). Same as the math model.
-  Gives effective CNN DIM = 9 (512 vertices), landing the FLATTEN
-  head at 2,048 features — proven territory from the math model.
+  defaults.  SR=0.95 was tested and performed worse (val top-1 dropped
+  from 37% to 33% at DIM 12).
+- **Output fraction** **0.5**.  The CNN sees 4096 of 8192 vertices
+  (effective CNN DIM = 12).  This gives the CNN the same spatial
+  resolution as a full DIM 12 reservoir while the extra 4096 hidden
+  vertices enrich the reservoir's internal dynamics.
 
-| output_fraction | stride | eff. CNN DIM | N at CNN | FLATTEN feats (nl=1, ch=8) | Head params (96 classes) |
-|-----------------|--------|-------------|----------|---------------------------|--------------------------|
-| 1.0             | 1      | 12          | 4096     | 16,384                    | 1.57M                   |
-| 0.5             | 2      | 11          | 2048     | 8,192                     | 786k                    |
-| 0.25            | 4      | 10          | 1024     | 4,096                     | 393k                    |
-| **0.125 (default)** | **8** | **9**  | **512**  | **2,048**                 | **197k**                |
-| 0.0625          | 16     | 8           | 256      | 1,024                     | 98k                     |
+| output_fraction | eff. CNN DIM | N at CNN | FLATTEN feats (nl=1, ch=4) | Head params (96 classes) |
+|-----------------|-------------|----------|---------------------------|--------------------------|
+| 1.0             | 13          | 8192     | 16,384                    | 1.57M                   |
+| **0.5 (current)** | **12**   | **4096** | **8,192**                 | **786k**                |
+| 0.25            | 11          | 2048     | 4,096                     | 393k                    |
+| 0.125           | 10          | 1024     | 2,048                     | 197k                    |
 
-**Why 0.125:** at 900k training positions, the sample/param ratio is
-~4.6:1. Comfortable regime — well out of memorization risk. Going up
-to 0.25 would double head params to 393k (ratio 2.3:1) — still
-workable. Going down to 0.0625 halves to 98k (ratio 9.2:1) — very
-safe but may underfit. The math model proved 0.125 at 200k positions
-with 20 classes; 96 classes have a larger head but the 900k training
-set compensates.
+**Why 0.5:** experiments at DIM 12 showed that increasing spatial
+resolution (more vertices visible to the CNN) was the strongest
+performance lever — stronger than deeper CNN heads or higher SR.
+At 900k training positions the sample/param ratio is 900k/786k ≈
+1.15:1.  This is tighter than the math model's 4.6:1 but the CNN
+extracts the useful signal in a single streaming pass, limiting
+overfitting.
 
 - **Seed** — single seed, derived from `gen_seed` via golden-ratio
-  XOR. Same reasoning as math: at DIM 12, seed lottery variance is
-  cosmetic.
+  XOR. Seed lottery variance is cosmetic at DIM 13.
 
-Reservoir state steps once per input character. HCNN sees raw state;
-no translation layer.
+Reservoir state steps once per input character.  The CNN readout
+sees the subsampled live state directly; no translation layer, no
+states buffer.
 
 ## Readout
 
@@ -309,34 +310,31 @@ no translation layer.
   deterministic evaluation. Temperature > 0 produces more diverse
   and readable autoregressive samples.
 
-Starting architecture: `HRCCNNBaseline<12>()` backbone — **nl=1,
-ch=8, FLATTEN head** — identical to the math model.
+Architecture: `HRCCNNBaseline<13>()` backbone with **nl=1, ch=4,
+FLATTEN head**.
 
-- **nl = 1, ch = 8** (one conv+pool layer, 8 channels). After one
-  pool from effective DIM 9 → DIM 8: 256 vertices × 8 channels =
-  **2,048 features**. Linear head: 2,048 × 96 + 96 = **~197k params**.
-  Same architecture that worked for math; the 96-class head is 5×
-  larger than math's 20-class head, but the feature extractor is
-  identical.
-- **FLATTEN readout head.** Same reasoning as math: the hypercube
-  reservoir's per-vertex `W_in` means vertex identity carries
-  character information. Each of the 512 sampled vertices encodes a
-  different random projection of the 8-bit input — which vertices
-  are active tells you which character was seen. GAP averages this
-  away. FLATTEN preserves it end-to-end.
-- **bs = 4096, ep = 100** (reduced from math's 1000 because the
-  streaming corpus provides 900k positions — far more training data
-  per epoch than 5k expressions × ~40 chars).
-- **lr_decay_epochs = 200** (cosine decay horizon extends past
-  actual training, keeping the learning rate higher for longer).
+- **nl = 1, ch = 4** (one conv+pool layer, 4 channels). After one
+  pool from effective DIM 12 → DIM 11: 2048 vertices × 4 channels =
+  **8,192 features**. Linear head: 8,192 × 96 + 96 = **~786k params**.
+  The lean 4-channel head keeps the parameter count manageable while
+  the full DIM 12 spatial resolution provides rich per-vertex signal.
+- **FLATTEN readout head.** The hypercube reservoir's per-vertex
+  `W_in` means vertex identity carries character information. Each of
+  the 4096 visible vertices encodes a different random projection of
+  the 8-bit input — which vertices are active tells you which
+  character was seen. GAP averages this away. FLATTEN preserves it
+  end-to-end.
+- **LR**: cosine decay from `lr_max=0.0015` over the full training
+  stream (900k steps).  Adam optimizer for stable online updates.
 
 ### Eval diagnostics
 
-Each eval hook (every 25 epochs by default) reports:
+After streaming through the training region, the reservoir continues
+into the val region.  Each val character is predicted via
+`PredictLiveRaw()` and metrics are accumulated:
 
-- **Train top-1 accuracy** — cheap, via `esn.Accuracy()`.
-- **Val top-1, top-3, top-5 accuracy** — expensive per-sample
-  `PredictRaw`, but only on the 100k val positions.
+- **Val top-1, top-3, top-5 accuracy** — per-character prediction
+  from the live reservoir state across 100k val positions.
 - **Val BPC (bits per character)** — cross-entropy in bits. The
   standard metric for char-level LMs. Baselines: ~6.6 BPC for uniform
   random over 96 classes, ~1.5 BPC for a simple RNN, ~1.2 BPC for a
@@ -347,86 +345,84 @@ Each eval hook (every 25 epochs by default) reports:
   each with a 64-char prompt and 200 chars of generated text at the
   configured temperature.
 
-Early stopping is available via `eval_patience` (disabled by default).
-When enabled, training halts if val top-1 has not improved for N
-consecutive eval checkpoints.
-
 ## Training Regime
 
-**Streaming single-pass.** Unlike the math model (which resets the
-reservoir per expression), the text model drives the reservoir through
-one continuous span of the corpus. This is the natural regime for a
-language model: the reservoir's fading memory integrates context from
-all preceding characters, exactly as it would at inference time.
+**Streaming online training.** The reservoir is driven through the
+corpus one character at a time.  After each character, the CNN readout
+receives a single gradient update on the live reservoir state.  No
+states are stored — RAM usage is constant regardless of corpus size.
 
 Layout in the corpus:
 
 ```
-[── warmup ──][──────────── train_chars ──────────────][── val_chars ──][+1]
-     64                   900,000                         100,000
+[── warmup ──][── warmup_train ──][──────── train_chars ────────][── val_chars ──][+1]
+     64             32,768                  900,000                   100,000
 ```
 
-- **Warmup** (64 chars): drives the reservoir without collecting states.
-  Washes out the zero-init transient. At SR = 0.90, the zero-state
+- **Warmup** (64 chars): drives the reservoir without training.
+  Washes out the zero-init transient.  At SR = 0.90, the zero-state
   contribution decays to < 0.1% after 64 steps.
-- **Train positions** (900,000): `esn.Run()` collects one state per
-  character. Each state's target is the next character's class index.
-- **Val positions** (100,000): collected in the same `esn.Run()` call,
-  contiguous with training positions. The reservoir's state at the
-  train/val boundary carries context from the training region, matching
-  what would happen in production — no artificial state reset.
-  **Val is only scored every 25 epochs** (controlled by
-  `eval_every_epochs`), not after every epoch — the val states sit
-  idle between eval hooks and add no per-epoch cost.
+- **Warmup-train** (32,768 chars): `esn.InitOnline()` drives the
+  reservoir through these positions, collects states transiently to
+  compute input standardization (per-vertex mean and 1/std), builds
+  the CNN architecture, and frees the states buffer.
+- **Train stream** (900,000 chars): for each character, the reservoir
+  advances one step and `esn.TrainLiveStep()` applies one CNN gradient
+  update.  The target is the next character's class index.  LR follows
+  cosine decay from `lr_max` to `lr_min` over the full 900k steps.
+- **Val stream** (100,000 chars): the reservoir continues into the val
+  region.  Each character is predicted via `esn.PredictLiveRaw()` and
+  metrics (top-k accuracy, BPC, per-class confusion) are accumulated.
+  No weight updates.  The reservoir's state at the train/val boundary
+  carries context from the training region, matching what would happen
+  in production.
 - **+1 trailing character**: needed so the last val position has a
   target.
 
-**Total corpus usage**: 1,000,065 characters out of 1,115,394 (89.7%).
-Uses nearly the full corpus. The remaining ~115k chars are untouched
-and available for future held-out evaluation with `RunEval`.
+**Multiple passes.** The corpus can be re-fed through the reservoir
+for additional training passes.  The reservoir does not reset between
+passes — it continues from its current state, so each pass sees the
+data in a different dynamic context.
 
-**Memory budget**: 1M positions x 4096 floats x 4 bytes = 15.6 GiB
-for the states buffer. CNN training creates a standardized copy of
-the subsampled states (512 floats/position at output_fraction=0.125)
-= ~2 GiB, plus transient buffers. Peak RAM ~18 GiB. Requires 32 GiB
-system RAM.
+**Total corpus usage**: ~1,033k characters out of 1,115,394 (92.6%).
+The remaining ~82k chars are untouched and available for future
+held-out evaluation with `RunEval`.
+
+**Memory budget**: steady-state RAM is under 50 MiB (reservoir state +
+CNN weights + optimizer).  A transient ~1.5 GiB peak occurs during
+`InitOnline` (32k states for standardization), freed immediately after.
+No states buffer.  DIM 14, 15, 16 are all feasible.
 
 **Teacher forcing.** At position `t`, the reservoir has consumed
-`char(t)` and the target is `char(t+1)`. Standard next-character
-prediction — every position contributes a training example. No
-masking of any region.
+`char(t)` and the target is `char(t+1)`.  Standard next-character
+prediction — every position contributes one online gradient update.
 
-**No per-expression reset.** The reservoir runs continuously. The
+**No per-expression reset.** The reservoir runs continuously.  The
 spectral radius (0.90) governs the slowest decay mode: 0.9^t gives
-~35% at lag 10, ~4% at lag 30, ~0.5% at lag 50. But this is an upper
-bound — most eigenvalues are smaller, and the tanh nonlinearity
-typically reduces effective memory below the linear prediction. The
-true effective context window should be empirically measured via
-`diagnostics/MemoryCapacity.h` (total R² over lags 1–50) before
-drawing conclusions. Rough estimate: **20–40 characters** at DIM 12 /
-SR 0.90, covering word boundaries and short phrases. Paragraph-level
-structure is out of reach. If MC measurement shows this is
-insufficient, DIM 14 (4× neurons, 4× RAM per position) is a Phase 5
-experiment — contingent on a library optimization to store only
-subsampled states, which would break the current RAM deadlock
-(DIM 14 × 900k positions = 56 GiB states alone).
+~35% at lag 10, ~4% at lag 30, ~0.5% at lag 50.  The true effective
+context window should be empirically measured via
+`diagnostics/MemoryCapacity.h` (total R² over lags 1–50).  Rough
+estimate: **20–40 characters** at DIM 13 / SR 0.90, covering word
+boundaries and short phrases.  Paragraph-level structure is out of
+reach.  Increasing DIM further (14, 15) is straightforward with
+streaming training — no RAM constraint.
 
 ### Implications for the task (pending MC measurement)
 
 - **Word completion** (context ~5 chars) is well within estimated
-  echo state range. The model should learn common word continuations.
+  echo state range.  The model should learn common word continuations.
 - **Character-name prediction** after `\n` + uppercase (context ~15
   chars for a typical name) is probably within range.
 - **Verse structure / rhyme** (context ~40–80 chars for a couplet)
-  is likely beyond the memory horizon. Don't expect this.
+  is likely beyond the memory horizon.  Don't expect this.
 - **Cross-paragraph coherence** is impossible.
 
 ## Inference
 
 ```
-1. Construct ESN<12> from saved ReservoirConfig.
+1. Construct ESN<13> from saved ReservoirConfig.
 2. Bootstrap CNN readout (dummy Run + Train with epochs=0).
-3. Restore weights via SetReadoutState(FromSerial<12>(mf.readout)).
+3. Restore weights via SetReadoutState(FromSerial<13>(mf.readout)).
 4. ResetAndPrime(esn, prompt):
      a. esn.ResetReservoirOnly()
      b. Encode prompt to bipolar bits.
@@ -467,7 +463,7 @@ Temperature controls generation diversity:
   | Simple RNN (Karpathy) | ~1.5 |
   | LSTM (Karpathy) | ~1.2 |
 
-  Realistic target for HRCCNN at DIM 12: **2.5–3.5 BPC** (trigram to
+  Realistic target for HRCCNN at DIM 13: **2.5–3.5 BPC** (trigram to
   bigram level). Breaking below 2.5 would be a strong result. Breaking
   below 2.0 would be remarkable for a non-gradient-trained sequence
   model.
@@ -529,64 +525,49 @@ Temperature controls generation diversity:
 
 ## Phased Delivery
 
-**Phase 1 — scaffold.**
+**Phase 1 — scaffold.** (complete)
 - Corpus loader, fixed 96-token vocab, bipolar encoder.
 - Binary serialization with embedded vocab.
 - Config-driven train/eval/infer dispatch.
-- Streaming reservoir drive (warmup + continuous Run).
 - Autoregressive generation with temperature sampling.
-- **Acceptance criterion**: builds clean, config is sane, can load
-  corpus and print vocab/size. No training yet.
 
-**Phase 2 — DIM 12 v1.**
-- Default config: DIM 12, nl=1/ch=8/FLATTEN, 900k train / 100k val,
-  output_fraction=0.125, 100 epochs, bs=4096.
-- Target: top-1 accuracy > 25% (beating majority-class baseline by
-  a clear margin) and BPC < 4.0 (beating unigram baseline).
-- Eval hooks report top-k accuracy, BPC, per-class confusion, and
-  autoregressive samples every 25 epochs.
-- If BPC plateaus above 4.0, the approach has a structural problem.
+**Phase 2 — DIM 12 batch baseline.** (complete)
+- Batch training at DIM 12 with various configs.  Best result:
+  nl=1/ch=4/of=1.0, val top-1 = 44.5%, BPC = 2.89 at epoch 10.
+  Model plateaus immediately and overfits beyond epoch 10.
+- Established that SR=0.90 is optimal (SR=0.95 hurt performance).
+- Established that FLATTEN > GAP and more spatial resolution is the
+  strongest lever.
 
-**Phase 3 — scale & iterate.**
-- Increase epochs if not overfitting (900k positions already uses
-  ~90% of Tiny Shakespeare).
-- Try larger/different corpora to increase training data.
-- Target: BPC < 3.0 (bigram level or better).
+**Phase 3 — streaming training + DIM 13.** (current)
+- Streaming online training: one CNN gradient step per character,
+  no states buffer.  Enables DIM 13+ with negligible RAM.
+- DIM 13, of=0.5: 8192-neuron reservoir, CNN sees 4096 vertices.
+- Target: match or exceed DIM 12 batch baseline (44.5% / 2.89 BPC)
+  with a richer reservoir.
 
 **Phase 4 — diagnostics & tuning.**
-- Entry criterion: BPC has plateaued over 3+ eval checkpoints.
+- Entry criterion: BPC has plateaued.
 - **Memory capacity measurement**: run `diagnostics/MemoryCapacity.h`
-  at DIM 12 / SR 0.90 to get empirical R² vs lag. Establishes the
-  true context window before chasing tuning levers.
-- output_fraction sweep (0.25, 0.5, 1.0).
-- nl/ch sweep (nl=1..3, ch=8..32).
-- GAP vs FLATTEN comparison.
-- Per-position accuracy analysis (does accuracy vary with position
-  in a word? in a line?).
-- Context window probe: predict characters that require N-gram
-  context of increasing length; measure where accuracy drops off.
+  at DIM 13 / SR 0.90 to get empirical R² vs lag.
+- DIM sweep (14, 15) — streaming makes higher DIM trivial.
+- nl/ch sweep if readout capacity is the bottleneck.
 - **Multi-char input injection.** If BPC plateaus at bigram level
-  (~3.0), the reservoir's recurrent memory may not be carrying
-  char(t-1) at sufficient fidelity. Injecting char(t-1) alongside
-  char(t) as a second 8-bit bipolar input (`num_inputs=16`, 256
-  vertices/channel at DIM 12) gives the reservoir a clean,
-  undistorted copy of the previous character. The recurrent signal
-  (lossy, context-mixed) and the direct injection (pristine) are
-  complementary — one carries history, the other carries identity.
-  Cost: halves vertices per channel. Three chars (`num_inputs=24`,
-  ~170 vertices/channel) is possible but starts thinning the
-  random-projection bandwidth. Only pursue if v1 establishes that
-  temporal context — not readout capacity or training data — is the
-  bottleneck.
+  (~3.0), inject char(t-1) alongside char(t) as 16 bipolar inputs.
+  Gives the reservoir clean bigram signal without relying on echo
+  memory.  Cost: halves vertices per channel (512 at DIM 13).
+- **Positional encoding.** Concatenate vertex address bits as extra
+  CNN input channels.  Gives the conv layers position awareness
+  before the FLATTEN head.
 
 **Phase 5 — push limits.**
-- DIM 14 (N = 16,384) if DIM 12 caps below BPC 2.5. Contingent on a
-  library optimization to store only subsampled states per position
-  (currently the full N-vector is cached), which would break the RAM
-  deadlock at higher DIM.
+- DIM 14+ (N = 16,384+) — straightforward with streaming, no RAM
+  constraint.
 - Alternative / larger corpora (modern English, code, multilingual).
   Larger corpora are the primary scaling lever once Tiny Shakespeare
   is exhausted.
+- Multiple corpus passes to see if additional training signal exists
+  beyond the first pass.
 
 ## Deliverable Structure
 
@@ -596,8 +577,8 @@ Temperature controls generation diversity:
 
 **Modes:**
 
-- **Train**: load corpus, drive reservoir, train CNN readout, save
-  model with periodic checkpoints.
+- **Train**: load corpus, stream through reservoir with online CNN
+  updates, evaluate on val region, save model.
 - **Eval**: load saved model + corpus, score teacher-forced accuracy
   and BPC on a held-out region.
 - **Infer**: load saved model (no corpus needed — vocab from model
@@ -611,7 +592,7 @@ examples/HRCCNN_LM_Text/
   Corpus.h/.cpp     Corpus loading, fixed vocab, bipolar encoding
   Dataset.h/.cpp    ResetAndPrime, GenerateText (temperature sampling)
   Serialization.h/.cpp  Binary model file format (magic HCNNLMTX, v1)
-  RunTrain.cpp      Streaming train loop + eval hooks + checkpoints
+  RunTrain.cpp      Streaming online train loop + val eval
   RunEval.cpp       Teacher-forced eval on held-out region
   RunInfer.cpp      Autoregressive inference from prompt
   main.cpp          Mode dispatch
@@ -628,7 +609,7 @@ Same structure as HRCCNN_LLM_Math with two differences:
   vocab matches the expected fixed set.
 
 The rest of the format is identical: format version, DIM, training
-metadata (seed, chunks, epochs, git SHA), ReservoirConfig and
+metadata (seed, positions, epochs, git SHA), ReservoirConfig and
 CNNReadoutConfig as POD blobs, then the readout state (weights blob,
 bias, feature mean/scale vectors).
 
@@ -640,31 +621,32 @@ bias, feature mean/scale vectors).
 | Vocab source | hardcoded | fixed (not corpus-derived) |
 | Token semantics | structured (digits, ops, EOS) | natural (letters, punctuation) |
 | Input encoding | 8-bit bipolar (6 live channels) | 8-bit bipolar (7 live channels) |
+| DIM | 12 (N=4096) | 13 (N=8192) |
 | Corpus | generated on the fly | static file (Tiny Shakespeare) |
 | Reservoir regime | per-expression reset + priming | continuous streaming |
+| Training mode | batch (collect states, multi-epoch) | streaming (online, per-char updates) |
 | Context needed | full expression (~40 chars) | local (~20–40 chars estimated) |
-| Training positions | ~200k (5k expr x 40 chars) | 900k (contiguous) |
+| Training positions | ~200k (5k expr x 40 chars) | 900k (streamed) |
 | Primary metric | exact-match accuracy | BPC |
-| Output fraction | 0.125 (eff. DIM 9) | 0.125 (eff. DIM 9) |
-| CNN config | nl=1, ch=8, FLATTEN | nl=1, ch=8, FLATTEN |
+| Output fraction | 0.125 (eff. DIM 9) | 0.5 (eff. DIM 12) |
+| CNN config | nl=1, ch=8, FLATTEN | nl=1, ch=4, FLATTEN |
 | Temperature sampling | no (argmax only) | yes (default 0.8) |
-| Early stopping | no | yes (optional) |
+| Peak RAM | ~18 GiB | < 50 MiB (steady-state) |
 
 ## Open Decisions
 
-- **output_fraction**: 0.125 is the starting point (same as math).
-  If overfitting: increase training data before reducing fraction.
-  If underfitting: try 0.25 (doubles features and head params).
-- **GAP vs FLATTEN**: FLATTEN is default for vertex-identity
-  preservation. If overfitting persists after increasing training
-  data, GAP is a fallback that cuts head params from ~197k to ~1k.
-- **Class weighting**: uniform is default. Inverse-frequency if rare
-  characters show near-zero accuracy.
-- **Corpus expansion**: Tiny Shakespeare is ~1M chars. If the model
-  shows capacity for more data, concatenating additional texts (e.g.,
-  other Shakespeare plays, or mixing in modern English) is a Phase 5
+- **DIM scaling**: DIM 13 is the current config.  Streaming training
+  makes DIM 14+ trivial in terms of RAM.  Higher DIM gives the
+  reservoir more internal dynamics at the cost of slower per-step
+  computation.
+- **output_fraction**: 0.5 balances spatial resolution against head
+  params.  If the CNN needs more signal, try 1.0 with ch=2 to keep
+  the param budget constant.
+- **Class weighting**: uniform is the default.  Inverse-frequency if
+  rare characters show near-zero accuracy.
+- **Corpus expansion**: Tiny Shakespeare is ~1M chars.  Concatenating
+  additional texts (modern English, code, multilingual) is a Phase 5
   option.
-- **Multi-scale input**: feeding both the raw byte and a derived
-  "character class" (lowercase, uppercase, punctuation, whitespace)
-  as a second input channel. Deferred unless the single-byte encoding
-  proves insufficient.
+- **Multiple passes**: the corpus can be re-fed for additional
+  training.  Whether this helps or hurts (overfitting risk) is an
+  open empirical question.
