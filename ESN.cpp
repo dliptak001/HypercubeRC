@@ -28,6 +28,7 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
     size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * output_fraction_)));
     output_stride_ = std::max<size_t>(1, N / M);
     num_output_verts_ = (N + output_stride_ - 1) / output_stride_;
+    scratch_subsampled_.resize(num_output_verts_);
 
     // HCNN subsamples reservoir state onto a sub-hypercube via stride selection.
     // HypercubeCNN's convolution uses XOR-neighbor masks (hypercube topology),
@@ -471,7 +472,6 @@ size_t ESN<DIM>::EffectiveDIM() const
 template <size_t DIM>
 const float* ESN<DIM>::SubsampleIntoScratch(const float* src) const
 {
-    scratch_subsampled_.resize(num_output_verts_);
     size_t j = 0;
     for (size_t v = 0; v < N; v += output_stride_)
         scratch_subsampled_[j++] = src[v];
