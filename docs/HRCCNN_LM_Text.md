@@ -104,8 +104,8 @@ diagnostics, inverse-frequency loss reweighting is the first lever.
 
 ## Text Grammar
 
-Unlike HRCCNN_LLM_Math, there is no formal grammar to engineer.
-Natural English text has implicit structure at multiple scales:
+There is no formal grammar to engineer.  Natural English text has
+implicit structure at multiple scales:
 
 - **Character level**: letter frequency, digram/trigram statistics.
   English has strong character-level redundancy (`th`, `he`, `in`,
@@ -137,8 +137,7 @@ CNN readout.
 
 ## Input Encoding
 
-Identical to HRCCNN_LLM_Math: each input character is its 8-bit ASCII
-byte, bipolar-encoded.
+Each input character is its 8-bit ASCII byte, bipolar-encoded.
 
 - `ReservoirConfig::num_inputs = 8`.
 - Channel `b` (0 <= b <= 7) carries bit `b` of the current character's
@@ -227,7 +226,7 @@ Bits 4–0: Within each group, bits 4–0 encode the letter identity.
 
 ### Why not a learned embedding?
 
-Same reasoning as HRCCNN_LLM_Math: the reservoir's random per-vertex
+The reservoir's random per-vertex
 `W_in` *is* the embedding. Each of 1024 vertices per channel sees a
 different random projection of the 8-bit input, creating an 8192-dim
 distributed representation without any trainable embedding layer.
@@ -600,32 +599,15 @@ examples/HRCCNN_LM_Text/
 
 ## Serialization
 
-Same structure as HRCCNN_LLM_Math with two differences:
-
-- **Magic**: `HCNNLMTX` (8 bytes) instead of `HCNNLLMM`.
+- **Magic**: `HCNNLMTX` (8 bytes).
 - **Vocab**: stored as a length-prefixed string (u32 length + chars).
   The vocab is the fixed 96-token set, embedded in the model file for
   forward-compatibility verification — eval/infer confirm the loaded
   vocab matches the expected fixed set.
 
-The rest of the format is identical: format version, DIM, training
-metadata (seed, positions, epochs, git SHA), ReservoirConfig and
-CNNReadoutConfig as POD blobs, then the readout state (weights blob,
-bias, feature mean/scale vectors).
-
-## Comparison with HRCCNN_LLM_Math
-
-| Aspect | Math | Text |
-|--------|------|------|
-| Vocab size | 20 | 96 (fixed printable ASCII + newline) |
-| Vocab source | hardcoded | fixed (not corpus-derived) |
-| Token semantics | structured (digits, ops, EOS) | natural (letters, punctuation) |
-| Input encoding | 8-bit bipolar (6 live channels) | 8-bit bipolar (7 live channels) |
-| DIM | 12 (N=4096) | 13 (N=8192) |
-| Corpus | generated on the fly | static file (Tiny Shakespeare) |
-| Reservoir regime | per-expression reset + priming | continuous streaming |
-| Training mode | batch (collect states, multi-epoch) | streaming (online, per-char updates) |
-| Context needed | full expression (~40 chars) | local (~20–40 chars estimated) |
+Format: format version, DIM, training metadata (seed, positions, epochs,
+git SHA), ReservoirConfig and CNNReadoutConfig as POD blobs, then the
+readout state (weights blob, bias, feature mean/scale vectors).
 | Training positions | ~200k (5k expr x 40 chars) | 900k (streamed) |
 | Primary metric | exact-match accuracy | BPC |
 | Output fraction | 0.125 (eff. DIM 9) | 0.5 (eff. DIM 12) |

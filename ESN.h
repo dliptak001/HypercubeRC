@@ -70,7 +70,7 @@ public:
     ///   - `ClearStates()`: drop training samples, keep dynamics going
     ///     (e.g. sliding-window retraining on continuous data).
     ///   - `ResetReservoirOnly()`: episodic reservoir, cumulative buffer
-    ///     (e.g. HRCCNN_LLM_Math per-expression reset + priming).
+    ///     (e.g. per-expression reset + priming).
     ///   - `Reset()`: completely fresh start (e.g. new validation run).
 
     /// @brief Clear collected states and cached features; reservoir state untouched.
