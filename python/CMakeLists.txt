@@ -32,8 +32,6 @@ set(CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(CORE_SOURCES
     ${CORE_DIR}/Reservoir.cpp
     ${CORE_DIR}/ESN.cpp
-    ${CORE_DIR}/TranslationLayer.cpp
-    ${CORE_DIR}/readout/LinearReadout.cpp
     ${CORE_DIR}/readout/RidgeRegression.cpp
 )
 

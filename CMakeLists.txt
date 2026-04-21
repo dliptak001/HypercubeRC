@@ -10,7 +10,6 @@ file(GLOB READOUT_SOURCES ${PROJECT_SOURCE_DIR}/readout/*.cpp)
 add_library(HypercubeRCCore STATIC
     ${PROJECT_SOURCE_DIR}/Reservoir.cpp
     ${PROJECT_SOURCE_DIR}/ESN.cpp
-    ${PROJECT_SOURCE_DIR}/TranslationLayer.cpp
     ${READOUT_SOURCES}
 )
 
@@ -18,7 +17,6 @@ add_library(HypercubeRCCore STATIC
 set(PUBLIC_HEADERS
     ${PROJECT_SOURCE_DIR}/ESN.h
     ${PROJECT_SOURCE_DIR}/Reservoir.h
-    ${PROJECT_SOURCE_DIR}/TranslationLayer.h
     ${PROJECT_SOURCE_DIR}/readout/RidgeRegression.h
     ${PROJECT_SOURCE_DIR}/readout/CNNReadout.h
 )

@@ -171,20 +171,7 @@ static double analyze_and_print(const char* label,
 
 int main(int argc, char* argv[])
 {
-    // --- Parse feature mode (applies to Ridge path only) ---
-    FeatureMode feature_mode = FeatureMode::Translated;  // default — classification needs translation
-    if (argc > 1)
-    {
-        if (std::strcmp(argv[1], "raw") == 0)
-            feature_mode = FeatureMode::Raw;
-        else if (std::strcmp(argv[1], "translation") == 0)
-            feature_mode = FeatureMode::Translated;
-        else
-        {
-            std::cerr << "Usage: " << argv[0] << " [raw|translation]\n";
-            return 1;
-        }
-    }
+    (void)argc; (void)argv;
 
     // --- Configuration ---
     constexpr size_t DIM = 7;
@@ -232,15 +219,13 @@ int main(int argc, char* argv[])
     ridge_cfg.seed = seed;
     ridge_cfg.leak_rate = 0.35f;
     ridge_cfg.output_fraction = 0.7f;
-    ESN<DIM> esn_ridge(ridge_cfg, ReadoutType::Ridge, feature_mode);
+    ESN<DIM> esn_ridge(ridge_cfg, ReadoutType::Ridge);
     const size_t num_features = esn_ridge.NumFeatures();
 
-    bool use_translation = (feature_mode == FeatureMode::Translated);
     std::cout << "Ridge config: DIM=" << DIM << "  N=" << N
               << "  Outputs=" << esn_ridge.NumOutputVerts()
               << " (" << static_cast<int>(esn_ridge.OutputFraction() * 100) << "%)"
               << "  Features=" << num_features
-              << " (" << (use_translation ? "translation" : "raw") << ")"
               << "  Cycles=" << num_cycles << "  Total=" << collect << " steps\n\n";
 
     esn_ridge.Warmup(signal.data(), warmup);
@@ -361,7 +346,7 @@ int main(int argc, char* argv[])
     std::cout << "  HCNN    |  " << std::setw(6) << hcnn_acc << "%\n\n";
 
     std::cout << "Both classifiers use the same reservoir dynamics.  Ridge trains\n";
-    std::cout << "4 one-vs-rest regressors on hand-crafted translation features;\n";
+    std::cout << "4 one-vs-rest regressors on raw reservoir features;\n";
     std::cout << "HCNN trains a single multi-class network on raw reservoir state.\n";
 
     return 0;

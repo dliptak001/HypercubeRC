@@ -6,28 +6,22 @@
 #include <variant>
 #include <vector>
 #include "Reservoir.h"
-#include "TranslationLayer.h"
 #include "RidgeRegression.h"
 #include "CNNReadout.h"
 
 enum class ReadoutType { Ridge, HCNN };
-enum class FeatureMode { Raw, Translated };
 
 /// @brief Echo-state network implementing the full pipeline:
-///        Reservoir -> [Output Selection] -> [Translation] -> Readout.
+///        Reservoir -> [Output Selection] -> Readout.
 ///
-/// ESN owns all stages of the pipeline. Construct with a ReservoirConfig,
-/// a ReadoutType, and a FeatureMode, then drive, train, and predict:
+/// ESN owns all stages of the pipeline. Construct with a ReservoirConfig
+/// and a ReadoutType, then drive, train, and predict:
 ///
-///     ESN<6> esn(cfg, ReadoutType::Ridge, FeatureMode::Translated);
+///     ESN<6> esn(cfg, ReadoutType::Ridge);
 ///     esn.Warmup(inputs, 200);
 ///     esn.Run(inputs + 200, total);
 ///     esn.Train(targets, train_size);
 ///     double r2 = esn.R2(targets, train_size, test_size);
-///
-/// **Feature modes.**
-///   - Raw: M stride-selected vertex states (M features per timestep).
-///   - Translated: M selected -> 2.5M features via [x | x² | x*x_antipodal].
 ///
 /// **Training.** Train() uses sensible defaults for both readout types.
 /// Power users can call the Ridge overload with a custom lambda, or the
@@ -44,8 +38,7 @@ class ESN
 
 public:
     explicit ESN(const ReservoirConfig& cfg,
-                 ReadoutType readout_type = ReadoutType::Ridge,
-                 FeatureMode feature_mode = FeatureMode::Translated);
+                 ReadoutType readout_type = ReadoutType::Ridge);
 
     // ---------------------------------------------------------------
     //  Reservoir driving
@@ -205,10 +198,7 @@ public:
     /// Only computes features for states added since the last call.
     void EnsureFeatures() const;
 
-    /// @brief Size of the per-timestep vector the readout consumes.
-    ///   Ridge + Raw        : M = num_output_verts_
-    ///   Ridge + Translated : 2.5 * M
-    ///   HCNN               : M (CNN operates on the subsampled sub-hypercube)
+    /// @brief Size of the per-timestep feature vector: M = num_output_verts_.
     [[nodiscard]] size_t NumFeatures() const;
 
     // --- Accessors ---
@@ -219,7 +209,6 @@ public:
     [[nodiscard]] size_t OutputStride() const { return output_stride_; }
     [[nodiscard]] size_t NumOutputVerts() const { return num_output_verts_; }
     [[nodiscard]] ReadoutType GetReadoutType() const { return readout_type_; }
-    [[nodiscard]] FeatureMode GetFeatureMode() const { return feature_mode_; }
     [[nodiscard]] float GetAlpha() const { return reservoir_->GetAlpha(); }
     [[nodiscard]] size_t NumInputs() const { return num_inputs_; }
 
@@ -251,7 +240,6 @@ public:
 private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
     ReadoutType readout_type_;
-    FeatureMode feature_mode_;
     std::variant<RidgeRegression, CNNReadout> readout_;
 
     size_t num_inputs_ = 1;

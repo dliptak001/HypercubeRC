@@ -24,10 +24,7 @@ struct BenchmarkDIM
     {
         std::cout << "  " << std::setw(3) << DIM
             << "  | " << std::setw(5) << (1ULL << DIM)
-            << " | " << std::fixed << std::setprecision(3) << std::setw(7) << r.nrmse_raw
-            << " | " << std::setprecision(3) << std::setw(7) << r.nrmse_full
-            << " (" << std::showpos << std::setprecision(1) << std::setw(5) << r.pct_change
-            << "%" << std::noshowpos << ")";
+            << " | " << std::fixed << std::setprecision(3) << std::setw(7) << r.nrmse_raw;
         if (show_hcnn && r.nrmse_hcnn >= 0.0)
             std::cout << " | " << std::fixed << std::setprecision(3) << std::setw(7) << r.nrmse_hcnn
                       << " (" << std::showpos << std::setprecision(1) << std::setw(5) << r.pct_change_hcnn
@@ -58,7 +55,6 @@ struct BenchmarkSuite
         std::cout << "\n\n";
         std::cout << "  DIM  -- hypercube dimension; the reservoir has N = 2^DIM neurons\n";
         std::cout << "  raw  -- Ridge readout on N raw reservoir states\n";
-        std::cout << "  full -- Ridge readout on 2.5M translated features (x, x^2, x*x')\n";
         if (run_hcnn) {
             std::cout << "  HCNN -- HypercubeCNN readout on N raw states (learned convolution)\n";
             std::cout << "          config: nl=1 ch=8 FLAT ep=2000 lr=0.0015 bs=1<<(DIM-1)"
@@ -68,12 +64,11 @@ struct BenchmarkSuite
 
         std::cout << "--- NARMA-10 (NRMSE, lower is better) ---\n";
         std::cout << "Nonlinear autoregressive benchmark requiring both memory (10-step\n";
-        std::cout << "history) and nonlinear computation (product terms). This is where\n";
-        std::cout << "the translation layer has the biggest impact.\n\n";
-        std::cout << "  DIM |     N |    raw  |   full translation";
-        if (run_hcnn) std::cout << "     |   HCNN";
-        std::cout << "\n  ----+-------+---------+-----------------";
-        if (run_hcnn) std::cout << "--+------------------";
+        std::cout << "history) and nonlinear computation (product terms).\n\n";
+        std::cout << "  DIM |     N |    raw ";
+        if (run_hcnn) std::cout << " |   HCNN";
+        std::cout << "\n  ----+-------+--------";
+        if (run_hcnn) std::cout << "+------------------";
         std::cout << "\n" << std::flush;
         RunAndPrintNARMA<5>(output_fraction, config, run_hcnn);
         RunAndPrintNARMA<6>(output_fraction, config, run_hcnn);

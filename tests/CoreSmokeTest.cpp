@@ -30,7 +30,7 @@ static std::vector<float> make_sine(size_t n, float freq = 1.0f)
     return s;
 }
 
-// ── Test: ESN with Ridge readout (translated features) ──
+// ── Test: ESN with Ridge readout ──
 template <size_t DIM>
 void test_ridge_prediction()
 {
@@ -39,7 +39,7 @@ void test_ridge_prediction()
 
     auto signal = make_sine(2000, 10.0f);
 
-    ESN<DIM> esn(ReservoirConfig{.seed = 42}, ReadoutType::Ridge, FeatureMode::Translated);
+    ESN<DIM> esn(ReservoirConfig{.seed = 42}, ReadoutType::Ridge);
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
     esn.Train(signal.data() + 201, 1400);
@@ -49,25 +49,6 @@ void test_ridge_prediction()
 
     printf("         R2=%.6f  NRMSE=%.6f\n", r2, nrmse);
     check(r2 > 0.99 && nrmse < 0.1, label.c_str());
-}
-
-// ── Test: ESN with Ridge readout (raw features) ──
-template <size_t DIM>
-void test_ridge_raw_prediction()
-{
-    constexpr size_t N = 1ULL << DIM;
-    std::string label = "DIM " + std::to_string(DIM) + " Ridge raw prediction (N=" + std::to_string(N) + ")";
-
-    auto signal = make_sine(2000, 10.0f);
-
-    ESN<DIM> esn(ReservoirConfig{.seed = 42}, ReadoutType::Ridge, FeatureMode::Raw);
-    esn.Warmup(signal.data(), 200);
-    esn.Run(signal.data() + 200, 1799);
-    esn.Train(signal.data() + 201, 1400);
-
-    double r2 = esn.R2(signal.data() + 201, 0, esn.NumCollected());
-    printf("         R2=%.6f\n", r2);
-    check(r2 > 0.99, label.c_str());
 }
 
 // ── Test: Classification with accuracy check ──
@@ -82,7 +63,7 @@ void test_classification()
     for (size_t i = 0; i < 1799; ++i)
         labels[i] = signal[i + 201] >= 0.0f ? 1.0f : -1.0f;
 
-    ESN<DIM> esn(ReservoirConfig{.seed = 7}, ReadoutType::Ridge, FeatureMode::Translated);
+    ESN<DIM> esn(ReservoirConfig{.seed = 7}, ReadoutType::Ridge);
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
     esn.Train(labels.data(), 1400);
@@ -95,14 +76,14 @@ void test_classification()
 // ── Test: ESN construction across all supported DIMs ──
 void test_all_dims_construct()
 {
-    ESN<5>  e5 (ReservoirConfig{.seed = 1}, ReadoutType::Ridge, FeatureMode::Translated);
-    ESN<6>  e6 (ReservoirConfig{.seed = 1}, ReadoutType::Ridge, FeatureMode::Translated);
-    ESN<7>  e7 (ReservoirConfig{.seed = 1}, ReadoutType::Ridge, FeatureMode::Translated);
-    ESN<8>  e8 (ReservoirConfig{.seed = 1}, ReadoutType::Ridge, FeatureMode::Translated);
-    ESN<9>  e9 (ReservoirConfig{.seed = 1}, ReadoutType::Ridge, FeatureMode::Translated);
-    ESN<10> e10(ReservoirConfig{.seed = 1}, ReadoutType::Ridge, FeatureMode::Translated);
-    ESN<11> e11(ReservoirConfig{.seed = 1}, ReadoutType::Ridge, FeatureMode::Translated);
-    ESN<12> e12(ReservoirConfig{.seed = 1}, ReadoutType::Ridge, FeatureMode::Translated);
+    ESN<5>  e5 (ReservoirConfig{.seed = 1}, ReadoutType::Ridge);
+    ESN<6>  e6 (ReservoirConfig{.seed = 1}, ReadoutType::Ridge);
+    ESN<7>  e7 (ReservoirConfig{.seed = 1}, ReadoutType::Ridge);
+    ESN<8>  e8 (ReservoirConfig{.seed = 1}, ReadoutType::Ridge);
+    ESN<9>  e9 (ReservoirConfig{.seed = 1}, ReadoutType::Ridge);
+    ESN<10> e10(ReservoirConfig{.seed = 1}, ReadoutType::Ridge);
+    ESN<11> e11(ReservoirConfig{.seed = 1}, ReadoutType::Ridge);
+    ESN<12> e12(ReservoirConfig{.seed = 1}, ReadoutType::Ridge);
 
     bool ok = e5.NumFeatures() > 0 && e6.NumFeatures() > 0 &&
               e7.NumFeatures() > 0 && e8.NumFeatures() > 0 &&
@@ -120,7 +101,7 @@ void test_persistence()
     auto signal = make_sine(2000, 10.0f);
 
     // Train a model
-    ESN<DIM> esn1(ReservoirConfig{.seed = 42}, ReadoutType::Ridge, FeatureMode::Translated);
+    ESN<DIM> esn1(ReservoirConfig{.seed = 42}, ReadoutType::Ridge);
     esn1.Warmup(signal.data(), 200);
     esn1.Run(signal.data() + 200, 1799);
     esn1.Train(signal.data() + 201, 1400);
@@ -130,7 +111,7 @@ void test_persistence()
     auto state = esn1.GetReadoutState();
 
     // Create a new ESN, drive with same data, restore state
-    ESN<DIM> esn2(ReservoirConfig{.seed = 42}, ReadoutType::Ridge, FeatureMode::Translated);
+    ESN<DIM> esn2(ReservoirConfig{.seed = 42}, ReadoutType::Ridge);
     esn2.Warmup(signal.data(), 200);
     esn2.Run(signal.data() + 200, 1799);
     esn2.SetReadoutState(state);
@@ -150,7 +131,7 @@ void test_clear_states()
 
     auto signal = make_sine(2000, 10.0f);
 
-    ESN<DIM> esn(ReservoirConfig{.seed = 42}, ReadoutType::Ridge, FeatureMode::Translated);
+    ESN<DIM> esn(ReservoirConfig{.seed = 42}, ReadoutType::Ridge);
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
     esn.Train(signal.data() + 201, 1400);
@@ -195,7 +176,7 @@ void test_multi_input()
     }
 
     ReservoirConfig cfg{.seed = 42, .num_inputs = K};
-    ESN<DIM> esn(cfg, ReadoutType::Ridge, FeatureMode::Translated);
+    ESN<DIM> esn(cfg, ReadoutType::Ridge);
     esn.Warmup(inputs.data(), warmup_steps);
     esn.Run(inputs.data() + warmup_steps * K, run_steps);
     esn.Train(targets.data(), run_steps - 1);  // -1: last target looks ahead past data
@@ -218,9 +199,6 @@ void test_hcnn_prediction()
     cfg.output_fraction = 1.0f;
     ESN<DIM> esn(cfg, ReadoutType::HCNN);
 
-    // Verify HCNN forces Raw mode
-    check(esn.GetFeatureMode() == FeatureMode::Raw,
-          (label + " - forces Raw mode").c_str());
     check(esn.NumOutputs() == 1,
           (label + " - default 1 output").c_str());
 
@@ -324,10 +302,6 @@ int main()
     test_ridge_prediction<6>();
     test_ridge_prediction<7>();
     test_ridge_prediction<8>();
-
-    printf("\n--- Ridge raw prediction ---\n");
-    test_ridge_raw_prediction<5>();
-    test_ridge_raw_prediction<6>();
 
     printf("\n--- Classification ---\n");
     test_classification<6>();

@@ -32,11 +32,7 @@ defaults don't serve. Most users will only need to adjust `DIM`,
    - DIM 7+:     ReadoutType::HCNN    (when accuracy ceiling matters or classification)
    - Streaming:  ReadoutType::HCNN    (supports online training for incremental adaptation)
 
-3. Pick feature mode
-   - Most tasks:         FeatureMode::Translated  (20-70% lower NRMSE)
-   - Speed-constrained:  FeatureMode::Raw         (fewer features, faster)
-
-4. Set output_fraction (DIM 9+)
+3. Set output_fraction (DIM 9+)
    - DIM 9:   0.5   (256 selected vertices)
    - DIM 10:  0.25  (256 selected vertices)
    - DIM 11+: 0.125 or lower
@@ -52,15 +48,15 @@ defaults don't serve. Most users will only need to adjust `DIM`,
 DIM controls the number of neurons (N = 2^DIM). More neurons = more
 computational capacity, but also more features for the readout to handle.
 
-| DIM | N    | Features (Translated) | Ridge solve time | Best for |
-|-----|------|-----------------------|------------------|----------|
-| 5   | 32   | 80                    | instant          | Prototyping, embedded, unit tests |
-| 6   | 64   | 160                   | instant          | Light benchmarks, fast iteration |
-| 7   | 128  | 320                   | ~1 ms            | Standard benchmarks, production (simple tasks) |
-| 8   | 256  | 640                   | ~5 ms            | Production, complex time series |
-| 9   | 512  | 1280 (at full)        | ~40 ms           | Research, high-capacity tasks |
-| 10  | 1024 | 2560 (at full)        | ~300 ms          | Research (use output_fraction) |
-| 11+ | 2048+| 5120+ (at full)       | seconds          | Research (must use output_fraction) |
+| DIM | N     | Features (M at full) | Ridge solve time | Best for |
+|-----|-------|----------------------|------------------|----------|
+| 5   | 32    | 32                   | instant          | Prototyping, embedded, unit tests |
+| 6   | 64    | 64                   | instant          | Light benchmarks, fast iteration |
+| 7   | 128   | 128                  | ~1 ms            | Standard benchmarks, production (simple tasks) |
+| 8   | 256   | 256                  | ~5 ms            | Production, complex time series |
+| 9   | 512   | 512 (at full)        | ~40 ms           | Research, high-capacity tasks |
+| 10  | 1024  | 1024 (at full)       | ~300 ms          | Research (use output_fraction) |
+| 11+ | 2048+ | 2048+ (at full)      | seconds          | Research (must use output_fraction) |
 
 **Rule of thumb:** increase DIM until test performance plateaus, then stop.
 DIM 8 is the sweet spot for most real-world tasks.
@@ -153,9 +149,9 @@ Controls the tanh nonlinearity: `tanh(alpha * weighted_sum)`.
 | > 1.0 | Sharper saturation | You need stronger nonlinear separation (e.g., classification) |
 | 2.0+ | Hard limiter (approaches sign function) | Rarely useful; reduces effective dynamic range |
 
-**Most users never touch this.** The translation layer already provides
-nonlinear features (x^2, x*x_antipodal) that compensate for tanh's
-information compression. Adjusting alpha is a second-order effect.
+**Most users never touch this.** The HCNN readout provides its own
+nonlinear feature discovery; for Ridge, tanh states are used directly.
+Adjusting alpha is a second-order effect.
 
 ---
 
@@ -165,12 +161,12 @@ Controls what fraction of the N reservoir neurons are used as readout
 features. This is the primary lever for managing Ridge readout cost at
 large DIM values.
 
-| Value | Selected vertices M | Features (Translated) | Ridge cost relative |
-|-------|--------------------|-----------------------|--------------------|
-| 1.0   | N                  | 2.5N                  | 1x (baseline) |
-| 0.5   | N/2                | 1.25N                 | ~0.25x |
-| 0.25  | N/4                | 0.625N                | ~0.0625x |
-| 0.1   | N/10               | 0.25N                 | ~0.01x |
+| Value | Selected vertices M | Ridge cost relative |
+|-------|---------------------|---------------------|
+| 1.0   | N                   | 1x (baseline)       |
+| 0.5   | N/2                 | ~0.25x              |
+| 0.25  | N/4                 | ~0.0625x            |
+| 0.1   | N/10                | ~0.01x              |
 
 **Ridge cost is quadratic in feature count** (building the Gram matrix
 is O(features^2 * samples)). Halving the feature count gives a 4x
@@ -276,19 +272,18 @@ allocate memory).
 1. **Check warmup.** Are you using at least 200 warmup steps?
 2. **Check training size.** Do you have at least 10x as many training
    samples as features?
-3. **Try Translated mode.** If using Raw, switch to Translated -- it
-   typically improves NRMSE by 20-70%.
-4. **Increase DIM.** More neurons = more capacity. Go from 7 to 8.
-5. **Screen seeds.** Try 50 seeds and pick the best.
-6. **Sweep lambda** (Ridge) or check that lr isn't too high (Linear).
+3. **Increase DIM.** More neurons = more capacity. Go from 7 to 8.
+4. **Screen seeds.** Try 50 seeds and pick the best.
+5. **Sweep lambda** (Ridge) or check that lr isn't too high (Linear).
+6. **Try HCNN.** At DIM 7+ the HCNN readout often beats Ridge by
+   discovering nonlinear features.
 
 ### "Training is too slow"
 
 1. **Reduce output_fraction.** This is the most effective lever.
    Going from 1.0 to 0.5 gives ~4x speedup with minimal accuracy loss.
-2. **Switch to Raw features.** 2.5x fewer features than Translated.
-3. **Reduce DIM.** If DIM 8 is too slow, DIM 7 may be sufficient.
-4. **Use Ridge readout.** The closed-form solve is a single pass —
+2. **Reduce DIM.** If DIM 8 is too slow, DIM 7 may be sufficient.
+3. **Use Ridge readout.** The closed-form solve is a single pass —
    no epoch tuning needed.
 
 ### "Predictions are noisy / jittery"
@@ -345,7 +340,7 @@ complete implementation.
 1. Start with defaults:
    ReservoirConfig cfg;
    cfg.seed = 42;
-   ESN<8> esn(cfg);  // Ridge + Translated
+   ESN<8> esn(cfg);  // Ridge readout
 
 2. Get a baseline:
    esn.Warmup(data, 500);
@@ -358,10 +353,10 @@ complete implementation.
    - Screen 50+ seeds
    - Sweep Ridge lambda
    - Lower leak_rate if signal is slow
+   - Try HCNN at DIM 7+
 
 4. If speed is insufficient:
    - Reduce output_fraction
-   - Use Raw features
    - Decrease DIM
 
 5. For production:

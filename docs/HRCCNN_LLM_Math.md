@@ -702,7 +702,7 @@ struct ModelFile {
 1. Read header; verify magic, format_version, and `dim` matches the
    binary's compile-time DIM (fail loudly if not — DIM is a template
    parameter, not a runtime choice).
-2. Construct `ESN<DIM>(reservoir_cfg, ReadoutType::HCNN, FeatureMode::Raw)`.
+2. Construct \`ESN<DIM>(reservoir_cfg, ReadoutType::HCNN)\`.
    The reservoir's recurrent weights and `W_in` are regenerated
    deterministically from `reservoir_cfg.seed`.
 3. Assemble an `ESN<DIM>::ReadoutState` from the persisted weights blob

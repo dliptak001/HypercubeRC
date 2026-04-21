@@ -83,7 +83,7 @@ retraining needed.
 
 ## ESN Integration Points
 
-- `ReadoutType::HCNN` selects this readout; forces `FeatureMode::Raw`
+- \`ReadoutType::HCNN\` selects this readout
 - `ESN::Train(targets, train_size)` routes to `CNNReadout::Train` with default config
 - `ESN::Train(targets, train_size, CNNReadoutConfig)` for custom config
 - `ESN::PredictRaw(timestep)` scalar (num_outputs must be 1)

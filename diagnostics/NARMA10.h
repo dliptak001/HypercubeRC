@@ -28,9 +28,7 @@ public:
     struct Result
     {
         double nrmse_raw;
-        double nrmse_full;
         double nrmse_hcnn;       // -1.0 if not run
-        double pct_change;       // % change raw -> full
         double pct_change_hcnn;  // % change raw -> hcnn
     };
 
@@ -58,7 +56,7 @@ public:
         constexpr size_t warmup = (N < 256) ? 200 : 500;
         constexpr size_t collect = 18 * N;
 
-        double s_nrmse_raw = 0.0, s_nrmse_full = 0.0, s_nrmse_hcnn = 0.0;
+        double s_nrmse_raw = 0.0, s_nrmse_hcnn = 0.0;
 
         for (uint64_t seed : Seeds())
         {
@@ -83,20 +81,11 @@ public:
 
             // Ridge: raw features
             {
-                ESN<DIM> esn(cfg, readout_type_, FeatureMode::Raw);
+                ESN<DIM> esn(cfg, readout_type_);
                 esn.Warmup(ri.data(), warmup);
                 esn.Run(ri.data() + warmup, collect);
                 esn.Train(targets.data(), tr);
                 s_nrmse_raw += esn.NRMSE(targets.data(), tr, te);
-            }
-
-            // Ridge: full translation
-            {
-                ESN<DIM> esn(cfg, readout_type_, FeatureMode::Translated);
-                esn.Warmup(ri.data(), warmup);
-                esn.Run(ri.data() + warmup, collect);
-                esn.Train(targets.data(), tr);
-                s_nrmse_full += esn.NRMSE(targets.data(), tr, te);
             }
 
             // HCNN
@@ -113,13 +102,11 @@ public:
 
         double n = static_cast<double>(Seeds().size());
         double nrmse_raw = s_nrmse_raw / n;
-        double nrmse_full = s_nrmse_full / n;
         double nrmse_hcnn = run_hcnn_ ? s_nrmse_hcnn / n : -1.0;
-        double pct = (nrmse_raw > 1e-12) ? 100.0 * (nrmse_full - nrmse_raw) / nrmse_raw : 0.0;
         double pct_hcnn = (run_hcnn_ && nrmse_raw > 1e-12)
                               ? 100.0 * (nrmse_hcnn - nrmse_raw) / nrmse_raw : 0.0;
 
-        return {nrmse_raw, nrmse_full, nrmse_hcnn, pct, pct_hcnn};
+        return {nrmse_raw, nrmse_hcnn, pct_hcnn};
     }
 
     /// @brief Run the benchmark and print a standalone result row.
@@ -133,10 +120,12 @@ public:
 
         std::cout << "  " << std::setw(3) << DIM
                   << "  | " << std::setw(5) << N
-                  << " | " << std::fixed << std::setprecision(3) << std::setw(7) << r.nrmse_raw
-                  << " | " << std::setprecision(3) << std::setw(7) << r.nrmse_full
-                  << " (" << std::showpos << std::setprecision(1) << std::setw(5) << r.pct_change
-                  << "%" << std::noshowpos << ")\n";
+                  << " | " << std::fixed << std::setprecision(3) << std::setw(7) << r.nrmse_raw;
+        if (r.nrmse_hcnn >= 0.0)
+            std::cout << " | " << std::setprecision(3) << std::setw(7) << r.nrmse_hcnn
+                      << " (" << std::showpos << std::setprecision(1) << std::setw(5) << r.pct_change_hcnn
+                      << "%" << std::noshowpos << ")";
+        std::cout << "\n";
     }
 
 private:
@@ -164,16 +153,16 @@ private:
     void PrintHeader(size_t warmup, size_t collect) const
     {
         const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "HCNN";
-        std::cout << "=== NARMA-10 (" << rn << " Readout, raw vs full translation) ===\n";
+        std::cout << "=== NARMA-10 (" << rn << " Readout) ===\n";
         std::cout << "Seed: " << DefaultSeed() << " | Alpha: 1.0 | Leak: 1.0"
                   << " | SR: 0.90 | Input scaling: 0.02\n";
         float frac = output_fraction_;
         size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * frac)));
         std::cout << "Warmup: " << warmup << " | Collect: " << collect
                   << " | Outputs: " << M << "/" << N
-                  << " | Features: " << M << " raw, " << TranslationFeatureCountSelected(M) << " translated\n\n";
+                  << " | Features: " << M << "\n\n";
 
-        std::cout << "  DIM |     N |    raw  |   full\n";
-        std::cout << "  ----+-------+---------+-----------------\n";
+        std::cout << "  DIM |     N |    raw\n";
+        std::cout << "  ----+-------+--------\n";
     }
 };

@@ -7,7 +7,7 @@ on the two chaotic-regression benchmarks. Populated iteratively via
 ## Baselines
 
 Numbers in the "Ridge raw" column come from `NARMA10<DIM>` (or the
-equivalent MG benchmark) with `FeatureMode::Raw` and `output_fraction = 1.0` — the
+equivalent MG benchmark) with `output_fraction = 1.0` — the
 apples-to-apples baseline for HCNN, which also operates on raw state.
 "Ridge translated" is `FeatureMode::Translated` (2.5N features) for
 context; HCNN's goal is to match or beat the raw baseline.

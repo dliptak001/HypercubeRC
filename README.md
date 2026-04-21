@@ -214,34 +214,14 @@ Two connection families create rich mixing:
 All weights are random and fixed. See [docs/Reservoir.md](docs/Reservoir.md) for
 full architectural details.
 
-### Stage 2: Translation Layer
+### Stage 2: Readout
 
-The reservoir's tanh activation encodes input history nonlinearly — powerful for
-computation, but a linear readout cannot fully decode it. The translation layer
-expands M selected states into 2.5M features:
-
-| Features | Count | Purpose |
-|----------|-------|---------|
-| x        | M     | Raw states — direct linear access to reservoir dynamics |
-| x²       | M     | Magnitude regardless of sign — breaks tanh symmetry |
-| x*x'     | M/2   | Antipodal products — long-range quadratic interactions |
-
-This is a fixed algebraic transform with no learned parameters. Antipodal
-partners (vertex v XOR N-1) are looked up from the full N-state vector, not from
-the selected subset — every cross-product spans the full diameter of the
-hypercube. NRMSE improvement: 27-38% on Mackey-Glass, 16-83% on NARMA-10 at DIM 5-8 (benchmarked range).
-
-See [docs/TranslationLayer.md](docs/TranslationLayer.md) for design rationale
-and feature details.
-
-### Stage 3: Readout
-
-The readout is the only trained component — a linear mapping from 2.5M translated
-features to the target signal:
+The readout is the only trained component — a mapping from M raw reservoir
+states to the target signal:
 
 - **RidgeRegression** — Closed-form optimal via normal equations. O(M³) solve.
-
-Standardizes features internally to handle the mixed-scale translation output.
+- **HCNN** — HypercubeCNN learned convolutional readout. Discovers nonlinear
+  feature interactions directly from raw state.
 
 See [docs/Readout.md](docs/Readout.md) for algorithm details, selection policy,
 and streaming mode.
@@ -355,8 +335,7 @@ parallel seed sweeps. The core library has no OpenMP dependency.
 ```
 HypercubeRC/
   Reservoir.h/cpp        Hypercube reservoir (N = 2^DIM vertices)
-  ESN.h/cpp              Unified pipeline: warmup, run, train, predict (owns readout + translation)
-  TranslationLayer.h/cpp Feature expansion: x + x² + x*x' (2.5M features)
+  ESN.h/cpp              Unified pipeline: warmup, run, train, predict
   main.cpp               Benchmark suite entry point (DIM 5-8)
   docs/CPP_SDK.md        C++ consumer documentation for the static library
 
@@ -377,7 +356,6 @@ HypercubeRC/
 
   docs/
     Reservoir.md          Reservoir architecture, connectivity, parameters
-    TranslationLayer.md   Translation layer design and feature classes
     Readout.md            Readout algorithms, streaming mode, selection policy
     ScaleInvariance.md    Scale-invariant hyperparameters: evidence and analysis
     DoesTopologyMatter.md Hypercube vs random sparse ESN experiment
@@ -389,7 +367,6 @@ HypercubeRC/
 | Document | Covers |
 |----------|--------|
 | [docs/Reservoir.md](docs/Reservoir.md) | Hypercube graph, connectivity, leaky integrator, spectral radius, scale-invariant defaults |
-| [docs/TranslationLayer.md](docs/TranslationLayer.md) | Feature expansion rationale, antipodal pairing, stride-selected variant, standardization |
 | [docs/Readout.md](docs/Readout.md) | RidgeRegression algorithm, feature standardization, selection policy |
 | [docs/ScaleInvariance.md](docs/ScaleInvariance.md) | Why SR=0.90 and input_scaling=0.02 work at every DIM — sweep data and vertex-transitivity analysis |
 | [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) | Hypercube vs random ESN: equivalent performance, different architectural tradeoffs |

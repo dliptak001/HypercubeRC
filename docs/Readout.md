@@ -4,8 +4,8 @@
 
 ```
 Ridge path:
-Reservoir (N states) ──> Translation Layer (2.5N features) ──> Readout
-    fixed random              fixed algebra                    TRAINED
+Reservoir (N states) ──> Output Selection (M states) ──> Readout
+    fixed random              stride-selected              TRAINED
 
 HCNN path:
 Reservoir (N states) ────────────────────────────────────────> CNNReadout
@@ -13,13 +13,12 @@ Reservoir (N states) ───────────────────�
 ```
 
 The readout is the only trained component in the entire pipeline. The
-reservoir's random weights are fixed at initialization; the translation
-layer is a fixed algebraic transform. All learning happens here.
+reservoir's random weights are fixed at initialization. All learning
+happens here.
 
-Ridge fits a linear mapping from translated features to targets. The CNN readout replaces that linear fit with a learned
+Ridge fits a linear mapping from selected reservoir states to targets. The CNN readout replaces that linear fit with a learned
 convolutional network that operates directly on raw reservoir state,
-discovering its own nonlinear features instead of relying on the
-hand-crafted translation expansion.
+discovering its own nonlinear features.
 
 This is the core principle of reservoir computing: a complex, nonlinear
 dynamical system (the reservoir) projects inputs into a high-dimensional
@@ -32,7 +31,7 @@ HypercubeRC provides two readout classes:
 
 | Class             | Features consumed | Training                  | Best for                         |
 |-------------------|-------------------|---------------------------|----------------------------------|
-| `RidgeRegression` | Translated (2.5M) | Closed-form normal equations | Batch regression, all DIM     |
+| `RidgeRegression` | Raw state (M)     | Closed-form normal equations | Batch regression, all DIM     |
 | `CNNReadout`      | Raw state (N)     | Mini-batch backprop (Adam)| Hard tasks, classification, streaming, larger DIM |
 
 Both expose the same prediction interface (`PredictRaw`, `R2`,
@@ -121,8 +120,7 @@ use `epochs=300, batch_size=128, lr_max=0.003`.
 **When to use:**
 - Tasks where the linear-readout ceiling is hit and nonlinear feature
   discovery is worth the training cost. NARMA-10 at DIM 7+ and the
-  signal-classification example both show HCNN matching or beating
-  Ridge with translation features.
+  signal-classification example both show HCNN matching or beating Ridge.
 - Classification problems. Ridge handles classification as one-vs-rest
   regression + argmax; HCNN natively supports multi-class with
   softmax+CE.
@@ -140,34 +138,25 @@ integration-status breakdown, and `examples/BasicPrediction.cpp` /
 ## Feature standardization
 
 Both readouts standardize their inputs before training: each
-feature (or raw vertex, for HCNN) is shifted to zero mean and scaled
-to unit variance. The statistics are computed from the training set
-and stored; `PredictRaw` applies the same transform at inference.
+feature (or raw vertex) is shifted to zero mean and scaled to unit
+variance. The statistics are computed from the training set and stored;
+`PredictRaw` applies the same transform at inference.
 
-For Ridge this is critical because the translation layer
-produces three feature classes with different scales:
-
-| Class | Range | Without standardization... |
-|-------|-------|--------------------------|
-| x     | [-1, +1] | Dominates gradient/regularization (largest magnitude) |
-| x²    | [0, 1] | Under-penalized by Ridge lambda (smaller magnitude) |
-| x*x'  | [-1, +1] | Comparable to x |
-
-Without standardization, Ridge's lambda penalizes feature groups
-unevenly.
+For Ridge, selected reservoir states (M vertices) are standardized
+before the normal equations are solved. This ensures Ridge's lambda
+penalizes all features equally regardless of scale.
 
 For HCNN the raw N-vertex state is centered and scaled per-vertex
-before it enters the first Conv layer. The translation layer is
-bypassed — HCNN's convolution kernels discover their own nonlinear
-features from raw state, which is the whole point of using it.
+before it enters the first Conv layer. HCNN's convolution kernels
+discover their own nonlinear features from raw state.
 
 ## Which readout should I use?
 
-| DIM | N    | Translated features (2.5N) | Recommended defaults              |
-|-----|------|----------------------------|-----------------------------------|
-| 5-6 | 32-64 | 80-160                   | Ridge (fast, accurate at small sizes) |
-| 7   | 128  | 320                        | Ridge or HCNN (HCNN starts being competitive) |
-| 8+  | 256+ | 640+                       | Ridge for fast closed-form; HCNN when accuracy ceiling matters |
+| DIM | N    | Recommended defaults              |
+|-----|------|-----------------------------------|
+| 5-6 | 32-64 | Ridge (fast, accurate at small sizes) |
+| 7   | 128  | Ridge or HCNN (HCNN starts being competitive) |
+| 8+  | 256+ | Ridge for fast closed-form; HCNN when accuracy ceiling matters |
 
 The main benchmark suite uses Ridge for MG and NARMA-10 (where optimal
 accuracy matters). Adding `--hcnn` to the suite runs HCNN alongside
@@ -196,7 +185,7 @@ the readout. This is a standard batch `Train()` call with at least
 ```cpp
 ReservoirConfig cfg;
 cfg.seed = seed;
-ESN<8> esn(cfg, ReadoutType::Ridge, FeatureMode::Translated);
+ESN<8> esn(cfg, ReadoutType::Ridge);
 esn.Warmup(historical_data, 500);
 esn.Run(historical_data + 500, prime_steps);
 esn.Train(targets, train_size);

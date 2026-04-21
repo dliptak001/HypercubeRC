@@ -63,20 +63,7 @@ struct Event
 
 int main(int argc, char* argv[])
 {
-    // --- Parse feature mode ---
-    FeatureMode feature_mode = FeatureMode::Raw;  // default
-    if (argc > 1)
-    {
-        if (std::strcmp(argv[1], "raw") == 0)
-            feature_mode = FeatureMode::Raw;
-        else if (std::strcmp(argv[1], "translation") == 0)
-            feature_mode = FeatureMode::Translated;
-        else
-        {
-            std::cerr << "Usage: " << argv[0] << " [raw|translation]\n";
-            return 1;
-        }
-    }
+    (void)argc; (void)argv;
 
     constexpr size_t DIM = 8;
     constexpr size_t N = 1ULL << DIM;
@@ -123,21 +110,19 @@ int main(int argc, char* argv[])
     // Ridge ESN: 50% output, Ridge closed-form regression.
     ReservoirConfig ridge_cfg = base_cfg;
     ridge_cfg.output_fraction = 0.5f;
-    ESN<DIM> esn_ridge(ridge_cfg, ReadoutType::Ridge, feature_mode);
+    ESN<DIM> esn_ridge(ridge_cfg, ReadoutType::Ridge);
 
     // HCNN ESN: 100% output (HCNN always operates on raw state).
     ReservoirConfig hcnn_cfg_r = base_cfg;
     hcnn_cfg_r.output_fraction = 1.0f;
     ESN<DIM> esn_hcnn(hcnn_cfg_r, ReadoutType::HCNN);
 
-    bool use_translation = (feature_mode == FeatureMode::Translated);
     std::cout << "Config: DIM=" << DIM << "  N=" << N
               << "  Leak=" << base_cfg.leak_rate
               << "  Threshold=" << anomaly_threshold << "x baseline\n";
     std::cout << "  Ridge: Outputs=" << esn_ridge.NumOutputVerts()
               << " (" << static_cast<int>(esn_ridge.OutputFraction() * 100) << "%)"
-              << "  Features=" << esn_ridge.NumFeatures()
-              << " (" << (use_translation ? "translation" : "raw") << ")\n";
+              << "  Features=" << esn_ridge.NumFeatures() << "\n";
     std::cout << "  HCNN : Outputs=" << esn_hcnn.NumOutputVerts()
               << " (100%)  raw state\n\n";
 

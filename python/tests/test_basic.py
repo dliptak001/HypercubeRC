@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import hypercube_rc as hrc
-from hypercube_rc import ESN, ReadoutType, FeatureMode
+from hypercube_rc import ESN, ReadoutType
 
 
 def _sine_signal(n=2000):
@@ -32,7 +32,6 @@ class TestConstruction:
     def test_defaults(self):
         esn = ESN(dim=5)
         assert esn.readout_type == ReadoutType.Ridge
-        assert esn.feature_mode == FeatureMode.Translated
         assert esn.num_inputs == 1
         assert esn.output_fraction == pytest.approx(1.0)
         assert esn.alpha == pytest.approx(1.0)
@@ -47,10 +46,8 @@ class TestConstruction:
             alpha=1.5,
             output_fraction=0.5,
             readout_type=ReadoutType.Ridge,
-            feature_mode=FeatureMode.Raw,
         )
         assert esn.readout_type == ReadoutType.Ridge
-        assert esn.feature_mode == FeatureMode.Raw
         assert esn.alpha == pytest.approx(1.5)
 
     def test_repr(self):
@@ -88,7 +85,7 @@ class TestSinePrediction:
 
     def test_ridge_raw_prediction(self):
         signal = _sine_signal()
-        esn = ESN(dim=6, seed=42, feature_mode=FeatureMode.Raw)
+        esn = ESN(dim=6, seed=42)
         esn.warmup(signal[:200])
         esn.run(signal[200:-1])
         targets = signal[201:]
@@ -115,27 +112,6 @@ class TestSinePrediction:
         preds = esn.predictions()
         assert preds.shape == (esn.num_collected,)
         assert preds.dtype == np.float32
-
-
-class TestFeatureModes:
-    """Test Raw vs Translated feature modes."""
-
-    def test_raw_mode(self):
-        esn = ESN(dim=5, seed=1, feature_mode=FeatureMode.Raw)
-        signal = _sine_signal(500)
-        esn.warmup(signal[:100])
-        esn.run(signal[100:-1])
-        # Raw mode: num_features == num_output_verts
-        assert esn.num_features == esn.num_output_verts
-
-    def test_translated_mode(self):
-        esn = ESN(dim=5, seed=1, feature_mode=FeatureMode.Translated)
-        signal = _sine_signal(500)
-        esn.warmup(signal[:100])
-        esn.run(signal[100:-1])
-        # Translated mode: num_features == 2.5 * num_output_verts
-        M = esn.num_output_verts
-        assert esn.num_features == M + M + M // 2
 
 
 class TestMultiInput:
@@ -416,7 +392,7 @@ class TestPersistence:
 
     def test_pickle_roundtrip_ridge_raw(self):
         signal = _sine_signal()
-        esn = ESN(dim=6, seed=42, feature_mode=FeatureMode.Raw)
+        esn = ESN(dim=6, seed=42)
         esn.fit(signal, warmup=200)
         r2_before = esn.r2()
 
@@ -453,8 +429,7 @@ class TestPersistence:
         esn = ESN(dim=8, seed=123, spectral_radius=0.85,
                   input_scaling=0.05, leak_rate=0.7, alpha=1.2,
                   num_inputs=2, output_fraction=0.5,
-                  readout_type=ReadoutType.Ridge,
-                  feature_mode=FeatureMode.Raw)
+                  readout_type=ReadoutType.Ridge)
         loaded = pickle.loads(pickle.dumps(esn))
         assert loaded.dim == 8
         assert loaded.seed == 123
@@ -465,7 +440,6 @@ class TestPersistence:
         assert loaded.num_inputs == 2
         assert loaded.output_fraction == pytest.approx(0.5)
         assert loaded.readout_type == ReadoutType.Ridge
-        assert loaded.feature_mode == FeatureMode.Raw
 
     def test_collected_states_not_persisted(self):
         signal = _sine_signal()

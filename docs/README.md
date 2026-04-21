@@ -12,14 +12,13 @@ order below.
 | Document | What you'll learn |
 |----------|-------------------|
 | [Reservoir.md](Reservoir.md) | How the hypercube reservoir works — topology, connectivity, timestep mechanics, spectral radius, scale-invariant defaults |
-| [TranslationLayer.md](TranslationLayer.md) | Why raw tanh states limit a linear readout, and how the translation layer breaks through that bottleneck |
 | [Readout.md](Readout.md) | The two readout algorithms (SGD vs. Ridge), when to use each, feature standardization, and streaming mode |
 
 These three documents cover the full pipeline:
 
 ```
-Input ──> Reservoir (N states) ──> Translation (2.5N features) ──> Readout ──> Prediction
-           [Reservoir.md]          [TranslationLayer.md]          [Readout.md]
+Input ──> Reservoir (N states) ──> Readout ──> Prediction
+           [Reservoir.md]          [Readout.md]
 ```
 
 ### 2. See it in action
@@ -60,6 +59,5 @@ in the header files are written for an educational audience:
 |--------|----------------|
 | `ESN.h` | `ESN<DIM>` — the pipeline wrapper (warmup, run, collect states) |
 | `Reservoir.h` | `Reservoir<DIM>` — the hypercube reservoir core |
-| `TranslationLayer.h` | `TranslationTransform<DIM>()`, `TranslationTransformSelected<DIM>()` — feature expansion |
 | `diagnostics/SignalGenerators.h` | `GenerateNARMA10()`, `ComputeNRMSE()` |
 | `readout/RidgeRegression.h` | `RidgeRegression` — closed-form optimal readout |

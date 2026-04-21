@@ -8,21 +8,12 @@
 #include <type_traits>
 
 template <size_t DIM>
-ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode feature_mode)
+ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type)
     : reservoir_(Reservoir<DIM>::Create(cfg)),
-      readout_type_(readout_type),
-      feature_mode_(feature_mode)
+      readout_type_(readout_type)
 {
     num_inputs_      = cfg.num_inputs;
     output_fraction_ = cfg.output_fraction;
-
-    // HCNN operates directly on reservoir state (optionally stride-subsampled
-    // onto a sub-hypercube) — it never consumes TranslationLayer features.
-    // Force Raw so GetFeatureMode() reports something honest.
-    if (readout_type_ == ReadoutType::HCNN)
-    {
-        feature_mode_    = FeatureMode::Raw;
-    }
 
     assert(output_fraction_ > 0.0f && output_fraction_ <= 1.0f);
     size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * output_fraction_)));
@@ -264,12 +255,7 @@ float ESN<DIM>::PredictLiveRaw() const
         return std::get<CNNReadout>(readout_).PredictRaw(SubsampleIntoScratch(res_out));
     }
 
-    const auto& ridge = std::get<RidgeRegression>(readout_);
-    if (feature_mode_ == FeatureMode::Translated) {
-        auto feat = TranslationTransformSelected<DIM>(res_out, 1, output_stride_, num_output_verts_);
-        return ridge.PredictRaw(feat.data());
-    }
-    return ridge.PredictRaw(SubsampleIntoScratch(res_out));
+    return std::get<RidgeRegression>(readout_).PredictRaw(SubsampleIntoScratch(res_out));
 }
 
 template <size_t DIM>
@@ -399,22 +385,13 @@ void ESN<DIM>::EnsureFeatures() const
     size_t old_count = features_computed_;
     size_t new_count = num_collected_ - old_count;
     features_.resize(num_collected_ * nf);
-    if (feature_mode_ == FeatureMode::Translated)
+    for (size_t s = 0; s < new_count; ++s)
     {
-        auto new_feats = TranslationTransformSelected<DIM>(
-            states_.data() + old_count * N, new_count, output_stride_, num_output_verts_);
-        memcpy(features_.data() + old_count * nf, new_feats.data(), new_count * nf * sizeof(float));
-    }
-    else
-    {
-        for (size_t s = 0; s < new_count; ++s)
-        {
-            const float* src = states_.data() + (old_count + s) * N;
-            float* dst = features_.data() + (old_count + s) * nf;
-            size_t j = 0;
-            for (size_t v = 0; v < N; v += output_stride_)
-                dst[j++] = src[v];
-        }
+        const float* src = states_.data() + (old_count + s) * N;
+        float* dst = features_.data() + (old_count + s) * nf;
+        size_t j = 0;
+        for (size_t v = 0; v < N; v += output_stride_)
+            dst[j++] = src[v];
     }
     features_computed_ = num_collected_;
 }
@@ -422,10 +399,6 @@ void ESN<DIM>::EnsureFeatures() const
 template <size_t DIM>
 size_t ESN<DIM>::NumFeatures() const
 {
-    if (readout_type_ == ReadoutType::HCNN)
-        return num_output_verts_;  // CNN operates on stride-selected sub-hypercube
-    if (feature_mode_ == FeatureMode::Translated)
-        return TranslationFeatureCountSelected(num_output_verts_);
     return num_output_verts_;
 }
 

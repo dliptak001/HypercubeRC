@@ -20,13 +20,13 @@ import pathlib
 import pickle
 import numpy as np
 
-from ._core import ReadoutType, FeatureMode
+from ._core import ReadoutType
 from ._core import (
     _ESN5, _ESN6, _ESN7, _ESN8, _ESN9, _ESN10, _ESN11, _ESN12,
 )
 
 __version__ = "0.2.0"
-__all__ = ["ESN", "ReadoutType", "FeatureMode"]
+__all__ = ["ESN", "ReadoutType"]
 
 _ESN_CLASSES = {
     5: _ESN5, 6: _ESN6, 7: _ESN7, 8: _ESN8,
@@ -70,9 +70,6 @@ class ESN:
         Reduce for large dim to control Ridge readout cost.
     readout_type : ReadoutType
         ReadoutType.Ridge (default) or ReadoutType.HCNN.
-    feature_mode : FeatureMode
-        FeatureMode.Translated (default) or FeatureMode.Raw.
-
     Examples
     --------
     Simple (single-input next-step prediction):
@@ -108,7 +105,6 @@ class ESN:
         num_inputs: int = 1,
         output_fraction: float = 1.0,
         readout_type: ReadoutType = ReadoutType.Ridge,
-        feature_mode: FeatureMode = FeatureMode.Translated,
     ):
         if dim not in _ESN_CLASSES:
             raise ValueError(f"dim must be 5-12, got {dim}")
@@ -122,7 +118,6 @@ class ESN:
             num_inputs=num_inputs,
             output_fraction=output_fraction,
             readout_type=readout_type,
-            feature_mode=feature_mode,
         )
         self._targets: np.ndarray | None = None
         self._train_size: int | None = None
@@ -517,11 +512,6 @@ class ESN:
         return self._impl.readout_type
 
     @property
-    def feature_mode(self) -> FeatureMode:
-        """Feature mode (Translated or Raw)."""
-        return self._impl.feature_mode
-
-    @property
     def alpha(self) -> float:
         """Tanh gain parameter."""
         return self._impl.alpha
@@ -562,7 +552,6 @@ class ESN:
         parts = [
             f"ESN(dim={self.dim}, N={self.N}",
             f"readout={self.readout_type.name}",
-            f"features={self.feature_mode.name}",
             f"collected={self.num_collected}",
         ]
         if self._train_size is not None:
@@ -590,7 +579,6 @@ class ESN:
             "num_inputs": self.num_inputs,
             "output_fraction": self.output_fraction,
             "readout_type": self.readout_type,
-            "feature_mode": self.feature_mode,
             "readout_state": self._impl._get_readout_state(),
         }
 
@@ -613,7 +601,6 @@ class ESN:
             num_inputs=state["num_inputs"],
             output_fraction=state["output_fraction"],
             readout_type=state["readout_type"],
-            feature_mode=state["feature_mode"],
         )
         self._impl._set_readout_state(state["readout_state"])
 

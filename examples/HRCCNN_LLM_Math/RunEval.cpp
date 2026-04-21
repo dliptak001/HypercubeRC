@@ -57,7 +57,7 @@ int RunEval()
     std::cerr << "[eval] eval_samples=" << args.samples
               << " eval_seed=" << seed << "\n";
 
-    ESN<kDIM> esn(mf.reservoir_cfg, ReadoutType::HCNN, FeatureMode::Raw);
+    ESN<kDIM> esn(mf.reservoir_cfg, ReadoutType::HCNN);
     // Bootstrap the CNN topology. CNNReadout builds its architecture lazily
     // inside Train(), so a no-op train with epochs=0 on a single dummy state
     // establishes the HCNN net and matching scratch buffers. SetReadoutState

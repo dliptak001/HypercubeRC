@@ -17,7 +17,7 @@ void bind_esn(py::module_& m, const char* name)
         .def(py::init([](uint64_t seed, float spectral_radius, float input_scaling,
                          float leak_rate, float alpha, size_t num_inputs,
                          float output_fraction,
-                         ReadoutType readout_type, FeatureMode feature_mode) {
+                         ReadoutType readout_type) {
             ReservoirConfig cfg;
             cfg.seed             = seed;
             cfg.spectral_radius  = spectral_radius;
@@ -26,7 +26,7 @@ void bind_esn(py::module_& m, const char* name)
             cfg.alpha            = alpha;
             cfg.num_inputs       = num_inputs;
             cfg.output_fraction  = output_fraction;
-            return std::make_unique<E>(cfg, readout_type, feature_mode);
+            return std::make_unique<E>(cfg, readout_type);
         }),
             py::arg("seed")             = 0ULL,
             py::arg("spectral_radius")  = 0.9f,
@@ -35,8 +35,7 @@ void bind_esn(py::module_& m, const char* name)
             py::arg("alpha")            = 1.0f,
             py::arg("num_inputs")       = 1ULL,
             py::arg("output_fraction")  = 1.0f,
-            py::arg("readout_type")     = ReadoutType::Ridge,
-            py::arg("feature_mode")     = FeatureMode::Translated)
+            py::arg("readout_type")     = ReadoutType::Ridge)
 
         // ── Reservoir driving ──
         .def("warmup", [](E& self, py::array_t<float, py::array::c_style | py::array::forcecast> inputs) {
@@ -361,7 +360,6 @@ void bind_esn(py::module_& m, const char* name)
         .def_property_readonly("output_stride", &E::OutputStride)
         .def_property_readonly("num_output_verts", &E::NumOutputVerts)
         .def_property_readonly("readout_type", &E::GetReadoutType)
-        .def_property_readonly("feature_mode", &E::GetFeatureMode)
         .def_property_readonly("alpha", &E::GetAlpha)
         .def_property_readonly("dim", [](const E&) { return DIM; })
         .def_property_readonly("N", [](const E&) { return NN; })
@@ -435,12 +433,6 @@ PYBIND11_MODULE(_core, m)
                "Closed-form Ridge regression. Deterministic, fast, optimal.")
         .value("HCNN", ReadoutType::HCNN,
                "HypercubeCNN-based learned readout. Operates on raw reservoir state.");
-
-    py::enum_<FeatureMode>(m, "FeatureMode")
-        .value("Raw", FeatureMode::Raw,
-               "Use selected states directly as features.")
-        .value("Translated", FeatureMode::Translated,
-               "Expand selected states via [x | x^2 | x*x_antipodal] (2.5x features).");
 
     bind_esn<5>(m,  "_ESN5");
     bind_esn<6>(m,  "_ESN6");

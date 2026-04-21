@@ -48,7 +48,7 @@ int RunInfer()
         return 4;
     }
 
-    ESN<kDIM> esn(mf.reservoir_cfg, ReadoutType::HCNN, FeatureMode::Raw);
+    ESN<kDIM> esn(mf.reservoir_cfg, ReadoutType::HCNN);
     {
         std::vector<float> dummy_bits(kInputBits, 0.0f);
         esn.Run(dummy_bits.data(), 1);

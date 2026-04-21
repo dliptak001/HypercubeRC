@@ -58,7 +58,7 @@ public:
             cfg.seed = seed;
             if (output_fraction_ != 1.0f)
                 cfg.output_fraction = output_fraction_;
-            ESN<DIM> esn(cfg, ReadoutType::Ridge, FeatureMode::Raw);
+            ESN<DIM> esn(cfg, ReadoutType::Ridge);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
             esn.EnsureFeatures();

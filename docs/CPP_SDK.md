@@ -26,7 +26,6 @@ After installation, the SDK contains:
   include/HypercubeRC/
     ESN.h              -- The public API (the only header consumers include)
     Reservoir.h        -- Internal: included by ESN.h
-    TranslationLayer.h -- Internal: included by ESN.h
     RidgeRegression.h  -- Internal: included by ESN.h
     CNNReadout.h       -- Internal: included by ESN.h (HCNN readout config)
   lib/
@@ -137,7 +136,7 @@ int main()
     // Create ESN with default config
     ReservoirConfig cfg;
     cfg.seed = 42;
-    ESN<DIM> esn(cfg);  // defaults: Ridge readout, Translated features
+    ESN<DIM> esn(cfg);  // defaults: Ridge readout, raw features
 
     // Drive and train
     esn.Warmup(signal.data(), warmup);
@@ -162,8 +161,7 @@ int main()
 ### HCNN readout example
 
 The HCNN (HypercubeCNN) readout replaces linear regression with a learned
-convolutional network operating directly on raw reservoir state. It always
-uses `FeatureMode::Raw` (the translation layer is bypassed) and requires
+convolutional network operating directly on raw reservoir state. It requires
 a `CNNReadoutConfig` for training.
 
 ```cpp
@@ -185,7 +183,7 @@ int main()
     ReservoirConfig cfg;
     cfg.seed = 42;
     cfg.output_fraction = 1.0f;  // HCNN operates on all N vertices
-    ESN<DIM> esn(cfg, ReadoutType::HCNN);  // FeatureMode::Raw is forced
+    ESN<DIM> esn(cfg, ReadoutType::HCNN);
 
     esn.Warmup(signal.data(), warmup);
     esn.Run(signal.data() + warmup, collect);
@@ -239,16 +237,7 @@ For DIM 9+, reduce `output_fraction` to control Ridge readout cost (e.g., 0.25 f
 | Value | Description |
 |-------|-------------|
 | `Ridge` | Closed-form Ridge regression. Deterministic, fast, optimal for the given regularization. Default. |
-| `HCNN` | Learned convolutional readout (HypercubeCNN). Operates directly on raw N-vertex state, bypassing the translation layer. Supports multi-output regression and multi-class classification. Trained via the `Train(targets, train_size, CNNReadoutConfig)` overload. See [CNNReadoutConfig](#cnnreadoutconfig). |
-
-#### `FeatureMode`
-
-| Value | Description |
-|-------|-------------|
-| `Translated` | Expands M selected states into 2.5M features via [x \| x^2 \| x\*x_antipodal]. Reduces NRMSE by 20-70% on standard benchmarks. Default for Ridge. |
-| `Raw` | Uses M selected states directly. Fewer features, faster computation, sufficient for simple tasks. |
-
-**Note:** When `ReadoutType::HCNN` is selected, the ESN constructor forces `FeatureMode::Raw` regardless of what you pass. HCNN operates on raw N-vertex state and has its own internal standardization — it never uses the translation layer.
+| `HCNN` | Learned convolutional readout (HypercubeCNN). Operates directly on raw N-vertex state. Supports multi-output regression and multi-class classification. Trained via the `Train(targets, train_size, CNNReadoutConfig)` overload. See [CNNReadoutConfig](#cnnreadoutconfig). |
 
 #### `HCNNTask`
 
@@ -339,13 +328,13 @@ See `readout/CNNReadout.md` for the full design notes and benchmark data.
 
 ### ESN\<DIM\>
 
-The complete API. Owns the full Reservoir -> [Translation] -> Readout pipeline (translation is bypassed when `ReadoutType::HCNN` is selected).
+The complete API. Owns the full Reservoir -> Readout pipeline.
 
 ```cpp
 // Construction
-ESN<DIM>(cfg);                                              // Ridge + Translated (defaults)
-ESN<DIM>(cfg, ReadoutType::Ridge, FeatureMode::Raw);        // explicit selection
-ESN<DIM>(cfg, ReadoutType::HCNN);                           // HCNN (forces FeatureMode::Raw)
+ESN<DIM>(cfg);                                              // Ridge readout (default)
+ESN<DIM>(cfg, ReadoutType::Ridge);                          // explicit selection
+ESN<DIM>(cfg, ReadoutType::HCNN);                           // HCNN readout
 
 // Reservoir driving
 esn.Warmup(inputs, num_steps);              // drive without recording
@@ -378,8 +367,7 @@ esn.NumCollected();                         // timesteps recorded
 
 ```cpp
 explicit ESN(const ReservoirConfig& cfg,
-             ReadoutType readout_type = ReadoutType::Ridge,
-             FeatureMode feature_mode = FeatureMode::Translated);
+             ReadoutType readout_type = ReadoutType::Ridge);
 ```
 
 Creates the reservoir from `cfg`, initializes the selected readout type, and computes output selection parameters from `cfg.output_fraction`. The reservoir weights are generated and spectral-radius-rescaled at construction time.
@@ -387,7 +375,6 @@ Creates the reservoir from `cfg`, initializes the selected readout type, and com
 **Parameters:**
 - `cfg` -- Reservoir configuration. See [ReservoirConfig](#reservoirconfig).
 - `readout_type` -- Which readout to use. Default: `ReadoutType::Ridge`.
-- `feature_mode` -- Whether to apply the translation layer. Default: `FeatureMode::Translated`. **Forced to `FeatureMode::Raw` when `readout_type == ReadoutType::HCNN`** regardless of what you pass.
 
 ---
 
@@ -489,7 +476,7 @@ void Train(const float* targets, size_t train_size,
            const CNNReadoutConfig& config);
 ```
 
-Trains the HCNN readout on raw reservoir state, bypassing the translation layer. **Asserts that `readout_type` is `HCNN`.**
+Trains the HCNN readout on raw reservoir state. **Asserts that `readout_type` is `HCNN`.**
 
 **Parameters:**
 - `targets` -- Target values. Layout depends on `config.task`:
@@ -499,7 +486,7 @@ Trains the HCNN readout on raw reservoir state, bypassing the translation layer.
 - `config` -- Architecture and training hyperparameters. See [CNNReadoutConfig](#cnnreadoutconfig).
 
 **Notes:**
-- HCNN reads directly from `States()` (raw N-vertex state) — the feature pipeline is not touched.
+- HCNN reads directly from `States()` (raw N-vertex state).
 - Per-vertex input standardization (mean/std) is computed from the training set and stored.
 - For regression, per-output target centering is applied internally; predictions are de-centered at inference.
 - For classification, softmax+CE loss; predictions from `PredictRaw(timestep, out)` are raw logits (apply argmax to get a class).
@@ -665,7 +652,7 @@ void EnsureFeatures() const;
 
 Computes features for any collected states that haven't been processed yet. Incremental -- only processes new states since the last call. Called automatically by `Train()`, `PredictRaw()`, `R2()`, `NRMSE()`, and `Accuracy()`.
 
-In `Translated` mode, applies the translation transform (x, x^2, x*x_antipodal) to stride-selected vertices. In `Raw` mode, extracts stride-selected vertices without transformation.
+For Ridge, extracts stride-selected vertices. For HCNN, features are computed directly from raw state and this path is not used.
 
 ---
 
@@ -676,8 +663,8 @@ In `Translated` mode, applies the translation transform (x, x^2, x*x_antipodal) 
 ```
 
 Returns the number of features per timestep.
-- **Translated mode:** `M + M + M/2` = 2.5M, where M = `NumOutputVerts()`.
-- **Raw mode:** M.
+- **Ridge:** M, where M = `NumOutputVerts()`.
+- **HCNN:** N (all vertices).
 
 ---
 
@@ -691,7 +678,6 @@ Returns the number of features per timestep.
 | `OutputStride()` | `size_t` | Stride used for vertex selection: `max(1, N / M)`. |
 | `NumOutputVerts()` | `size_t` | Number of selected vertices M = ceil(N / stride). |
 | `GetReadoutType()` | `ReadoutType` | Readout type selected at construction. |
-| `GetFeatureMode()` | `FeatureMode` | Feature mode selected at construction (forced to `Raw` for HCNN). |
 | `GetAlpha()` | `float` | The tanh gain alpha from the reservoir config. |
 | `NumInputs()` | `size_t` | Number of input channels from config. |
 | `GetConfig()` | `ReservoirConfig` | Full config used to construct this ESN (for serialization). |
@@ -708,8 +694,8 @@ The ESN exposes its trained readout state for serialization. The reservoir weigh
 |-------|------|-------------|
 | `weights` | `std::vector<double>` | **Linear/Ridge:** learned weight vector. **HCNN:** opaque flattened blob of all conv kernels, biases, and dense-head weights (layout defined by `hcnn::HCNN::GetWeights` / `SetWeights`). Do not interpret the values — just round-trip them. |
 | `bias` | `double` | **Linear/Ridge:** learned bias. **HCNN:** fallback value for per-output target centering when the full target-mean vector isn't round-tripped separately. |
-| `feature_mean` | `std::vector<float>` | **Linear/Ridge:** per-feature mean from the 2.5M-feature standardization. **HCNN:** per-vertex mean from the raw N-vertex standardization. |
-| `feature_scale` | `std::vector<float>` | **Linear/Ridge:** per-feature 1/std. **HCNN:** per-vertex 1/std. |
+| `feature_mean` | `std::vector<float>` | **Ridge:** per-feature mean from the M-feature standardization. **HCNN:** per-vertex mean from the raw N-vertex standardization. |
+| `feature_scale` | `std::vector<float>` | **Ridge:** per-feature 1/std. **HCNN:** per-vertex 1/std. |
 | `is_trained` | `bool` | True if the readout has been trained. |
 
 | Method | Returns | Description |
@@ -726,11 +712,11 @@ For HCNN, `SetReadoutState` reconstructs the full network architecture from the 
 auto cfg = esn.GetConfig();
 auto state = esn.GetReadoutState();
 // ... serialize cfg, state.weights, state.bias, state.feature_mean,
-//     state.feature_scale, readout_type, feature_mode, DIM
+//     state.feature_scale, readout_type, DIM
 //     using your preferred format (JSON, protobuf, binary, etc.)
 
 // Restore
-ESN<6> restored(cfg, readout_type, feature_mode);
+ESN<6> restored(cfg, readout_type);
 restored.SetReadoutState(state);
 // Ready to predict — no retraining needed.
 // Call Warmup() + Run() on new data, then PredictRaw().

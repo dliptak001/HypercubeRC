@@ -145,7 +145,7 @@ int RunTrain()
               << " train=" << args.train_chars
               << " val=" << args.val_chars << "\n";
 
-    ESN<kDIM> esn(rcfg, ReadoutType::HCNN, FeatureMode::Raw);
+    ESN<kDIM> esn(rcfg, ReadoutType::HCNN);
 
     // --- Phase 1: Reservoir warmup (no collection). ---
     std::size_t corpus_pos = 0;

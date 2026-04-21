@@ -174,7 +174,7 @@ int RunTrain()
               << " epochs=" << args.epochs
               << " batch_size=" << args.batch_size << "\n";
 
-    ESN<kDIM> esn(rcfg, ReadoutType::HCNN, FeatureMode::Raw);
+    ESN<kDIM> esn(rcfg, ReadoutType::HCNN);
 
     GeneratorConfig gcfg;
     gcfg.rhs_filter_999 = args.rhs_filter_999;

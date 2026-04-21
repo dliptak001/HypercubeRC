@@ -118,26 +118,18 @@ For dim 9+, reduce `output_fraction` to control Ridge readout cost (e.g., 0.25 f
 |-------|-------------|
 | `ReadoutType.Ridge` | Closed-form Ridge regression. Deterministic, fast, optimal for the given regularization. Default. |
 
-#### `FeatureMode`
-
-| Value | Description |
-|-------|-------------|
-| `FeatureMode.Translated` | Expands M selected states into 2.5M features via [x \| x² \| x·x_antipodal]. Reduces NRMSE by 20-70% on standard benchmarks. Default. |
-| `FeatureMode.Raw` | Uses M selected states directly. Fewer features, faster computation, sufficient for simple tasks. |
-
 ---
 
 ### ESN
 
-The complete API. Owns the full Reservoir → Translation → Readout pipeline.
+The complete API. Owns the full Reservoir → Readout pipeline.
 
 ```python
 import hypercube_rc as hrc
 
 # Construction
 esn = hrc.ESN(dim=7)                                                    # defaults
-esn = hrc.ESN(dim=7, readout_type=hrc.ReadoutType.Ridge,
-              feature_mode=hrc.FeatureMode.Raw)                          # explicit
+esn = hrc.ESN(dim=7, readout_type=hrc.ReadoutType.Ridge)                # explicit
 
 # High-level pipeline (recommended)
 esn.fit(signal, warmup=200)                     # warmup + run + train
@@ -170,7 +162,7 @@ esn.selected_states()               # stride-selected states as ndarray
 ```python
 ESN(dim, *, seed=0, spectral_radius=0.9, input_scaling=0.02,
     leak_rate=1.0, alpha=1.0, num_inputs=1, output_fraction=1.0,
-    readout_type=ReadoutType.Ridge, feature_mode=FeatureMode.Translated)
+    readout_type=ReadoutType.Ridge)
 ```
 
 Creates the reservoir, initializes the selected readout type, and computes output selection parameters from `output_fraction`. The reservoir weights are generated and spectral-radius-rescaled at construction time.
@@ -188,7 +180,6 @@ Creates the reservoir, initializes the selected readout type, and computes outpu
 | `num_inputs` | `int` | `1` | Number of input channels. Channel k drives every K-th vertex starting at offset k. |
 | `output_fraction` | `float` | `1.0` | Fraction of N vertices used as readout features, in (0.0, 1.0]. |
 | `readout_type` | `ReadoutType` | `Ridge` | Which readout to use. |
-| `feature_mode` | `FeatureMode` | `Translated` | Whether to apply the translation layer. |
 
 ---
 
@@ -396,13 +387,12 @@ Extract stride-selected vertices from all collected states.
 | `dim` | `int` | Hypercube dimension. |
 | `N` | `int` | Number of neurons (2^dim). |
 | `num_collected` | `int` | Timesteps recorded by `run()`. |
-| `num_features` | `int` | Features per timestep. M for Raw, 2.5M for Translated. |
+| `num_features` | `int` | Features per timestep. M selected vertices for Ridge. |
 | `num_inputs` | `int` | Number of input channels. |
 | `output_fraction` | `float` | Fraction of vertices used as readout features. |
 | `output_stride` | `int` | Stride used for vertex selection: max(1, N/M). |
 | `num_output_verts` | `int` | Number of selected output vertices M. |
 | `readout_type` | `ReadoutType` | Readout type selected at construction. |
-| `feature_mode` | `FeatureMode` | Feature mode selected at construction. |
 | `alpha` | `float` | Tanh gain parameter. |
 | `seed` | `int` | RNG seed used to initialize reservoir weights. |
 | `spectral_radius` | `float` | Target spectral radius. |
@@ -499,7 +489,7 @@ restored = pickle.loads(data)
 |-------|-----------|
 | All constructor parameters (dim, seed, spectral_radius, etc.) | Collected states (regenerate with `warmup()` + `run()`) |
 | Trained readout weights, bias, and standardization stats | Cached features |
-| Readout type and feature mode | `fit()` targets and train/test split |
+| Readout type | `fit()` targets and train/test split |
 
 ---
 

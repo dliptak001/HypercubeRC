@@ -23,20 +23,7 @@
 
 int main(int argc, char* argv[])
 {
-    // --- Parse feature mode for Ridge readout ---
-    FeatureMode feature_mode = FeatureMode::Raw;  // default
-    if (argc > 1)
-    {
-        if (std::strcmp(argv[1], "raw") == 0)
-            feature_mode = FeatureMode::Raw;
-        else if (std::strcmp(argv[1], "translation") == 0)
-            feature_mode = FeatureMode::Translated;
-        else
-        {
-            std::cerr << "Usage: " << argv[0] << " [raw|translation]\n";
-            return 1;
-        }
-    }
+    (void)argc; (void)argv;
 
     // --- Configuration ---
     constexpr size_t DIM = 7;                // Hypercube dimension (2^7 = 128 neurons)
@@ -79,14 +66,12 @@ int main(int argc, char* argv[])
 
     ReservoirConfig ridge_cfg = cfg;
     ridge_cfg.output_fraction = 0.1f;
-    ESN<DIM> esn_ridge(ridge_cfg, ReadoutType::Ridge, feature_mode);
+    ESN<DIM> esn_ridge(ridge_cfg, ReadoutType::Ridge);
 
-    bool use_translation = (feature_mode == FeatureMode::Translated);
     std::cout << "  Config: N=" << N
               << "  Outputs=" << esn_ridge.NumOutputVerts()
               << " (" << static_cast<int>(esn_ridge.OutputFraction() * 100) << "%)"
-              << "  Features=" << esn_ridge.NumFeatures()
-              << " (" << (use_translation ? "translation" : "raw") << ")\n";
+              << "  Features=" << esn_ridge.NumFeatures() << "\n";
 
     esn_ridge.Warmup(signal.data(), warmup);
     esn_ridge.Run(signal.data() + warmup, collect);
