@@ -18,7 +18,7 @@ set(PUBLIC_HEADERS
     ${PROJECT_SOURCE_DIR}/ESN.h
     ${PROJECT_SOURCE_DIR}/Reservoir.h
     ${PROJECT_SOURCE_DIR}/readout/RidgeRegression.h
-    ${PROJECT_SOURCE_DIR}/readout/CNNReadout.h
+    ${PROJECT_SOURCE_DIR}/readout/HCNNReadout.h
 )
 
 # ——— HypercubeCNN dependency (CNN readout) ———

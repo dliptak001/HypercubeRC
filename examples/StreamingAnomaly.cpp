@@ -165,7 +165,7 @@ int main(int argc, char* argv[])
     // bs=1<<(DIM-1)) with smooth-signal epochs: ep=25 is the saturation
     // point for the smooth anomaly process here.  The baseline's default
     // ep=2000 is calibrated for chaotic signals (NARMA).
-    CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
+    HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
     cnn_cfg.num_outputs = 1;
     cnn_cfg.task        = HCNNTask::Regression;
     cnn_cfg.epochs      = 1000;

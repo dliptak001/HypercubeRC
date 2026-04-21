@@ -4,7 +4,7 @@
 #include <cstdint>
 
 #include "../Reservoir.h"
-#include "CNNReadout.h"
+#include "HCNNReadout.h"
 
 /// @file HCNNPresets.h
 /// @brief Per-DIM, per-task HCNN configuration bundles.
@@ -26,7 +26,7 @@
 ///    function below, filling in both `p.reservoir` and `p.cnn`.
 /// 3. Update `docs/HCNNTuning.md` with the final row and narrative.
 ///
-/// Untuned DIMs fall through to library defaults (`CNNReadoutConfig{}`
+/// Untuned DIMs fall through to library defaults (`HCNNReadoutConfig{}`
 /// with `num_layers=0` auto-sizing and the generic reservoir defaults),
 /// so consumers get a functional — if unoptimized — config at any DIM.
 
@@ -36,7 +36,7 @@ namespace hcnn_presets {
 struct HCNNPreset
 {
     ReservoirConfig  reservoir;  ///< Includes surveyed seed when available.
-    CNNReadoutConfig cnn;        ///< Tuned HCNN hyperparameters.
+    HCNNReadoutConfig cnn;        ///< Tuned HCNN hyperparameters.
 };
 
 // ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ struct HCNNPreset
 
 /// @brief Tuned HCNN preset for the NARMA-10 benchmark.
 ///
-/// Not yet tuned for any DIM.  All DIMs fall through to CNNReadoutConfig
+/// Not yet tuned for any DIM.  All DIMs fall through to HCNNReadoutConfig
 /// defaults, with the surveyed reservoir seed.
 template <size_t DIM>
 HCNNPreset NARMA10()
@@ -101,9 +101,9 @@ HCNNPreset NARMA10()
 /// across DIMs and coincides with the DIM 5/6/7 Gold Standard `bs` values,
 /// so benchmark cadence is commensurable with the tuned reference runs.
 template <size_t DIM>
-CNNReadoutConfig HRCCNNBaseline()
+HCNNReadoutConfig HRCCNNBaseline()
 {
-    CNNReadoutConfig cfg;
+    HCNNReadoutConfig cfg;
     cfg.num_layers    = 1;
     cfg.conv_channels = 8;
     cfg.epochs        = 2000;

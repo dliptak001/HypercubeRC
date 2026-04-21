@@ -41,7 +41,7 @@ struct ModelFile
     std::string          vocab;
     TrainingMetadata     meta;
     ReservoirConfig      reservoir_cfg{};
-    CNNReadoutConfig     cnn_cfg{};
+    HCNNReadoutConfig     cnn_cfg{};
     SerialReadoutState   readout;
 };
 

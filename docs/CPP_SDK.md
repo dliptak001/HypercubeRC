@@ -13,7 +13,7 @@ Static C++ library for reservoir computing on Boolean hypercube graphs.
   - [Template parameter: DIM](#template-parameter-dim)
   - [Enums](#enums)
   - [ReservoirConfig](#reservoirconfig)
-  - [CNNReadoutConfig](#cnnreadoutconfig)
+  - [HCNNReadoutConfig](#cnnreadoutconfig)
   - [ESN\<DIM\>](#esndim)
 - [Dependencies](#dependencies)
 
@@ -27,7 +27,7 @@ After installation, the SDK contains:
     ESN.h              -- The public API (the only header consumers include)
     Reservoir.h        -- Internal: included by ESN.h
     RidgeRegression.h  -- Internal: included by ESN.h
-    CNNReadout.h       -- Internal: included by ESN.h (HCNN readout config)
+    HCNNReadout.h       -- Internal: included by ESN.h (HCNN readout config)
   lib/
     libHypercubeRCCore.a
   lib/cmake/HypercubeRC/
@@ -162,7 +162,7 @@ int main()
 
 The HCNN (HypercubeCNN) readout replaces linear regression with a learned
 convolutional network operating directly on raw reservoir state. It requires
-a `CNNReadoutConfig` for training.
+a `HCNNReadoutConfig` for training.
 
 ```cpp
 #include <HypercubeRC/ESN.h>
@@ -195,8 +195,8 @@ int main()
     size_t train_size = 1400;
     size_t test_size = collect - train_size;
 
-    // HCNN uses its own Train overload that takes a CNNReadoutConfig.
-    CNNReadoutConfig cnn_cfg;
+    // HCNN uses its own Train overload that takes a HCNNReadoutConfig.
+    HCNNReadoutConfig cnn_cfg;
     cnn_cfg.task = HCNNTask::Regression;
     cnn_cfg.num_outputs = 1;
     cnn_cfg.epochs = 25;           // HCNN saturates fast on structured signals
@@ -237,11 +237,11 @@ For DIM 9+, reduce `output_fraction` to control Ridge readout cost (e.g., 0.25 f
 | Value | Description |
 |-------|-------------|
 | `Ridge` | Closed-form Ridge regression. Deterministic, fast, optimal for the given regularization. Default. |
-| `HCNN` | Learned convolutional readout (HypercubeCNN). Operates directly on raw N-vertex state. Supports multi-output regression and multi-class classification. Trained via the `Train(targets, train_size, CNNReadoutConfig)` overload. See [CNNReadoutConfig](#cnnreadoutconfig). |
+| `HCNN` | Learned convolutional readout (HypercubeCNN). Operates directly on raw N-vertex state. Supports multi-output regression and multi-class classification. Trained via the `Train(targets, train_size, HCNNReadoutConfig)` overload. See [HCNNReadoutConfig](#cnnreadoutconfig). |
 
 #### `HCNNTask`
 
-Task head for the HCNN readout. Declared in `CNNReadout.h`.
+Task head for the HCNN readout. Declared in `HCNNReadout.h`.
 
 | Value | Description |
 |-------|-------------|
@@ -279,12 +279,12 @@ struct ReservoirConfig
 
 ---
 
-### CNNReadoutConfig
+### HCNNReadoutConfig
 
-Configuration struct for the HCNN readout. Only used by the `Train(targets, train_size, CNNReadoutConfig)` overload when `ReadoutType::HCNN` is selected.
+Configuration struct for the HCNN readout. Only used by the `Train(targets, train_size, HCNNReadoutConfig)` overload when `ReadoutType::HCNN` is selected.
 
 ```cpp
-struct CNNReadoutConfig {
+struct HCNNReadoutConfig {
     int num_outputs    = 1;
     HCNNTask task      = HCNNTask::Regression;
     int num_layers     = 0;        // 0 = auto: min(DIM - 3, 4)
@@ -322,7 +322,7 @@ struct CNNReadoutConfig {
 | 7    | 3           | 16, 32, 64           | 4         |
 | 8-16 | 4 (cap)     | 16, 32, 64, 128      | DIM − 4   |
 
-See `readout/CNNReadout.md` for the full design notes and benchmark data.
+See `readout/HCNNReadout.md` for the full design notes and benchmark data.
 
 ---
 
@@ -440,7 +440,7 @@ void Train(const float* targets, size_t train_size);
 Trains the readout on the first `train_size` collected states using default parameters for the selected readout type.
 
 - **Ridge** (default): lambda = 1.0
-- **HCNN**: delegates to the `Train(targets, train_size, CNNReadoutConfig{})` overload below with default-constructed config.
+- **HCNN**: delegates to the `Train(targets, train_size, HCNNReadoutConfig{})` overload below with default-constructed config.
 
 **Parameters:**
 - `targets` -- Pointer to target values. Must have at least `train_size` elements (or `train_size * num_outputs` for HCNN multi-output regression). For Ridge regression: continuous float values. For Ridge classification: {-1.0, +1.0}. For HCNN classification: float class indices.
@@ -469,11 +469,11 @@ Trains the Ridge readout with a custom regularization strength. **Asserts that `
 
 ---
 
-##### `Train` (HCNN with CNNReadoutConfig)
+##### `Train` (HCNN with HCNNReadoutConfig)
 
 ```cpp
 void Train(const float* targets, size_t train_size,
-           const CNNReadoutConfig& config);
+           const HCNNReadoutConfig& config);
 ```
 
 Trains the HCNN readout on raw reservoir state. **Asserts that `readout_type` is `HCNN`.**
@@ -483,7 +483,7 @@ Trains the HCNN readout on raw reservoir state. **Asserts that `readout_type` is
   - **Regression:** `train_size * config.num_outputs` floats, row-major (one row per sample, one column per output).
   - **Classification:** `train_size` floats where each value is a float class index (cast from integer class label).
 - `train_size` -- Number of training samples from collected state index 0.
-- `config` -- Architecture and training hyperparameters. See [CNNReadoutConfig](#cnnreadoutconfig).
+- `config` -- Architecture and training hyperparameters. See [HCNNReadoutConfig](#cnnreadoutconfig).
 
 **Notes:**
 - HCNN reads directly from `States()` (raw N-vertex state).
@@ -673,7 +673,7 @@ Returns the number of features per timestep.
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `NumCollected()` | `size_t` | Number of timesteps recorded by `Run()`. |
-| `NumOutputs()` | `size_t` | `1` for Linear/Ridge; `CNNReadoutConfig::num_outputs` for trained HCNN. |
+| `NumOutputs()` | `size_t` | `1` for Linear/Ridge; `HCNNReadoutConfig::num_outputs` for trained HCNN. |
 | `OutputFraction()` | `float` | The `output_fraction` from config. |
 | `OutputStride()` | `size_t` | Stride used for vertex selection: `max(1, N / M)`. |
 | `NumOutputVerts()` | `size_t` | Number of selected vertices M = ceil(N / stride). |
@@ -703,7 +703,7 @@ The ESN exposes its trained readout state for serialization. The reservoir weigh
 | `GetReadoutState()` | `ReadoutState` | Extract trained readout for serialization. |
 | `SetReadoutState(state)` | `void` | Restore a previously saved readout state. |
 
-For HCNN, `SetReadoutState` reconstructs the full network architecture from the stored `CNNReadoutConfig` and injects the weight blob — no retraining needed. The stored ESN must be recreated with `ReadoutType::HCNN` and the same `DIM`; the HCNN config (num_outputs, num_layers, conv_channels) must also be set on the readout before `SetReadoutState` is called, which happens when you construct the ESN and invoke any HCNN training path, or when the consuming application owns its own `CNNReadoutConfig` serialization separately.
+For HCNN, `SetReadoutState` reconstructs the full network architecture from the stored `HCNNReadoutConfig` and injects the weight blob — no retraining needed. The stored ESN must be recreated with `ReadoutType::HCNN` and the same `DIM`; the HCNN config (num_outputs, num_layers, conv_channels) must also be set on the readout before `SetReadoutState` is called, which happens when you construct the ESN and invoke any HCNN training path, or when the consuming application owns its own `HCNNReadoutConfig` serialization separately.
 
 **Example: save and restore a trained model (Linear/Ridge)**
 
@@ -728,11 +728,11 @@ restored.SetReadoutState(state);
 
 HypercubeRC depends on a single external project:
 
-**HypercubeCNN** — sibling library providing the hypercube convolutional network used by `CNNReadout` / `ReadoutType::HCNN`.
+**HypercubeCNN** — sibling library providing the hypercube convolutional network used by `HCNNReadout` / `ReadoutType::HCNN`.
 
 - Expected location: `../HypercubeCNN` relative to the HypercubeRC source tree (adjust `HCNN_DIR` in `CMakeLists.txt` if yours is elsewhere).
 - Built as `libHypercubeCNNCore.a` inside its own `cmake-build-release` directory before HypercubeRC is configured.
 - Public headers are re-exported through `HypercubeRCCore`'s include interface, so consumers of HypercubeRC do not need to add HypercubeCNN to their own link line — `target_link_libraries(my_app PRIVATE HypercubeRCCore)` pulls it in transitively.
-- The HCNN headers used by HypercubeRC consumers are the ones re-exported by `CNNReadout.h` (forward-declared `hcnn::HCNN` via PIMPL); the full HCNN API is not part of the public HypercubeRC surface.
+- The HCNN headers used by HypercubeRC consumers are the ones re-exported by `HCNNReadout.h` (forward-declared `hcnn::HCNN` via PIMPL); the full HCNN API is not part of the public HypercubeRC surface.
 
 No other external dependencies beyond the C++ standard library.

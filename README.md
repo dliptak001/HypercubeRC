@@ -193,7 +193,7 @@ Input ──> Reservoir ──> Output Selection ──> Ridge Readout ──> O
                          (stride-selected)
 
 HCNN path:
-Input ──> Reservoir ──────────────────────> CNNReadout ──> Output
+Input ──> Reservoir ──────────────────────> HCNNReadout ──> Output
            N states                          trained
 ```
 
@@ -225,7 +225,7 @@ states to the target signal:
 
 - **RidgeRegression** — Closed-form optimal via normal equations on M
   stride-selected vertices. O(M³) solve.
-- **CNNReadout (HCNN)** — HypercubeCNN learned convolutional readout on all
+- **HCNNReadout (HCNN)** — HypercubeCNN learned convolutional readout on all
   N vertices. Discovers nonlinear feature interactions directly from raw state.
 
 See [docs/Readout.md](docs/Readout.md) for algorithm details, selection policy,

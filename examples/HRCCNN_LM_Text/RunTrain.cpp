@@ -162,7 +162,7 @@ int RunTrain()
     for (std::size_t i = 0; i < args.warmup_train_chars; ++i)
         BipolarBits(corpus.text[corpus_pos + i], warmup_bits.data() + i * kInputBits);
 
-    CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<kDIM>();
+    HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<kDIM>();
     cnn_cfg.task          = HCNNTask::Classification;
     cnn_cfg.num_outputs   = static_cast<int>(kVocabSize);
     cnn_cfg.num_layers    = args.cnn_num_layers;

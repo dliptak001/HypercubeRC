@@ -11,7 +11,7 @@ namespace hcnn { class HCNN; }
 enum class HCNNTask { Regression, Classification };
 
 /// Configuration for the CNN readout's architecture and training.
-struct CNNReadoutConfig {
+struct HCNNReadoutConfig {
     int num_outputs   = 1;        ///< Number of output neurons (classes or regression targets).
     HCNNTask task     = HCNNTask::Regression; ///< Task type.
     int num_layers    = 0;        ///< Conv+Pool pairs. 0 = auto: min(DIM-3, 4). Channels double per layer.
@@ -34,12 +34,12 @@ struct CNNReadoutConfig {
                                    ///< that already reports accuracy.
 };
 
-/// Runtime-only training hooks.  Kept out of CNNReadoutConfig because the
+/// Runtime-only training hooks.  Kept out of HCNNReadoutConfig because the
 /// config must stay POD for the checkpoint format (see Serialization.cpp's
 /// static_assert).  The callback fires after every `eval_every_epochs`
 /// completed epoch and unconditionally after the final epoch.
 ///
-/// When the callback runs, CNNReadout's `net_` holds the weights produced
+/// When the callback runs, HCNNReadout's `net_` holds the weights produced
 /// by the just-completed epoch and `trained_` is already true, so the
 /// client can call Predict*/Accuracy/R2 directly (typically via the
 /// enclosing ESN) for a mid-training eval.
@@ -63,7 +63,7 @@ struct CNNTrainHooks {
 ///
 /// **Architecture:** Auto-sized from DIM: min(DIM-3, 4) Conv+Pool pairs,
 ///   channels doubling per layer (16, 32, 64, 128).  Override via
-///   CNNReadoutConfig::num_layers.
+///   HCNNReadoutConfig::num_layers.
 ///
 /// **Interface compatibility:** Provides the same method signatures as
 /// RidgeRegression so that ESN's std::visit lambdas compile
@@ -73,17 +73,17 @@ struct CNNTrainHooks {
 ///
 /// **PIMPL:** The hcnn::HCNN object is held via unique_ptr behind a forward
 /// declaration.  #include "HCNN.h" stays in the .cpp only.
-class CNNReadout
+class HCNNReadout
 {
 public:
-    CNNReadout();
-    ~CNNReadout();
-    CNNReadout(CNNReadout&&) noexcept;
-    CNNReadout& operator=(CNNReadout&&) noexcept;
+    HCNNReadout();
+    ~HCNNReadout();
+    HCNNReadout(HCNNReadout&&) noexcept;
+    HCNNReadout& operator=(HCNNReadout&&) noexcept;
 
     // Non-copyable (owns a unique_ptr<HCNN> which is non-copyable).
-    CNNReadout(const CNNReadout&) = delete;
-    CNNReadout& operator=(const CNNReadout&) = delete;
+    HCNNReadout(const HCNNReadout&) = delete;
+    HCNNReadout& operator=(const HCNNReadout&) = delete;
 
     /// @brief Train the CNN readout on raw reservoir states.
     /// @param states     Row-major: num_samples rows, each of N = 2^dim floats.
@@ -94,18 +94,18 @@ public:
     /// @param config     Architecture and training hyperparameters.
     void Train(const float* states, const float* targets,
                size_t num_samples, size_t dim,
-               const CNNReadoutConfig& config,
+               const HCNNReadoutConfig& config,
                CNNTrainHooks& hooks);
 
     void Train(const float* states, const float* targets,
                size_t num_samples, size_t dim,
-               const CNNReadoutConfig& config = {});
+               const HCNNReadoutConfig& config = {});
 
     /// @brief Initialize CNN for online (streaming) training.
     /// Computes standardization stats from a warmup buffer, builds the
     /// architecture, and sets the optimizer.  Call before TrainOnlineStep.
     void InitOnline(const float* warmup_states, size_t warmup_count,
-                    size_t dim, const CNNReadoutConfig& config);
+                    size_t dim, const HCNNReadoutConfig& config);
 
     /// @brief Single-sample online gradient step (classification).
     /// State is one subsampled reservoir state (2^dim floats).
@@ -184,17 +184,17 @@ public:
     /// @brief Pre-set architecture config before restoring weights via SetState.
     /// Required when loading a saved model without training — SetState's
     /// rebuild_from_blob() needs config_ to reconstruct the CNN.
-    void SetConfig(const CNNReadoutConfig& cfg);
+    void SetConfig(const HCNNReadoutConfig& cfg);
 
     /// @brief Check if the readout has been trained.
     [[nodiscard]] bool IsTrained() const { return trained_; }
 
     /// @brief Get the config used for training (valid after Train).
-    [[nodiscard]] const CNNReadoutConfig& GetConfig() const { return config_; }
+    [[nodiscard]] const HCNNReadoutConfig& GetConfig() const { return config_; }
 
 private:
     std::unique_ptr<hcnn::HCNN> net_;
-    CNNReadoutConfig config_;
+    HCNNReadoutConfig config_;
     bool trained_ = false;
     size_t dim_ = 0;
     size_t num_features_ = 0;  // N = 2^dim (raw state size, for interface compat)

@@ -102,7 +102,7 @@ int main(int argc, char* argv[])
     // bs=1<<(DIM-1)) with smooth-signal epochs: ep=100 stays because
     // BasicPrediction is a sine wave (not chaotic), and the baseline's
     // ep=2000 is calibrated for chaotic signals (NARMA).
-    CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
+    HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
     cnn_cfg.epochs      = 1100;
     cnn_cfg.lr_min_frac = 0.1f;
     cnn_cfg.seed        = 42007;

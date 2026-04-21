@@ -110,7 +110,7 @@ void bind_esn(py::module_& m, const char* name)
             size_t n = static_cast<size_t>(buf.size);
             const float* ptr = static_cast<const float*>(buf.ptr);
 
-            CNNReadoutConfig cfg;
+            HCNNReadoutConfig cfg;
             cfg.num_outputs    = num_outputs;
             cfg.task           = (std::strcmp(task, "classification") == 0)
                                      ? HCNNTask::Classification
@@ -152,7 +152,7 @@ void bind_esn(py::module_& m, const char* name)
             "Train HCNN readout on collected states.\n\n"
             "task: 'regression' or 'classification'.\n"
             "num_layers: Conv+Pool pairs (0 = auto from DIM).\n"
-            "See CNNReadoutConfig for parameter details.")
+            "See HCNNReadoutConfig for parameter details.")
 
         // ── Online (streaming) HCNN training ──
         .def("init_online", [](E& self,
@@ -169,7 +169,7 @@ void bind_esn(py::module_& m, const char* name)
             if (total % K != 0)
                 throw std::invalid_argument("warmup_inputs size must be divisible by num_inputs");
 
-            CNNReadoutConfig cfg;
+            HCNNReadoutConfig cfg;
             cfg.num_outputs   = num_outputs;
             cfg.task          = (std::strcmp(task, "classification") == 0)
                                     ? HCNNTask::Classification
@@ -406,7 +406,7 @@ void bind_esn(py::module_& m, const char* name)
                                   int num_layers, int conv_channels) {
             if (self.GetReadoutType() != ReadoutType::HCNN)
                 throw std::invalid_argument("set_cnn_config() requires ReadoutType.HCNN");
-            CNNReadoutConfig cfg;
+            HCNNReadoutConfig cfg;
             cfg.num_outputs   = num_outputs;
             cfg.task          = (std::strcmp(task, "classification") == 0)
                                     ? HCNNTask::Classification

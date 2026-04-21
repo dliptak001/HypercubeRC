@@ -16,7 +16,7 @@ apples-to-apples comparison:
   need to re-prime the model frequently.
 - **HCNN** — learned CNN on raw state (all vertices). Trained once in
   Phase 1 and frozen for Phase 2. HCNN does **not** support incremental
-  updates — `CNNReadout` is batch only — so the example uses it in
+  updates — `HCNNReadout` is batch only — so the example uses it in
   frozen-readout mode.
 
 This is the most practical example in the collection: it demonstrates
@@ -228,7 +228,7 @@ washout time.
 
 ## A note on streaming and HCNN
 
-`CNNReadout` supports online training for streaming applications.
+`HCNNReadout` supports online training for streaming applications.
 For workloads that need to track drift, HCNN online training can
 adapt the model incrementally — see `docs/Readout.md` for details.
 

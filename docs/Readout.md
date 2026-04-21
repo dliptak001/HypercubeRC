@@ -8,7 +8,7 @@ Reservoir (N states) ──> Output Selection (M states) ──> Readout
     fixed random              stride-selected              TRAINED
 
 HCNN path:
-Reservoir (N states) ────────────────────────────────────────> CNNReadout
+Reservoir (N states) ────────────────────────────────────────> HCNNReadout
     fixed random                                                TRAINED
 ```
 
@@ -32,7 +32,7 @@ HypercubeRC provides two readout classes:
 | Class             | Features consumed | Training                  | Best for                         |
 |-------------------|-------------------|---------------------------|----------------------------------|
 | `RidgeRegression` | Raw state (M)     | Closed-form normal equations | Batch regression, all DIM     |
-| `CNNReadout`      | Raw state (N)     | Mini-batch backprop (Adam)| Hard tasks, classification, streaming, larger DIM |
+| `HCNNReadout`      | Raw state (N)     | Mini-batch backprop (Adam)| Hard tasks, classification, streaming, larger DIM |
 
 Both expose the same prediction interface (`PredictRaw`, `R2`,
 `Accuracy`, `Weights`, `Bias`) so ESN can dispatch uniformly, and both
@@ -66,7 +66,7 @@ computation fills the upper triangle, mirrored afterward.
 global optimum is fast, accurate, and requires no epoch tuning.
 This is the default for the main benchmarks (MG, NARMA-10).
 
-### CNNReadout — learned convolutional readout
+### HCNNReadout — learned convolutional readout
 
 **Algorithm:** HypercubeCNN — a stack of hypercube Conv+MaxPool layers
 followed by global average pooling and a dense head, trained with Adam
@@ -91,7 +91,7 @@ state; the translation layer is bypassed entirely.
 5. After training, weights are flattened via `HCNN::GetWeights()` for
    serialization and restored via `SetWeights()` on reload.
 
-**Key parameters (`CNNReadoutConfig`):**
+**Key parameters (`HCNNReadoutConfig`):**
 
 | Parameter       | Default                   | Role |
 |-----------------|---------------------------|------|
@@ -131,7 +131,7 @@ use `epochs=300, batch_size=128, lr_max=0.003`.
 **When not to use:**
 - Small-DIM tasks (5-6) where Ridge is cheaper and at least as good.
 
-See `readout/CNNReadout.md` for the full architecture table and
+See `readout/HCNNReadout.md` for the full architecture table and
 integration-status breakdown, and `examples/BasicPrediction.cpp` /
 `examples/SignalClassification.cpp` for working side-by-side code.
 
@@ -162,7 +162,7 @@ The benchmark suite runs both Ridge and HCNN on NARMA-10 by default
 for apples-to-apples comparison. Edit `main.cpp` to switch to
 `BenchmarkMode::HCNNOnly` for HCNN-only runs at higher DIMs.
 
-For classification tasks, CNNReadout is the natural fit — a single
+For classification tasks, HCNNReadout is the natural fit — a single
 multi-class readout replaces N one-vs-rest Ridge heads and tends to
 produce cleaner lock-on at block transitions. See
 `examples/SignalClassification.cpp`.
@@ -170,7 +170,7 @@ produce cleaner lock-on at block transitions. See
 ## Streaming mode (HCNN online training)
 
 For applications where data arrives continuously (e.g., process
-monitoring, anomaly detection), CNNReadout supports online training
+monitoring, anomaly detection), HCNNReadout supports online training
 for incremental adaptation. RidgeRegression does not support streaming
 — its O(N³) solve cost makes incremental updates impractical.
 
@@ -242,7 +242,7 @@ exist on every alternative):
 ESN wraps the two readouts in a `std::variant` and dispatches via
 `std::visit`; call sites see a uniform `ESN::Train / PredictRaw / R2`
 interface regardless of which readout is selected. HCNN has a
-dedicated `Train(targets, n, CNNReadoutConfig)` overload since it
+dedicated `Train(targets, n, HCNNReadoutConfig)` overload since it
 needs its own hyperparameters.
 
 ## Implementation notes
@@ -250,7 +250,7 @@ needs its own hyperparameters.
 - Both classes live in `readout/` with separate .h/.cpp files.
 - RidgeRegression uses `double` internally for numerical stability in
   the Gram matrix solve.
-- CNNReadout holds a `std::unique_ptr<hcnn::HCNN>` via PIMPL so that
+- HCNNReadout holds a `std::unique_ptr<hcnn::HCNN>` via PIMPL so that
   `#include "HCNN.h"` stays in the .cpp only.
 - Neither class is templated — they accept arbitrary feature counts at
   runtime.

@@ -1,8 +1,8 @@
-# CNNReadout — HypercubeCNN as ESN Readout Layer
+# HCNNReadout — HypercubeCNN as ESN Readout Layer
 
 ## Overview
 
-CNNReadout integrates HypercubeCNN (HCNN) as a learned readout for the
+HCNNReadout integrates HypercubeCNN (HCNN) as a learned readout for the
 HypercubeRC reservoir computing pipeline.  Instead of linear regression on
 hand-crafted features, the CNN's convolution kernels discover which vertex
 interactions predict the target directly from raw reservoir state.
@@ -16,7 +16,7 @@ HCNN (Conv->Pool stack -> GAP -> Linear) -> de-center -> output.
 |------------------|----------|----------------------------------|
 | HypercubeCNN     | 3-32     | `HCNNNetwork.cpp:24`             |
 | HypercubeRC ESN  | 5-16     | `ESN.cpp` template instantiations |
-| CNNReadout       | **5-16** | Intersection; matches ESN range  |
+| HCNNReadout       | **5-16** | Intersection; matches ESN range  |
 
 ## Architecture Auto-sizing
 
@@ -50,13 +50,13 @@ Manual override: set `config.num_layers` to a specific count (asserted <= DIM - 
 | Regression       | num_samples x num_outputs (row-major)  | de-centered floats | R2, NRMSE |
 | Classification   | num_samples floats (class indices)     | logits (argmax)    | Accuracy |
 
-Configured via `CNNReadoutConfig::task` (`HCNNTask::Regression` / `Classification`)
-and `CNNReadoutConfig::num_outputs`.
+Configured via `HCNNReadoutConfig::task` (`HCNNTask::Regression` / `Classification`)
+and `HCNNReadoutConfig::num_outputs`.
 
-## CNNReadoutConfig
+## HCNNReadoutConfig
 
 ```cpp
-struct CNNReadoutConfig {
+struct HCNNReadoutConfig {
     int num_outputs   = 1;        // classes or regression targets
     HCNNTask task     = HCNNTask::Regression;
     int num_layers    = 0;        // 0 = auto: min(DIM-3, 4)
@@ -84,8 +84,8 @@ retraining needed.
 ## ESN Integration Points
 
 - \`ReadoutType::HCNN\` selects this readout
-- `ESN::Train(targets, train_size)` routes to `CNNReadout::Train` with default config
-- `ESN::Train(targets, train_size, CNNReadoutConfig)` for custom config
+- `ESN::Train(targets, train_size)` routes to `HCNNReadout::Train` with default config
+- `ESN::Train(targets, train_size, HCNNReadoutConfig)` for custom config
 - `ESN::PredictRaw(timestep)` scalar (num_outputs must be 1)
 - `ESN::PredictRaw(timestep, float* output)` multi-output
 - `ESN::NumOutputs()` returns 1 for Linear/Ridge, config-based for HCNN

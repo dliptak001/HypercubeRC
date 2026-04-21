@@ -13,8 +13,8 @@ namespace hrccnn_lm_text {
 
 static_assert(std::is_trivially_copyable_v<ReservoirConfig>,
               "ReservoirConfig must stay trivially copyable for POD serialization");
-static_assert(std::is_trivially_copyable_v<CNNReadoutConfig>,
-              "CNNReadoutConfig must stay trivially copyable for POD serialization");
+static_assert(std::is_trivially_copyable_v<HCNNReadoutConfig>,
+              "HCNNReadoutConfig must stay trivially copyable for POD serialization");
 
 namespace {
 

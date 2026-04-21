@@ -7,7 +7,7 @@
 #include <vector>
 #include "Reservoir.h"
 #include "RidgeRegression.h"
-#include "CNNReadout.h"
+#include "HCNNReadout.h"
 
 enum class ReadoutType { Ridge, HCNN };
 
@@ -25,7 +25,7 @@ enum class ReadoutType { Ridge, HCNN };
 ///
 /// **Training.** Train() uses sensible defaults for both readout types.
 /// Power users can call the Ridge overload with a custom lambda, or the
-/// HCNN overload with a CNNReadoutConfig.
+/// HCNN overload with a HCNNReadoutConfig.
 ///
 /// **State access.** States(), SelectedStates(), and Features() remain
 /// available for direct access (diagnostics, analysis, custom readouts).
@@ -102,19 +102,19 @@ public:
 
     /// @brief Train CNN readout on raw reservoir states (bypasses feature pipeline).
     void Train(const float* targets, size_t train_size,
-               const CNNReadoutConfig& config);
+               const HCNNReadoutConfig& config);
 
     /// @brief Train CNN readout with runtime hooks (mid-training eval callback).
-    /// See CNNTrainHooks in CNNReadout.h for semantics.
+    /// See CNNTrainHooks in HCNNReadout.h for semantics.
     void Train(const float* targets, size_t train_size,
-               const CNNReadoutConfig& config,
+               const HCNNReadoutConfig& config,
                CNNTrainHooks& hooks);
 
     /// @brief Initialize CNN readout for online (streaming) training.
     /// Collects warmup_count states via Run(), computes standardization,
     /// builds the CNN architecture.  Call before TrainLiveStep.
     void InitOnline(const float* warmup_inputs, size_t warmup_count,
-                    const CNNReadoutConfig& config);
+                    const HCNNReadoutConfig& config);
 
     /// @brief Single-step online training on the live reservoir state.
     /// Subsamples the current reservoir output and applies one gradient step.
@@ -235,12 +235,12 @@ public:
 
     /// @brief Pre-set CNN architecture config before restoring weights.
     /// Call before SetReadoutState when loading a saved HCNN model.
-    void SetCNNConfig(const CNNReadoutConfig& cfg);
+    void SetCNNConfig(const HCNNReadoutConfig& cfg);
 
 private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
     ReadoutType readout_type_;
-    std::variant<RidgeRegression, CNNReadout> readout_;
+    std::variant<RidgeRegression, HCNNReadout> readout_;
 
     size_t num_inputs_ = 1;
     float output_fraction_ = 1.0f;

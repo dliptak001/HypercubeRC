@@ -1,4 +1,4 @@
-#include "CNNReadout.h"
+#include "HCNNReadout.h"
 #include "HCNN.h"
 
 #include <algorithm>
@@ -9,16 +9,16 @@
 #include <numeric>
 
 
-CNNReadout::CNNReadout() = default;
-CNNReadout::~CNNReadout() = default;
-CNNReadout::CNNReadout(CNNReadout&&) noexcept = default;
-CNNReadout& CNNReadout::operator=(CNNReadout&&) noexcept = default;
+HCNNReadout::HCNNReadout() = default;
+HCNNReadout::~HCNNReadout() = default;
+HCNNReadout::HCNNReadout(HCNNReadout&&) noexcept = default;
+HCNNReadout& HCNNReadout::operator=(HCNNReadout&&) noexcept = default;
 
 // ---------------------------------------------------------------------------
 //  Input standardization
 // ---------------------------------------------------------------------------
 
-void CNNReadout::compute_standardization(const float* states,
+void HCNNReadout::compute_standardization(const float* states,
                                          size_t num_samples, size_t n)
 {
     input_mean_.resize(n);
@@ -50,7 +50,7 @@ void CNNReadout::compute_standardization(const float* states,
     }
 }
 
-void CNNReadout::standardize(const float* in, float* out, size_t n) const
+void HCNNReadout::standardize(const float* in, float* out, size_t n) const
 {
     for (size_t v = 0; v < n; ++v)
         out[v] = (in[v] - input_mean_[v]) * input_scale_[v];
@@ -60,7 +60,7 @@ void CNNReadout::standardize(const float* in, float* out, size_t n) const
 //  Architecture
 // ---------------------------------------------------------------------------
 
-void CNNReadout::build_architecture()
+void HCNNReadout::build_architecture()
 {
     assert(dim_ >= 5);
     const size_t n = 1ULL << dim_;
@@ -98,17 +98,17 @@ void CNNReadout::build_architecture()
 //  Training
 // ---------------------------------------------------------------------------
 
-void CNNReadout::Train(const float* states, const float* targets,
+void HCNNReadout::Train(const float* states, const float* targets,
                        size_t num_samples, size_t dim,
-                       const CNNReadoutConfig& config)
+                       const HCNNReadoutConfig& config)
 {
     CNNTrainHooks no_hooks;
     Train(states, targets, num_samples, dim, config, no_hooks);
 }
 
-void CNNReadout::Train(const float* states, const float* targets,
+void HCNNReadout::Train(const float* states, const float* targets,
                        size_t num_samples, size_t dim,
-                       const CNNReadoutConfig& config,
+                       const HCNNReadoutConfig& config,
                        CNNTrainHooks& hooks)
 {
     config_ = config;
@@ -255,8 +255,8 @@ void CNNReadout::Train(const float* states, const float* targets,
 //  Online (streaming) training
 // ---------------------------------------------------------------------------
 
-void CNNReadout::InitOnline(const float* warmup_states, size_t warmup_count,
-                            size_t dim, const CNNReadoutConfig& config)
+void HCNNReadout::InitOnline(const float* warmup_states, size_t warmup_count,
+                            size_t dim, const HCNNReadoutConfig& config)
 {
     config_ = config;
     dim_ = dim;
@@ -272,7 +272,7 @@ void CNNReadout::InitOnline(const float* warmup_states, size_t warmup_count,
     trained_ = true;
 }
 
-void CNNReadout::TrainOnlineStep(const float* state, int target_class,
+void HCNNReadout::TrainOnlineStep(const float* state, int target_class,
                                  float lr, float weight_decay)
 {
     assert(trained_ && net_);
@@ -283,7 +283,7 @@ void CNNReadout::TrainOnlineStep(const float* state, int target_class,
                     lr, /*momentum=*/0.0f, weight_decay);
 }
 
-void CNNReadout::TrainOnlineBatch(const float* states, const int* targets,
+void HCNNReadout::TrainOnlineBatch(const float* states, const int* targets,
                                   size_t count, float lr, float weight_decay)
 {
     assert(trained_ && net_);
@@ -301,7 +301,7 @@ void CNNReadout::TrainOnlineBatch(const float* states, const int* targets,
                      lr, /*momentum=*/0.0f, weight_decay);
 }
 
-void CNNReadout::TrainOnlineStepRegression(const float* state, const float* target,
+void HCNNReadout::TrainOnlineStepRegression(const float* state, const float* target,
                                            float lr, float weight_decay)
 {
     assert(trained_ && net_);
@@ -323,7 +323,7 @@ void CNNReadout::TrainOnlineStepRegression(const float* state, const float* targ
                               lr, /*momentum=*/0.0f, weight_decay);
 }
 
-void CNNReadout::TrainOnlineBatchRegression(const float* states, const float* targets,
+void HCNNReadout::TrainOnlineBatchRegression(const float* states, const float* targets,
                                             size_t count, float lr, float weight_decay)
 {
     assert(trained_ && net_);
@@ -352,7 +352,7 @@ void CNNReadout::TrainOnlineBatchRegression(const float* states, const float* ta
                                lr, /*momentum=*/0.0f, weight_decay);
 }
 
-void CNNReadout::ComputeTargetCentering(const float* targets, size_t num_samples)
+void HCNNReadout::ComputeTargetCentering(const float* targets, size_t num_samples)
 {
     const size_t K = num_outputs_;
     target_mean_.assign(K, 0.0);
@@ -367,7 +367,7 @@ void CNNReadout::ComputeTargetCentering(const float* targets, size_t num_samples
 //  Prediction
 // ---------------------------------------------------------------------------
 
-void CNNReadout::PredictRaw(const float* state, float* output) const
+void HCNNReadout::PredictRaw(const float* state, float* output) const
 {
     assert(trained_ && net_);
     const size_t n = num_features_;
@@ -385,7 +385,7 @@ void CNNReadout::PredictRaw(const float* state, float* output) const
     }
 }
 
-float CNNReadout::PredictRaw(const float* state) const
+float HCNNReadout::PredictRaw(const float* state) const
 {
     assert(num_outputs_ == 1);
     float out;
@@ -393,7 +393,7 @@ float CNNReadout::PredictRaw(const float* state) const
     return out;
 }
 
-int CNNReadout::PredictClass(const float* state) const
+int HCNNReadout::PredictClass(const float* state) const
 {
     assert(trained_ && net_);
     const size_t n = num_features_;
@@ -413,7 +413,7 @@ int CNNReadout::PredictClass(const float* state) const
 //  Evaluation
 // ---------------------------------------------------------------------------
 
-double CNNReadout::R2(const float* states, const float* targets,
+double HCNNReadout::R2(const float* states, const float* targets,
                       size_t num_samples) const
 {
     if (num_samples == 0) return 0.0;
@@ -445,7 +445,7 @@ double CNNReadout::R2(const float* states, const float* targets,
     return r2_sum / static_cast<double>(K);
 }
 
-double CNNReadout::Accuracy(const float* states, const float* labels,
+double HCNNReadout::Accuracy(const float* states, const float* labels,
                             size_t num_samples) const
 {
     if (num_samples == 0) return 0.0;
@@ -473,7 +473,7 @@ double CNNReadout::Accuracy(const float* states, const float* labels,
 //  Serialization
 // ---------------------------------------------------------------------------
 
-const std::vector<double>& CNNReadout::Weights() const
+const std::vector<double>& HCNNReadout::Weights() const
 {
     if (weights_blob_.empty() && net_) {
         auto fw = net_->GetWeights();
@@ -482,14 +482,14 @@ const std::vector<double>& CNNReadout::Weights() const
     return weights_blob_;
 }
 
-void CNNReadout::flatten_weights()
+void HCNNReadout::flatten_weights()
 {
     if (!net_) { weights_blob_.clear(); return; }
     auto fw = net_->GetWeights();
     weights_blob_.assign(fw.begin(), fw.end());
 }
 
-void CNNReadout::rebuild_from_blob()
+void HCNNReadout::rebuild_from_blob()
 {
     if (weights_blob_.empty() || dim_ == 0) return;
 
@@ -502,7 +502,7 @@ void CNNReadout::rebuild_from_blob()
     net_->SetWeights(fw);
 }
 
-void CNNReadout::SetState(std::vector<double> weights, double bias,
+void HCNNReadout::SetState(std::vector<double> weights, double bias,
                           std::vector<float> feature_mean,
                           std::vector<float> feature_scale,
                           std::vector<double> target_mean)
@@ -534,7 +534,7 @@ void CNNReadout::SetState(std::vector<double> weights, double bias,
     }
 }
 
-void CNNReadout::SetConfig(const CNNReadoutConfig& cfg)
+void HCNNReadout::SetConfig(const HCNNReadoutConfig& cfg)
 {
     config_ = cfg;
     num_outputs_ = static_cast<size_t>(cfg.num_outputs);

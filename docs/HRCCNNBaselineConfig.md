@@ -10,10 +10,10 @@ start from a meaningful anchor instead of a blind guess.
 ## The config
 
 ```cpp
-CNNReadoutConfig cfg;
+HCNNReadoutConfig cfg;
 cfg.num_layers    = 1;          // nl=1, single conv+pool pair
 cfg.conv_channels = 8;          // ch=8, lean
-cfg.readout_type  = HCNNReadoutType::FLATTEN;
+cfg.readout_type  = HHCNNReadoutType::FLATTEN;
 cfg.epochs        = 2000;
 cfg.batch_size    = 1 << (DIM - 1);     // doubles per DIM, unified DIM 5-16
 cfg.lr_max        = 0.0015f;

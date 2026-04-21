@@ -1,6 +1,6 @@
 # HCNN Readout Tuning — Per-DIM Best Configs
 
-Living record of the best CNNReadoutConfig found for each hypercube dimension
+Living record of the best HCNNReadoutConfig found for each hypercube dimension
 on the two chaotic-regression benchmarks. Populated iteratively via
 `diagnostics/OptimizeHRCCNNForMG.h` (Mackey-Glass) and its NARMA-10 counterpart.
 
@@ -47,14 +47,14 @@ target from the standard 10th-order recurrence.
 
 ## Column legend
 
-- **layers**: Conv+Pool pairs (0 in `CNNReadoutConfig` means auto =
+- **layers**: Conv+Pool pairs (0 in `HCNNReadoutConfig` means auto =
   `max(1, min(DIM-3, 4))` — this column records the *resolved* count)
 - **ch**: base `conv_channels`; each successive layer doubles
 - **head**: readout head after the conv stack. `GAP` = global average pool per
   channel → `[c_final]` → Linear (translation-invariant across vertices).
   `FLAT` = every `(channel, vertex)` cell is a feature → `[c_final × 2^final_dim]`
   → Linear (position-sensitive, one weight per vertex × channel). Plumbed via
-  `CNNReadoutConfig::readout_type`.
+  `HCNNReadoutConfig::readout_type`.
 - **ep**: epochs
 - **bs**: batch_size
 - **lr_max**: peak learning rate (cosine annealing floor =
@@ -98,16 +98,16 @@ Under averaging, **ch=32-ep=1500 at 0.00678 is the real current best**, still +1
 
 **Run 13 (num_layers=3 probe):** Auto-rule `min(DIM-3,4)` caps DIM=5 at nl=2; the assert enforcing it is compiled out under `-DNDEBUG`, so nl=3 actually runs. Result: **`nl3-ch32-ep2000 = 0.00490`, new best** (-21% vs Ridge raw, +12% vs Ridge translated). `nl3-ch16-ep2000 = 0.00683` and `nl3-ch16-ep3000 = 0.00541` showed narrow-deep needs more training but ultimately doesn't match wide-deep. Depth+width are coupled: more layers require more channels to fill the hierarchy with useful features.
 
-**Run 14 (DIM 5 finalization):** `nl3-ch32-ep3000 = 0.00609` (regression, confirms ep=2000 is the real plateau at nl=3-ch=32, not a still-dropping curve). `nl3-ch64-ep2000 = 0.01010` (heavy overfit — 4× the nl=3-ch=32 params on 403 samples). `nl4-ch32-ep2000` **crashed** with `HCNNConv requires 3 <= DIM <= 32`: at DIM=5 the 4th conv would operate on 2 vertices (DIM=2), below HCNNConv's minimum. **Real max depth at DIM=D is `nl ≤ D - 2`, not `D - 3` as the assert in CNNReadout::build_architecture claims.** The assert is off-by-one and should be relaxed to match HCNNConv's actual constraint.
+**Run 14 (DIM 5 finalization):** `nl3-ch32-ep3000 = 0.00609` (regression, confirms ep=2000 is the real plateau at nl=3-ch=32, not a still-dropping curve). `nl3-ch64-ep2000 = 0.01010` (heavy overfit — 4× the nl=3-ch=32 params on 403 samples). `nl4-ch32-ep2000` **crashed** with `HCNNConv requires 3 <= DIM <= 32`: at DIM=5 the 4th conv would operate on 2 vertices (DIM=2), below HCNNConv's minimum. **Real max depth at DIM=D is `nl ≤ D - 2`, not `D - 3` as the assert in HCNNReadout::build_architecture claims.** The assert is off-by-one and should be relaxed to match HCNNConv's actual constraint.
 
 **DIM 5 FROZEN at nl=3, ch=32, ep=2000, bs=16, lr=0.003 → NRMSE 0.00490.** Next: wire this into `readout/HCNNPresets.h` as the first entry, then start DIM 6. Key lesson for DIM 6+: always push the depth knob past the auto-rule (up to `nl = DIM - 2`) — depth is a real lever and the auto-rule is too conservative.
 
-**Run 15 (first-principles GAP vs FLATTEN sweep, 2026-04-13):** Up to this point `CNNReadout::build_architecture()` hardcoded `hcnn::ReadoutType::GAP`. Two reasons to question that default on a hypercube reservoir:
+**Run 15 (first-principles GAP vs FLATTEN sweep, 2026-04-13):** Up to this point `HCNNReadout::build_architecture()` hardcoded `hcnn::ReadoutType::GAP`. Two reasons to question that default on a hypercube reservoir:
 
 1. *Vertex identity carries signal.* The hypercube is topologically vertex-transitive, but the reservoir's random `W_in` assigns each vertex its own contribution from the driving signal — two vertices sit in identical graph positions but respond differently to the input stream. Ridge raw exploits this trivially (one weight per vertex). GAP averages across vertices and discards that information; FLATTEN keeps it (one weight per `(channel, vertex)` cell). On a hypercube RC, GAP's translation-invariance prior is structurally wrong.
 2. *Fan-in rank bound on channels.* At layer 1, each output channel is `TANH(W · neighbors + b)` where `W ∈ R^K`, `K = DIM`, no self-term (HCNNConv.h:65). The rank ceiling of any `R^K → R^C` linear map is `min(K, C)`, so at DIM=5 a layer-1 map is at most rank 5. The frozen winner's ch=32 is 6.4× over-complete; some of that is TANH piecewise nonlinearity + training-lottery benefit, but ch should roughly track `1-2*DIM`, not a fixed 32.
 
-Plumbed `HCNNReadoutType { GAP, FLATTEN }` through `CNNReadoutConfig::readout_type` → `CNNReadout::build_architecture()` → `hcnn::ReadoutType`, then ran a 2×2 on the two hypotheses under the frozen training budget (ep=2000, bs=16, lr=0.003, num_cnn_seeds=3):
+Plumbed `HHCNNReadoutType { GAP, FLATTEN }` through `HCNNReadoutConfig::readout_type` → `HCNNReadout::build_architecture()` → `hcnn::ReadoutType`, then ran a 2×2 on the two hypotheses under the frozen training budget (ep=2000, bs=16, lr=0.003, num_cnn_seeds=3):
 
 | Trial          | nl | ch | head | NRMSE    | vs Ridge raw | vs Ridge trans | time  |
 |----------------|---:|---:|:----:|---------:|-------------:|---------------:|------:|
@@ -336,4 +336,4 @@ _(pending first run)_
 
 - `diagnostics/OptimizeHRCCNNForMG.h` — the interactive optimizer
 - `diagnostics/NARMA10.h` — NARMA-10 benchmark
-- `readout/CNNReadout.md` — HCNN readout design and hyperparameter reference
+- `readout/HCNNReadout.md` — HCNN readout design and hyperparameter reference

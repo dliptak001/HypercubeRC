@@ -205,7 +205,7 @@ void test_hcnn_prediction()
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
 
-    CNNReadoutConfig cnn_cfg;
+    HCNNReadoutConfig cnn_cfg;
     cnn_cfg.epochs = 50;
     cnn_cfg.batch_size = 32;
     esn.Train(signal.data() + 201, 1400, cnn_cfg);
@@ -234,7 +234,7 @@ void test_hcnn_classification()
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
 
-    CNNReadoutConfig cnn_cfg;
+    HCNNReadoutConfig cnn_cfg;
     cnn_cfg.num_outputs = 2;
     cnn_cfg.task = HCNNTask::Classification;
     cnn_cfg.epochs = 50;
@@ -269,7 +269,7 @@ void test_hcnn_multi_output()
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, run_steps);
 
-    CNNReadoutConfig cnn_cfg;
+    HCNNReadoutConfig cnn_cfg;
     cnn_cfg.num_outputs = static_cast<int>(K);
     cnn_cfg.epochs = 50;
     cnn_cfg.batch_size = 32;

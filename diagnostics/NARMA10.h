@@ -39,13 +39,13 @@ public:
     NARMA10(BenchmarkMode mode = BenchmarkMode::RidgeOnly,
             const ReservoirConfig* config = nullptr,
             float output_fraction = 1.0f,
-            const CNNReadoutConfig& hcnn_config = BenchmarkCNNConfig())
+            const HCNNReadoutConfig& hcnn_config = BenchmarkCNNConfig())
         : mode_(mode), config_(config), output_fraction_(output_fraction),
           hcnn_config_(hcnn_config)
     {
     }
 
-    static CNNReadoutConfig BenchmarkCNNConfig()
+    static HCNNReadoutConfig BenchmarkCNNConfig()
     {
         return hcnn_presets::HRCCNNBaseline<DIM>();
     }
@@ -133,7 +133,7 @@ private:
     BenchmarkMode mode_;
     const ReservoirConfig* config_;
     float output_fraction_;
-    CNNReadoutConfig hcnn_config_;
+    HCNNReadoutConfig hcnn_config_;
 
     static std::vector<uint64_t> Seeds()
     {
