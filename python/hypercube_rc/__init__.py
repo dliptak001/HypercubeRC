@@ -20,13 +20,12 @@ import pathlib
 import pickle
 import numpy as np
 
-from ._core import ReadoutType
 from ._core import (
     _ESN5, _ESN6, _ESN7, _ESN8, _ESN9, _ESN10, _ESN11, _ESN12,
 )
 
 __version__ = "0.2.0"
-__all__ = ["ESN", "ReadoutType"]
+__all__ = ["ESN"]
 
 _ESN_CLASSES = {
     5: _ESN5, 6: _ESN6, 7: _ESN7, 8: _ESN8,
@@ -67,9 +66,8 @@ class ESN:
         Number of input channels. Default: 1.
     output_fraction : float
         Fraction of N vertices used as readout features, in (0.0, 1.0]. Default: 1.0.
-        Reduce for large dim to control Ridge readout cost.
-    readout_type : ReadoutType
-        ReadoutType.Ridge (default) or ReadoutType.HCNN.
+        Reduce for large dim to control readout cost via sub-hypercube selection.
+
     Examples
     --------
     Simple (single-input next-step prediction):
@@ -104,7 +102,6 @@ class ESN:
         alpha: float = 1.0,
         num_inputs: int = 1,
         output_fraction: float = 1.0,
-        readout_type: ReadoutType = ReadoutType.Ridge,
     ):
         if dim not in _ESN_CLASSES:
             raise ValueError(f"dim must be 5-12, got {dim}")
@@ -117,7 +114,6 @@ class ESN:
             alpha=alpha,
             num_inputs=num_inputs,
             output_fraction=output_fraction,
-            readout_type=readout_type,
         )
         self._targets: np.ndarray | None = None
         self._train_size: int | None = None
@@ -286,26 +282,16 @@ class ESN:
     def train(
         self,
         targets: np.ndarray,
-        *,
-        reg: float | None = None,
     ) -> None:
-        """Train the readout on collected states.
-
-        With no optional arguments, uses default parameters for the selected
-        readout type.
+        """Train the HCNN readout on collected states with default parameters.
 
         Parameters
         ----------
         targets : ndarray
             Target values, shape ``(train_size,)``. For regression: continuous
-            values. For classification: {-1.0, +1.0}.
-        reg : float, optional
-            Ridge regularization strength (Ridge readout only). Typical: 0.01-100.
+            values. For classification: class indices as floats (0.0, 1.0, ...).
         """
-        self._impl.train(
-            _to_float32(targets),
-            reg=reg,
-        )
+        self._impl.train(_to_float32(targets))
 
     def predict_raw(self, timestep: int) -> float:
         """Return the raw continuous prediction for a collected timestep.
@@ -482,11 +468,6 @@ class ESN:
         return self._impl.num_collected
 
     @property
-    def num_features(self) -> int:
-        """Number of features per timestep."""
-        return self._impl.num_features
-
-    @property
     def num_inputs(self) -> int:
         """Number of input channels."""
         return self._impl.num_inputs
@@ -497,19 +478,9 @@ class ESN:
         return self._impl.output_fraction
 
     @property
-    def output_stride(self) -> int:
-        """Stride used for vertex selection."""
-        return self._impl.output_stride
-
-    @property
     def num_output_verts(self) -> int:
         """Number of selected output vertices."""
         return self._impl.num_output_verts
-
-    @property
-    def readout_type(self) -> ReadoutType:
-        """Readout type (Ridge or HCNN)."""
-        return self._impl.readout_type
 
     @property
     def alpha(self) -> float:
@@ -551,7 +522,6 @@ class ESN:
     def __repr__(self) -> str:
         parts = [
             f"ESN(dim={self.dim}, N={self.N}",
-            f"readout={self.readout_type.name}",
             f"collected={self.num_collected}",
         ]
         if self._train_size is not None:
@@ -578,7 +548,6 @@ class ESN:
             "alpha": self.alpha,
             "num_inputs": self.num_inputs,
             "output_fraction": self.output_fraction,
-            "readout_type": self.readout_type,
             "readout_state": self._impl._get_readout_state(),
         }
 
@@ -600,7 +569,6 @@ class ESN:
             alpha=state["alpha"],
             num_inputs=state["num_inputs"],
             output_fraction=state["output_fraction"],
-            readout_type=state["readout_type"],
         )
         self._impl._set_readout_state(state["readout_state"])
 

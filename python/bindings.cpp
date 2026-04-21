@@ -16,8 +16,7 @@ void bind_esn(py::module_& m, const char* name)
         // ── Construction ──
         .def(py::init([](uint64_t seed, float spectral_radius, float input_scaling,
                          float leak_rate, float alpha, size_t num_inputs,
-                         float output_fraction,
-                         ReadoutType readout_type) {
+                         float output_fraction) {
             ReservoirConfig cfg;
             cfg.seed             = seed;
             cfg.spectral_radius  = spectral_radius;
@@ -26,7 +25,7 @@ void bind_esn(py::module_& m, const char* name)
             cfg.alpha            = alpha;
             cfg.num_inputs       = num_inputs;
             cfg.output_fraction  = output_fraction;
-            return std::make_unique<E>(cfg, readout_type);
+            return std::make_unique<E>(cfg);
         }),
             py::arg("seed")             = 0ULL,
             py::arg("spectral_radius")  = 0.9f,
@@ -34,8 +33,7 @@ void bind_esn(py::module_& m, const char* name)
             py::arg("leak_rate")        = 1.0f,
             py::arg("alpha")            = 1.0f,
             py::arg("num_inputs")       = 1ULL,
-            py::arg("output_fraction")  = 1.0f,
-            py::arg("readout_type")     = ReadoutType::Ridge)
+            py::arg("output_fraction")  = 1.0f)
 
         // ── Reservoir driving ──
         .def("warmup", [](E& self, py::array_t<float, py::array::c_style | py::array::forcecast> inputs) {
@@ -61,16 +59,12 @@ void bind_esn(py::module_& m, const char* name)
         .def("clear_states", &E::ClearStates,
              "Clear collected states and cached features. Keeps trained readout.")
 
-        .def("reset", &E::Reset,
-             "Zero reservoir state and clear collected states/features.")
-
         .def("reset_reservoir_only", &E::ResetReservoirOnly,
-             "Zero only the reservoir state; collected states/features preserved.")
+             "Zero only the reservoir state; collected states preserved.")
 
         // ── Batch training ──
         .def("train", [](E& self,
-                         py::array_t<float, py::array::c_style | py::array::forcecast> targets,
-                         py::object reg) {
+                         py::array_t<float, py::array::c_style | py::array::forcecast> targets) {
             auto buf = targets.request();
             size_t n = static_cast<size_t>(buf.size);
             const float* ptr = static_cast<const float*>(buf.ptr);
@@ -80,21 +74,11 @@ void bind_esn(py::module_& m, const char* name)
                     "train_size (" + std::to_string(n) +
                     ") exceeds num_collected (" + std::to_string(self.NumCollected()) + ")");
 
-            if (!reg.is_none()) {
-                if (self.GetReadoutType() != ReadoutType::Ridge)
-                    throw std::invalid_argument(
-                        "reg parameter requires ReadoutType.Ridge");
-                self.Train(ptr, n, reg.cast<double>());
-            } else {
-                self.Train(ptr, n);
-            }
+            self.Train(ptr, n);
         },
             py::arg("targets"),
-            py::arg("reg") = py::none(),
-            "Train the readout on collected states.\n\n"
-            "Default: uses default parameters for the selected readout type.\n"
-            "Ridge: pass reg for custom regularization.\n"
-            "HCNN: use train_cnn() instead for full control over CNN config.")
+            "Train the HCNN readout on collected states with default parameters.\n"
+            "Use train_cnn() for full control over CNN config.")
 
         .def("train_cnn", [](E& self,
                              py::array_t<float, py::array::c_style | py::array::forcecast> targets,
@@ -104,8 +88,6 @@ void bind_esn(py::module_& m, const char* name)
                              float lr_max, float lr_min_frac,
                              int lr_decay_epochs, float weight_decay,
                              unsigned seed_val, bool verbose) {
-            if (self.GetReadoutType() != ReadoutType::HCNN)
-                throw std::invalid_argument("train_cnn() requires ReadoutType.HCNN");
             auto buf = targets.request();
             size_t n = static_cast<size_t>(buf.size);
             const float* ptr = static_cast<const float*>(buf.ptr);
@@ -161,8 +143,6 @@ void bind_esn(py::module_& m, const char* name)
                                int num_layers, int conv_channels,
                                int batch_size, float lr_max,
                                unsigned seed_val) {
-            if (self.GetReadoutType() != ReadoutType::HCNN)
-                throw std::invalid_argument("init_online() requires ReadoutType.HCNN");
             auto buf = warmup_inputs.request();
             size_t total = static_cast<size_t>(buf.size);
             size_t K = self.NumInputs();
@@ -196,8 +176,6 @@ void bind_esn(py::module_& m, const char* name)
 
         .def("compute_target_centering", [](E& self,
                                             py::array_t<float, py::array::c_style | py::array::forcecast> targets) {
-            if (self.GetReadoutType() != ReadoutType::HCNN)
-                throw std::invalid_argument("compute_target_centering() requires ReadoutType.HCNN");
             auto buf = targets.request();
             size_t total = static_cast<size_t>(buf.size);
             size_t K = self.NumOutputs();
@@ -210,8 +188,6 @@ void bind_esn(py::module_& m, const char* name)
            "centers targets and predictions are de-centered (matching batch behavior).")
 
         .def("train_live_step", [](E& self, float target_class, float lr, float weight_decay) {
-            if (self.GetReadoutType() != ReadoutType::HCNN)
-                throw std::invalid_argument("train_live_step() requires ReadoutType.HCNN");
             self.TrainLiveStep(target_class, lr, weight_decay);
         },
             py::arg("target_class"), py::arg("lr"), py::arg("weight_decay") = 0.0f,
@@ -221,8 +197,6 @@ void bind_esn(py::module_& m, const char* name)
                                     py::array_t<float, py::array::c_style | py::array::forcecast> states,
                                     py::array_t<int, py::array::c_style | py::array::forcecast> targets,
                                     float lr, float weight_decay) {
-            if (self.GetReadoutType() != ReadoutType::HCNN)
-                throw std::invalid_argument("train_live_batch() requires ReadoutType.HCNN");
             auto sbuf = states.request();
             auto tbuf = targets.request();
             size_t count = static_cast<size_t>(tbuf.size);
@@ -239,8 +213,6 @@ void bind_esn(py::module_& m, const char* name)
         .def("train_live_step_regression", [](E& self,
                                               py::array_t<float, py::array::c_style | py::array::forcecast> target,
                                               float lr, float weight_decay) {
-            if (self.GetReadoutType() != ReadoutType::HCNN)
-                throw std::invalid_argument("train_live_step_regression() requires ReadoutType.HCNN");
             auto buf = target.request();
             self.TrainLiveStepRegression(static_cast<const float*>(buf.ptr), lr, weight_decay);
         },
@@ -252,8 +224,6 @@ void bind_esn(py::module_& m, const char* name)
                                                py::array_t<float, py::array::c_style | py::array::forcecast> states,
                                                py::array_t<float, py::array::c_style | py::array::forcecast> targets,
                                                float lr, float weight_decay) {
-            if (self.GetReadoutType() != ReadoutType::HCNN)
-                throw std::invalid_argument("train_live_batch_regression() requires ReadoutType.HCNN");
             auto sbuf = states.request();
             auto tbuf = targets.request();
             size_t K = self.NumOutputs();
@@ -269,8 +239,6 @@ void bind_esn(py::module_& m, const char* name)
             "targets: (count, num_outputs) float array.")
 
         .def("copy_live_state", [](const E& self) {
-            if (self.GetReadoutType() != ReadoutType::HCNN)
-                throw std::invalid_argument("copy_live_state() requires ReadoutType.HCNN");
             size_t M = self.NumOutputVerts();
             py::array_t<float> arr(M);
             self.CopyLiveState(arr.mutable_data());
@@ -333,7 +301,7 @@ void bind_esn(py::module_& m, const char* name)
         }, py::arg("labels"), py::arg("start"), py::arg("count"),
            "Compute classification accuracy on a slice of collected states.")
 
-        // ── State & feature access ──
+        // ── State access ──
         .def("selected_states", [](const E& self) {
             auto vec = self.SelectedStates();
             size_t M = self.NumOutputVerts();
@@ -354,13 +322,9 @@ void bind_esn(py::module_& m, const char* name)
 
         // ── Properties ──
         .def_property_readonly("num_collected", &E::NumCollected)
-        .def_property_readonly("num_features", &E::NumFeatures)
         .def_property_readonly("num_outputs", &E::NumOutputs)
         .def_property_readonly("output_fraction", &E::OutputFraction)
-        .def_property_readonly("output_stride", &E::OutputStride)
         .def_property_readonly("num_output_verts", &E::NumOutputVerts)
-        .def_property_readonly("readout_type", &E::GetReadoutType)
-        .def_property_readonly("alpha", &E::GetAlpha)
         .def_property_readonly("dim", [](const E&) { return DIM; })
         .def_property_readonly("N", [](const E&) { return NN; })
         .def_property_readonly("num_inputs", &E::NumInputs)
@@ -368,8 +332,9 @@ void bind_esn(py::module_& m, const char* name)
         .def_property_readonly("spectral_radius", [](const E& self) { return self.GetConfig().spectral_radius; })
         .def_property_readonly("leak_rate", [](const E& self) { return self.GetConfig().leak_rate; })
         .def_property_readonly("input_scaling", [](const E& self) { return self.GetConfig().input_scaling; })
+        .def_property_readonly("alpha", [](const E& self) { return self.GetConfig().alpha; })
 
-        // ── Persistence (private, used by Python __getstate__/__setstate__) ──
+        // ── Persistence ──
         .def("_get_readout_state", [](const E& self) -> py::dict {
             auto s = self.GetReadoutState();
             py::dict d;
@@ -404,8 +369,6 @@ void bind_esn(py::module_& m, const char* name)
         .def("set_cnn_config", [](E& self,
                                   int num_outputs, const char* task,
                                   int num_layers, int conv_channels) {
-            if (self.GetReadoutType() != ReadoutType::HCNN)
-                throw std::invalid_argument("set_cnn_config() requires ReadoutType.HCNN");
             HCNNReadoutConfig cfg;
             cfg.num_outputs   = num_outputs;
             cfg.task          = (std::strcmp(task, "classification") == 0)
@@ -427,12 +390,6 @@ void bind_esn(py::module_& m, const char* name)
 PYBIND11_MODULE(_core, m)
 {
     m.doc() = "HypercubeRC: reservoir computing on Boolean hypercube graphs";
-
-    py::enum_<ReadoutType>(m, "ReadoutType")
-        .value("Ridge", ReadoutType::Ridge,
-               "Closed-form Ridge regression. Deterministic, fast, optimal.")
-        .value("HCNN", ReadoutType::HCNN,
-               "HypercubeCNN-based learned readout. Operates on raw reservoir state.");
 
     bind_esn<5>(m,  "_ESN5");
     bind_esn<6>(m,  "_ESN6");

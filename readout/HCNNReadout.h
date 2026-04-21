@@ -52,11 +52,10 @@ struct CNNTrainHooks {
 
 /// @brief HypercubeCNN-based readout for reservoir computing.
 ///
-/// Alternative to RidgeRegression: a learned convolutional
-/// readout that operates directly on raw reservoir state (N = 2^DIM floats
-/// per timestep).  The CNN's learned convolution kernels discover which
-/// vertex interactions predict the target -- no hand-crafted feature
-/// extraction, no translation layer, no stride selection.
+/// HypercubeCNN-based learned convolutional readout that operates directly on
+/// raw reservoir state (N = 2^DIM floats per timestep).  The CNN's learned
+/// convolution kernels discover which vertex interactions predict the target —
+/// no hand-crafted feature extraction, no stride selection.
 ///
 /// **Data path:** raw reservoir state -> input standardization ->
 ///   HypercubeCNN (Conv->Pool stack -> FLATTEN -> Linear) -> de-center -> output.
@@ -64,12 +63,6 @@ struct CNNTrainHooks {
 /// **Architecture:** Auto-sized from DIM: min(DIM-3, 4) Conv+Pool pairs,
 ///   channels doubling per layer (16, 32, 64, 128).  Override via
 ///   HCNNReadoutConfig::num_layers.
-///
-/// **Interface compatibility:** Provides the same method signatures as
-/// RidgeRegression so that ESN's std::visit lambdas compile
-/// for prediction, evaluation, and serialization.  Training is handled via
-/// a dedicated ESN code path (not through the generic Train visitor) because
-/// CNN training requires multi-epoch iteration with its own hyperparameters.
 ///
 /// **PIMPL:** The hcnn::HCNN object is held via unique_ptr behind a forward
 /// declaration.  #include "HCNN.h" stays in the .cpp only.
@@ -162,7 +155,7 @@ public:
     /// @brief Number of output neurons.
     [[nodiscard]] size_t NumOutputs() const { return num_outputs_; }
 
-    // --- State accessors (interface compatibility with Linear/Ridge) ---
+    // --- State accessors ---
 
     [[nodiscard]] size_t NumFeatures() const { return num_features_; }
     [[nodiscard]] double Bias() const { return target_mean_.empty() ? 0.0 : target_mean_[0]; }

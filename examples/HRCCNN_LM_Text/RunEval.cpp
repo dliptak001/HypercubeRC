@@ -63,7 +63,7 @@ int RunEval()
               << " eval=" << args.eval_chars << "\n";
 
     // --- Construct ESN + restore weights. ---
-    ESN<kDIM> esn(mf.reservoir_cfg, ReadoutType::HCNN);
+    ESN<kDIM> esn(mf.reservoir_cfg);
     esn.SetCNNConfig(mf.cnn_cfg);
     esn.SetReadoutState(FromSerial<kDIM>(mf.readout));
 

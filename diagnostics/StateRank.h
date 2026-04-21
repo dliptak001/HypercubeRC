@@ -58,13 +58,13 @@ public:
             cfg.seed = seed;
             if (output_fraction_ != 1.0f)
                 cfg.output_fraction = output_fraction_;
-            ESN<DIM> esn(cfg, ReadoutType::Ridge);
+            ESN<DIM> esn(cfg);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
-            esn.EnsureFeatures();
 
-            size_t M = esn.NumFeatures();
-            const float* states = esn.Features();
+            size_t M = esn.NumOutputVerts();
+            auto selected = esn.SelectedStates();
+            const float* states = selected.data();
 
             // Mean-center
             std::vector<double> mean(M, 0.0);

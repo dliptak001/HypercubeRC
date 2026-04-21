@@ -3,32 +3,12 @@
 #include <cstddef>
 #include <cstring>
 #include <memory>
-#include <variant>
 #include <vector>
 #include "Reservoir.h"
-#include "RidgeRegression.h"
 #include "HCNNReadout.h"
 
-enum class ReadoutType { Ridge, HCNN };
-
 /// @brief Echo-state network implementing the full pipeline:
-///        Reservoir -> [Output Selection] -> Readout.
-///
-/// ESN owns all stages of the pipeline. Construct with a ReservoirConfig
-/// and a ReadoutType, then drive, train, and predict:
-///
-///     ESN<6> esn(cfg, ReadoutType::Ridge);
-///     esn.Warmup(inputs, 200);
-///     esn.Run(inputs + 200, total);
-///     esn.Train(targets, train_size);
-///     double r2 = esn.R2(targets, train_size, test_size);
-///
-/// **Training.** Train() uses sensible defaults for both readout types.
-/// Power users can call the Ridge overload with a custom lambda, or the
-/// HCNN overload with a HCNNReadoutConfig.
-///
-/// **State access.** States(), SelectedStates(), and Features() remain
-/// available for direct access (diagnostics, analysis, custom readouts).
+///        Reservoir -> [Output Selection] -> HCNNReadout.
 ///
 /// @tparam DIM Hypercube dimension (5-16). Vertex count is 2^DIM.
 template <size_t DIM>
@@ -37,235 +17,116 @@ class ESN
     static constexpr size_t N = 1ULL << DIM;
 
 public:
-    explicit ESN(const ReservoirConfig& cfg,
-                 ReadoutType readout_type = ReadoutType::Ridge);
+    explicit ESN(const ReservoirConfig& cfg);
 
     // ---------------------------------------------------------------
     //  Reservoir driving
     // ---------------------------------------------------------------
 
-    /// @brief Drive the reservoir without recording.
-    /// @param inputs  Pointer to num_steps * num_inputs floats, row-major
-    ///                (num_inputs values per timestep).  When num_inputs == 1,
-    ///                this is simply num_steps scalars — fully backwards compatible.
     void Warmup(const float* inputs, size_t num_steps);
-
-    /// @brief Drive the reservoir and collect state snapshots.
-    /// @param inputs  Pointer to num_steps * num_inputs floats, row-major.
     void Run(const float* inputs, size_t num_steps);
 
-    /// @brief State management — three reset scopes.
-    ///
-    /// | Method               | Reservoir | Cache |
-    /// |----------------------|-----------|-------|
-    /// | `ClearStates()`      |   keep    | clear |
-    /// | `ResetReservoirOnly()`|  clear   | keep  |
-    /// | `Reset()`            |   clear   | clear |
-    ///
-    /// "Reservoir" here means the live reservoir state (`vtx_state_` /
-    /// `vtx_output_`); recurrent and input weights are always preserved.
-    /// "Cache" means `states_` + `features_` (the training buffer).
-    ///
-    /// Pick the one that matches the episode boundary:
-    ///   - `ClearStates()`: drop training samples, keep dynamics going
-    ///     (e.g. sliding-window retraining on continuous data).
-    ///   - `ResetReservoirOnly()`: episodic reservoir, cumulative buffer
-    ///     (e.g. per-expression reset + priming).
-    ///   - `Reset()`: completely fresh start (e.g. new validation run).
-
-    /// @brief Clear collected states and cached features; reservoir state untouched.
     void ClearStates();
-
-    /// @brief Zero reservoir state AND clear collected states/features.
-    /// Equivalent to `ResetReservoirOnly() + ClearStates()`.
-    void Reset();
-
-    /// @brief Zero only the reservoir state; cache (states_, features_) preserved.
     void ResetReservoirOnly();
 
-    /// @brief Snapshot the live reservoir state (2 * N floats).
-    /// state_out and output_out must each hold N floats.
     void SaveReservoirState(float* state_out, float* output_out) const;
-
-    /// @brief Restore a previously saved reservoir state.
     void RestoreReservoirState(const float* state_in, const float* output_in);
 
     // ---------------------------------------------------------------
     //  Training
     // ---------------------------------------------------------------
 
-    /// @brief Train on the first train_size collected states with default parameters.
     void Train(const float* targets, size_t train_size);
 
-    /// @brief Train Ridge readout with custom lambda.
-    void Train(const float* targets, size_t train_size, double lambda);
-
-    /// @brief Train CNN readout on raw reservoir states (bypasses feature pipeline).
     void Train(const float* targets, size_t train_size,
                const HCNNReadoutConfig& config);
 
-    /// @brief Train CNN readout with runtime hooks (mid-training eval callback).
-    /// See CNNTrainHooks in HCNNReadout.h for semantics.
     void Train(const float* targets, size_t train_size,
                const HCNNReadoutConfig& config,
                CNNTrainHooks& hooks);
 
-    /// @brief Initialize CNN readout for online (streaming) training.
-    /// Collects warmup_count states via Run(), computes standardization,
-    /// builds the CNN architecture.  Call before TrainLiveStep.
     void InitOnline(const float* warmup_inputs, size_t warmup_count,
                     const HCNNReadoutConfig& config);
 
-    /// @brief Single-step online training on the live reservoir state.
-    /// Subsamples the current reservoir output and applies one gradient step.
-    /// HCNN readout only.
     void TrainLiveStep(float target_class, float lr, float weight_decay = 0.0f);
 
-    /// @brief Copy the current subsampled reservoir state for external accumulation.
-    /// Writes num_output_verts_ floats to `out`.  HCNN readout only.
     void CopyLiveState(float* out) const;
 
-    /// @brief Mini-batch gradient step on externally accumulated states.
-    /// states: count rows of num_output_verts_ floats (from CopyLiveState).
-    /// targets: count int class indices.  HCNN readout only.
     void TrainLiveBatch(const float* states, const int* targets,
                         size_t count, float lr, float weight_decay = 0.0f);
 
-    /// @brief Single-step online regression training on the live reservoir state.
-    /// target: num_outputs floats.  HCNN readout only.
     void TrainLiveStepRegression(const float* target, float lr,
                                  float weight_decay = 0.0f);
 
-    /// @brief Mini-batch regression gradient step on externally accumulated states.
-    /// states: count rows of num_output_verts_ floats (from CopyLiveState).
-    /// targets: count * num_outputs contiguous floats (row-major).  HCNN readout only.
     void TrainLiveBatchRegression(const float* states, const float* targets,
                                   size_t count, float lr, float weight_decay = 0.0f);
 
-    /// @brief Compute per-output target centering for online regression.
-    /// Call after InitOnline so that online training centers targets and
-    /// PredictRaw/PredictLiveRaw de-centers predictions (matching batch).
-    /// targets: num_samples * NumOutputs() floats (row-major).  HCNN only.
     void ComputeTargetCentering(const float* targets, size_t num_samples);
 
     // ---------------------------------------------------------------
     //  Prediction & evaluation
     // ---------------------------------------------------------------
 
-    /// @brief Predict from collected state at a given timestep index (scalar).
     [[nodiscard]] float PredictRaw(size_t timestep) const;
-
-    /// @brief Multi-output predict: writes NumOutputs() floats to output.
-    /// For HCNN readout with num_outputs > 1; for Ridge writes 1 float.
     void PredictRaw(size_t timestep, float* output) const;
 
-    /// @brief Predict from the reservoir's CURRENT output, bypassing the
-    /// cached states_ buffer. Intended for autoregressive / streaming
-    /// inference loops that step the reservoir and immediately predict
-    /// without snapshotting state. Scalar overload (num_outputs must be 1).
     [[nodiscard]] float PredictLiveRaw() const;
-
-    /// @brief Multi-output live predict: writes NumOutputs() floats to output.
-    /// See scalar overload for semantics.
     void PredictLiveRaw(float* output) const;
 
-    /// @brief R² on a slice of collected states [start, start+count).
-    /// targets layout: count * NumOutputs() floats (row-major) for HCNN,
-    /// count floats for Ridge.  Indexed from `start`.
     [[nodiscard]] double R2(const float* targets, size_t start, size_t count) const;
-
-    /// @brief NRMSE on a slice of collected states [start, start+count).
-    /// targets layout: count * NumOutputs() floats (row-major) for HCNN,
-    /// count floats for Ridge.  Indexed from `start`.
     [[nodiscard]] double NRMSE(const float* targets, size_t start, size_t count) const;
-
-    /// @brief Classification accuracy on a slice of collected states.
-    /// labels layout: count floats (class indices for HCNN, ±1 for Ridge).
-    /// Indexed from `start`.
     [[nodiscard]] double Accuracy(const float* labels, size_t start, size_t count) const;
 
-    /// @brief Number of output neurons (1 for Ridge, config-based for HCNN).
     [[nodiscard]] size_t NumOutputs() const;
 
     // ---------------------------------------------------------------
-    //  State & feature access
+    //  State access
     // ---------------------------------------------------------------
 
     /// @brief Extract stride-selected vertices from collected states.
     [[nodiscard]] std::vector<float> SelectedStates() const;
 
-    /// @brief Build and cache features from collected states (incremental).
-    /// Only computes features for states added since the last call.
-    void EnsureFeatures() const;
-
-    /// @brief Size of the per-timestep feature vector: M = num_output_verts_.
-    [[nodiscard]] size_t NumFeatures() const;
-
-    // --- Accessors ---
+    // ---------------------------------------------------------------
+    //  Accessors
+    // ---------------------------------------------------------------
     [[nodiscard]] size_t NumCollected() const { return num_collected_; }
-    [[nodiscard]] const float* States() const { return states_.data(); }
-    [[nodiscard]] const float* Features() const { return features_.data(); }
     [[nodiscard]] float OutputFraction() const { return output_fraction_; }
-    [[nodiscard]] size_t OutputStride() const { return output_stride_; }
     [[nodiscard]] size_t NumOutputVerts() const { return num_output_verts_; }
-    [[nodiscard]] ReadoutType GetReadoutType() const { return readout_type_; }
-    [[nodiscard]] float GetAlpha() const { return reservoir_->GetAlpha(); }
     [[nodiscard]] size_t NumInputs() const { return num_inputs_; }
 
     // --- Config & persistence ---
 
-    /// @brief Reconstruct the full ReservoirConfig used to create this ESN.
     [[nodiscard]] ReservoirConfig GetConfig() const;
 
-    /// @brief Trained readout state — everything needed to serialize/restore predictions.
     struct ReadoutState {
-        std::vector<double> weights;      ///< Weight vector (double for both readout types).
-        double bias = 0.0;                ///< Bias term (scalar fallback for target centering).
-        std::vector<float> feature_mean;  ///< Per-feature mean from training standardization.
-        std::vector<float> feature_scale; ///< Per-feature 1/std from training standardization.
-        std::vector<double> target_mean;  ///< Per-output target centering (HCNN regression).
-        bool is_trained = false;          ///< True if the readout has been trained.
+        std::vector<double> weights;
+        double bias = 0.0;
+        std::vector<float> feature_mean;
+        std::vector<float> feature_scale;
+        std::vector<double> target_mean;
+        bool is_trained = false;
     };
 
-    /// @brief Extract the trained readout state for serialization.
     [[nodiscard]] ReadoutState GetReadoutState() const;
-
-    /// @brief Restore a previously trained readout state (from deserialization).
     void SetReadoutState(const ReadoutState& state);
-
-    /// @brief Pre-set CNN architecture config before restoring weights.
-    /// Call before SetReadoutState when loading a saved HCNN model.
     void SetCNNConfig(const HCNNReadoutConfig& cfg);
 
 private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
-    ReadoutType readout_type_;
-    std::variant<RidgeRegression, HCNNReadout> readout_;
+    HCNNReadout readout_;
 
     size_t num_inputs_ = 1;
     float output_fraction_ = 1.0f;
     size_t output_stride_ = 1;
     size_t num_output_verts_ = N;
 
-    std::vector<float> states_;      // flat: num_collected_ * N floats
+    std::vector<float> states_;
     size_t num_collected_ = 0;
 
-    mutable std::vector<float> features_;    // flat: num_collected_ * NumFeatures() floats
-    mutable size_t features_computed_ = 0;   // incremental: features valid for [0, features_computed_)
-
-    // Sub-hypercube subsampling helpers. Reservoir state is N = 2^DIM floats;
-    // consumers (HCNN's CNN and Raw-mode Ridge live inference) see
-    // num_output_verts_ = 2^EffectiveDIM() floats by taking every
-    // output_stride_'th vertex. output_stride_ is validated power-of-2 at
-    // construction when readout_type_ == HCNN.
     [[nodiscard]] size_t EffectiveDIM() const;
-    const float* SubsampleIntoScratch(const float* src) const; // fills scratch_subsampled_
-    const float* HCNNState(size_t timestep) const;             // delegates to SubsampleIntoScratch
+    const float* SubsampleIntoScratch(const float* src) const;
+    const float* HCNNState(size_t timestep) const;
     [[nodiscard]] std::vector<float> HCNNStates(size_t start, size_t count) const;
 
-    // Per-prediction scratch for one-at-a-time subsampling.
-    // NOT thread-safe: concurrent const calls (e.g. parallel PredictRaw over
-    // timesteps) would race on this buffer. Use per-thread ESN instances
-    // when parallelizing prediction.
     mutable std::vector<float> scratch_subsampled_;
 };

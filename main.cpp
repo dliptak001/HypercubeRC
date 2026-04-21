@@ -5,6 +5,6 @@
 
 int main()
 {
-    BenchmarkSuite::RunAll(BenchmarkMode::Both);
+    BenchmarkSuite::RunAll();
     return 0;
 }

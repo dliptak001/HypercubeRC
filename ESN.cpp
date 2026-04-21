@@ -5,12 +5,10 @@
 #include <cstring>
 #include <limits>
 #include <stdexcept>
-#include <type_traits>
 
 template <size_t DIM>
-ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type)
-    : reservoir_(Reservoir<DIM>::Create(cfg)),
-      readout_type_(readout_type)
+ESN<DIM>::ESN(const ReservoirConfig& cfg)
+    : reservoir_(Reservoir<DIM>::Create(cfg))
 {
     num_inputs_      = cfg.num_inputs;
     output_fraction_ = cfg.output_fraction;
@@ -21,23 +19,13 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type)
     num_output_verts_ = (N + output_stride_ - 1) / output_stride_;
     scratch_subsampled_.resize(num_output_verts_);
 
-    // HCNN subsamples reservoir state onto a sub-hypercube via stride selection.
-    // HypercubeCNN's convolution uses XOR-neighbor masks (hypercube topology),
-    // so the stride MUST be a power of 2 — arbitrary strides produce a subset
-    // with no coherent hypercube structure.
-    if (readout_type_ == ReadoutType::HCNN &&
-        (output_stride_ & (output_stride_ - 1)) != 0)
+    if ((output_stride_ & (output_stride_ - 1)) != 0)
     {
         throw std::invalid_argument(
-            "ESN<HCNN>: output_fraction must yield a power-of-2 stride "
+            "ESN: output_fraction must yield a power-of-2 stride "
             "(1, 2, 4, 8, 16, ...). Use output_fraction in "
             "{1.0, 0.5, 0.25, 0.125, 0.0625, ...}.");
     }
-
-    if (readout_type_ == ReadoutType::HCNN)
-        readout_ = HCNNReadout{};
-    else
-        readout_ = RidgeRegression{};
 }
 
 template <size_t DIM>
@@ -75,16 +63,6 @@ void ESN<DIM>::ClearStates()
     states_.clear();
     states_.shrink_to_fit();
     num_collected_ = 0;
-    features_.clear();
-    features_.shrink_to_fit();
-    features_computed_ = 0;
-}
-
-template <size_t DIM>
-void ESN<DIM>::Reset()
-{
-    reservoir_->Reset();
-    ClearStates();
 }
 
 template <size_t DIM>
@@ -108,38 +86,16 @@ void ESN<DIM>::RestoreReservoirState(const float* state_in, const float* output_
 template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size)
 {
-    if (readout_type_ == ReadoutType::HCNN) {
-        // CNN readout uses raw state directly -- no feature pipeline.
-        // Subsample to the sub-hypercube (stride-selected vertices) before
-        // handing off; CNN sees an effective-DIM hypercube of width num_output_verts_.
-        auto sub = HCNNStates(0, train_size);
-        std::get<HCNNReadout>(readout_).Train(
-            sub.data(), targets, train_size, EffectiveDIM());
-        return;
-    }
-    EnsureFeatures();
-    size_t nf = NumFeatures();
-    std::get<RidgeRegression>(readout_).Train(
-        features_.data(), targets, train_size, nf);
-}
-
-template <size_t DIM>
-void ESN<DIM>::Train(const float* targets, size_t train_size, double lambda)
-{
-    assert(readout_type_ == ReadoutType::Ridge);
-    EnsureFeatures();
-    std::get<RidgeRegression>(readout_).Train(
-        features_.data(), targets, train_size, NumFeatures(), lambda);
+    auto sub = HCNNStates(0, train_size);
+    readout_.Train(sub.data(), targets, train_size, EffectiveDIM());
 }
 
 template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size,
                      const HCNNReadoutConfig& config)
 {
-    assert(readout_type_ == ReadoutType::HCNN);
     auto sub = HCNNStates(0, train_size);
-    std::get<HCNNReadout>(readout_).Train(
-        sub.data(), targets, train_size, EffectiveDIM(), config);
+    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), config);
 }
 
 template <size_t DIM>
@@ -147,37 +103,30 @@ void ESN<DIM>::Train(const float* targets, size_t train_size,
                      const HCNNReadoutConfig& config,
                      CNNTrainHooks& hooks)
 {
-    assert(readout_type_ == ReadoutType::HCNN);
     auto sub = HCNNStates(0, train_size);
-    std::get<HCNNReadout>(readout_).Train(
-        sub.data(), targets, train_size, EffectiveDIM(), config, hooks);
+    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), config, hooks);
 }
 
 template <size_t DIM>
 void ESN<DIM>::InitOnline(const float* warmup_inputs, size_t warmup_count,
                           const HCNNReadoutConfig& config)
 {
-    assert(readout_type_ == ReadoutType::HCNN);
     Run(warmup_inputs, warmup_count);
     auto sub = HCNNStates(0, warmup_count);
-    std::get<HCNNReadout>(readout_).InitOnline(
-        sub.data(), warmup_count, EffectiveDIM(), config);
+    readout_.InitOnline(sub.data(), warmup_count, EffectiveDIM(), config);
     ClearStates();
 }
 
 template <size_t DIM>
 void ESN<DIM>::TrainLiveStep(float target_class, float lr, float weight_decay)
 {
-    assert(readout_type_ == ReadoutType::HCNN);
     const float* sub = SubsampleIntoScratch(reservoir_->Outputs());
-    std::get<HCNNReadout>(readout_).TrainOnlineStep(
-        sub, static_cast<int>(target_class), lr, weight_decay);
+    readout_.TrainOnlineStep(sub, static_cast<int>(target_class), lr, weight_decay);
 }
 
 template <size_t DIM>
 void ESN<DIM>::CopyLiveState(float* out) const
 {
-    assert(readout_type_ == ReadoutType::HCNN);
     const float* src = reservoir_->Outputs();
     size_t j = 0;
     for (size_t v = 0; v < N; v += output_stride_)
@@ -188,101 +137,62 @@ template <size_t DIM>
 void ESN<DIM>::TrainLiveBatch(const float* states, const int* targets,
                               size_t count, float lr, float weight_decay)
 {
-    assert(readout_type_ == ReadoutType::HCNN);
-    std::get<HCNNReadout>(readout_).TrainOnlineBatch(
-        states, targets, count, lr, weight_decay);
+    readout_.TrainOnlineBatch(states, targets, count, lr, weight_decay);
 }
 
 template <size_t DIM>
 void ESN<DIM>::TrainLiveStepRegression(const float* target, float lr,
                                        float weight_decay)
 {
-    assert(readout_type_ == ReadoutType::HCNN);
     const float* sub = SubsampleIntoScratch(reservoir_->Outputs());
-    std::get<HCNNReadout>(readout_).TrainOnlineStepRegression(
-        sub, target, lr, weight_decay);
+    readout_.TrainOnlineStepRegression(sub, target, lr, weight_decay);
 }
 
 template <size_t DIM>
 void ESN<DIM>::TrainLiveBatchRegression(const float* states, const float* targets,
                                         size_t count, float lr, float weight_decay)
 {
-    assert(readout_type_ == ReadoutType::HCNN);
-    std::get<HCNNReadout>(readout_).TrainOnlineBatchRegression(
-        states, targets, count, lr, weight_decay);
+    readout_.TrainOnlineBatchRegression(states, targets, count, lr, weight_decay);
 }
 
 template <size_t DIM>
 void ESN<DIM>::ComputeTargetCentering(const float* targets, size_t num_samples)
 {
-    assert(readout_type_ == ReadoutType::HCNN);
-    std::get<HCNNReadout>(readout_).ComputeTargetCentering(targets, num_samples);
+    readout_.ComputeTargetCentering(targets, num_samples);
 }
 
 template <size_t DIM>
 float ESN<DIM>::PredictRaw(size_t timestep) const
 {
     assert(timestep < num_collected_);
-    if (readout_type_ == ReadoutType::HCNN) {
-        return std::get<HCNNReadout>(readout_).PredictRaw(HCNNState(timestep));
-    }
-    EnsureFeatures();
-    size_t nf = NumFeatures();
-    const float* f = features_.data() + timestep * nf;
-    return std::get<RidgeRegression>(readout_).PredictRaw(f);
+    return readout_.PredictRaw(HCNNState(timestep));
 }
 
 template <size_t DIM>
 void ESN<DIM>::PredictRaw(size_t timestep, float* output) const
 {
     assert(timestep < num_collected_);
-    if (readout_type_ == ReadoutType::HCNN) {
-        std::get<HCNNReadout>(readout_).PredictRaw(HCNNState(timestep), output);
-        return;
-    }
-    EnsureFeatures();
-    size_t nf = NumFeatures();
-    const float* f = features_.data() + timestep * nf;
-    output[0] = std::get<RidgeRegression>(readout_).PredictRaw(f);
+    readout_.PredictRaw(HCNNState(timestep), output);
 }
 
 template <size_t DIM>
 float ESN<DIM>::PredictLiveRaw() const
 {
-    const float* res_out = reservoir_->Outputs();
-
-    if (readout_type_ == ReadoutType::HCNN) {
-        return std::get<HCNNReadout>(readout_).PredictRaw(SubsampleIntoScratch(res_out));
-    }
-
-    return std::get<RidgeRegression>(readout_).PredictRaw(SubsampleIntoScratch(res_out));
+    return readout_.PredictRaw(SubsampleIntoScratch(reservoir_->Outputs()));
 }
 
 template <size_t DIM>
 void ESN<DIM>::PredictLiveRaw(float* output) const
 {
-    if (readout_type_ == ReadoutType::HCNN) {
-        std::get<HCNNReadout>(readout_).PredictRaw(
-            SubsampleIntoScratch(reservoir_->Outputs()), output);
-        return;
-    }
-    // Ridge: single scalar output — delegate to scalar overload.
-    output[0] = PredictLiveRaw();
+    readout_.PredictRaw(SubsampleIntoScratch(reservoir_->Outputs()), output);
 }
 
 template <size_t DIM>
 double ESN<DIM>::R2(const float* targets, size_t start, size_t count) const
 {
     assert(start + count <= num_collected_);
-    if (readout_type_ == ReadoutType::HCNN) {
-        const auto& cnn = std::get<HCNNReadout>(readout_);
-        auto sub = HCNNStates(start, count);
-        return cnn.R2(sub.data(), targets + start * cnn.NumOutputs(), count);
-    }
-    EnsureFeatures();
-    size_t nf = NumFeatures();
-    const float* f = features_.data() + start * nf;
-    return std::get<RidgeRegression>(readout_).R2(f, targets + start, count);
+    auto sub = HCNNStates(start, count);
+    return readout_.R2(sub.data(), targets + start * readout_.NumOutputs(), count);
 }
 
 template <size_t DIM>
@@ -291,115 +201,47 @@ double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
     assert(start + count <= num_collected_);
     if (count == 0) return 0.0;
 
-    if (readout_type_ == ReadoutType::HCNN) {
-        const auto& cnn = std::get<HCNNReadout>(readout_);
-        const size_t K = cnn.NumOutputs();
-        const float* tgt = targets + start * K;
+    const size_t K = readout_.NumOutputs();
+    const float* tgt = targets + start * K;
 
-        // Predict all samples once, cache results. Subsample per sample into
-        // the scratch buffer; cheap relative to the CNN forward pass.
-        std::vector<float> preds(count * K);
+    std::vector<float> preds(count * K);
+    for (size_t s = 0; s < count; ++s)
+        readout_.PredictRaw(HCNNState(start + s), preds.data() + s * K);
+
+    double nrmse_sum = 0.0;
+    for (size_t k = 0; k < K; ++k) {
+        double mean = 0.0;
         for (size_t s = 0; s < count; ++s)
-            cnn.PredictRaw(HCNNState(start + s), preds.data() + s * K);
+            mean += tgt[s * K + k];
+        mean /= static_cast<double>(count);
 
-        // Average NRMSE across outputs.
-        double nrmse_sum = 0.0;
-        for (size_t k = 0; k < K; ++k) {
-            double mean = 0.0;
-            for (size_t s = 0; s < count; ++s)
-                mean += tgt[s * K + k];
-            mean /= static_cast<double>(count);
-
-            double var = 0.0, mse_k = 0.0;
-            for (size_t s = 0; s < count; ++s) {
-                double y  = tgt[s * K + k];
-                double yh = preds[s * K + k];
-                var += (y - mean) * (y - mean);
-                mse_k += (y - yh) * (y - yh);
-            }
-            if (var < 1e-12)
-                nrmse_sum += std::numeric_limits<double>::infinity();
-            else
-                nrmse_sum += std::sqrt(mse_k / count) / std::sqrt(var / count);
+        double var = 0.0, mse_k = 0.0;
+        for (size_t s = 0; s < count; ++s) {
+            double y  = tgt[s * K + k];
+            double yh = preds[s * K + k];
+            var += (y - mean) * (y - mean);
+            mse_k += (y - yh) * (y - yh);
         }
-        return nrmse_sum / static_cast<double>(K);
+        if (var < 1e-12)
+            nrmse_sum += std::numeric_limits<double>::infinity();
+        else
+            nrmse_sum += std::sqrt(mse_k / count) / std::sqrt(var / count);
     }
-
-    const float* tgt = targets + start;
-    double mean = 0.0;
-    for (size_t s = 0; s < count; ++s) mean += tgt[s];
-    mean /= static_cast<double>(count);
-
-    double var = 0.0, mse = 0.0;
-    EnsureFeatures();
-    size_t nf = NumFeatures();
-    const float* f = features_.data() + start * nf;
-    const auto& ridge = std::get<RidgeRegression>(readout_);
-    for (size_t s = 0; s < count; ++s) {
-        double y  = tgt[s];
-        double yh = ridge.PredictRaw(f + s * nf);
-        var += (y - mean) * (y - mean);
-        mse += (y - yh) * (y - yh);
-    }
-    if (var < 1e-12) return std::numeric_limits<double>::infinity();
-    return std::sqrt(mse / count) / std::sqrt(var / count);
+    return nrmse_sum / static_cast<double>(K);
 }
 
 template <size_t DIM>
 double ESN<DIM>::Accuracy(const float* labels, size_t start, size_t count) const
 {
     assert(start + count <= num_collected_);
-    if (readout_type_ == ReadoutType::HCNN) {
-        auto sub = HCNNStates(start, count);
-        return std::get<HCNNReadout>(readout_).Accuracy(sub.data(), labels + start, count);
-    }
-    EnsureFeatures();
-    size_t nf = NumFeatures();
-    const float* f = features_.data() + start * nf;
-    return std::get<RidgeRegression>(readout_).Accuracy(f, labels + start, count);
+    auto sub = HCNNStates(start, count);
+    return readout_.Accuracy(sub.data(), labels + start, count);
 }
 
 template <size_t DIM>
 size_t ESN<DIM>::NumOutputs() const
 {
-    if (readout_type_ == ReadoutType::HCNN)
-        return std::get<HCNNReadout>(readout_).NumOutputs();
-    return 1;
-}
-
-template <size_t DIM>
-std::vector<float> ESN<DIM>::SelectedStates() const
-{
-    return HCNNStates(0, num_collected_);
-}
-
-template <size_t DIM>
-void ESN<DIM>::EnsureFeatures() const
-{
-    // HCNN bypasses the feature cache — it consumes subsampled states
-    // directly via HCNNStates(). Skip to avoid wasting memory on a
-    // duplicate copy of what HCNNStates() already produces on demand.
-    if (readout_type_ == ReadoutType::HCNN) return;
-    if (features_computed_ == num_collected_) return;
-    size_t nf = NumFeatures();
-    size_t old_count = features_computed_;
-    size_t new_count = num_collected_ - old_count;
-    features_.resize(num_collected_ * nf);
-    for (size_t s = 0; s < new_count; ++s)
-    {
-        const float* src = states_.data() + (old_count + s) * N;
-        float* dst = features_.data() + (old_count + s) * nf;
-        size_t j = 0;
-        for (size_t v = 0; v < N; v += output_stride_)
-            dst[j++] = src[v];
-    }
-    features_computed_ = num_collected_;
-}
-
-template <size_t DIM>
-size_t ESN<DIM>::NumFeatures() const
-{
-    return num_output_verts_;
+    return readout_.NumOutputs();
 }
 
 template <size_t DIM>
@@ -420,17 +262,13 @@ template <size_t DIM>
 typename ESN<DIM>::ReadoutState ESN<DIM>::GetReadoutState() const
 {
     ReadoutState s;
-    std::visit([&](const auto& r) {
-        s.is_trained = r.NumFeatures() > 0;
-        s.bias = static_cast<double>(r.Bias());
-        s.feature_mean = r.FeatureMean();
-        s.feature_scale = r.FeatureScale();
-        const auto& w = r.Weights();
-        s.weights.assign(w.begin(), w.end());
-        if constexpr (std::is_same_v<std::decay_t<decltype(r)>, HCNNReadout>) {
-            s.target_mean = r.TargetMean();
-        }
-    }, readout_);
+    s.is_trained = readout_.NumFeatures() > 0;
+    s.bias = static_cast<double>(readout_.Bias());
+    s.feature_mean = readout_.FeatureMean();
+    s.feature_scale = readout_.FeatureScale();
+    const auto& w = readout_.Weights();
+    s.weights.assign(w.begin(), w.end());
+    s.target_mean = readout_.TargetMean();
     return s;
 }
 
@@ -438,24 +276,15 @@ template <size_t DIM>
 void ESN<DIM>::SetReadoutState(const ReadoutState& state)
 {
     if (!state.is_trained) return;
-    std::visit([&](auto& r) {
-        using R = std::decay_t<decltype(r)>;
-        if constexpr (std::is_same_v<R, HCNNReadout>) {
-            r.SetState(state.weights, state.bias,
-                       state.feature_mean, state.feature_scale,
-                       state.target_mean);
-        } else {
-            r.SetState(state.weights, state.bias,
-                       state.feature_mean, state.feature_scale);
-        }
-    }, readout_);
+    readout_.SetState(state.weights, state.bias,
+                      state.feature_mean, state.feature_scale,
+                      state.target_mean);
 }
 
 template <size_t DIM>
 void ESN<DIM>::SetCNNConfig(const HCNNReadoutConfig& cfg)
 {
-    assert(readout_type_ == ReadoutType::HCNN);
-    std::get<HCNNReadout>(readout_).SetConfig(cfg);
+    readout_.SetConfig(cfg);
 }
 
 // ---------------------------------------------------------------
@@ -465,9 +294,6 @@ void ESN<DIM>::SetCNNConfig(const HCNNReadoutConfig& cfg)
 template <size_t DIM>
 size_t ESN<DIM>::EffectiveDIM() const
 {
-    // num_output_verts_ is always a power of 2 when readout_type_ == HCNN
-    // (constructor rejects non-power-of-2 strides). For other readouts the
-    // value is still meaningful but not necessarily used.
     size_t d = 0;
     for (size_t n = num_output_verts_; n > 1; n >>= 1)
         ++d;
