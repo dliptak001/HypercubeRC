@@ -46,8 +46,7 @@ access to the quadratic interactions that the NARMA-10 recurrence demands.
 5. Train the selected readout on 70%, test on 30%.
 6. Report NRMSE for raw and translation, plus % change.
 
-Uses a single per-DIM seed selected by 500-seed survey
-(see [docs/SeedSurvey.md](../docs/SeedSurvey.md)).
+Uses a single per-DIM seed selected by 500-seed survey.
 
 ## Sample results
 

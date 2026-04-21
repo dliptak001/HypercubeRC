@@ -122,9 +122,6 @@ reuse the winners at any configuration. Seed quality is an intrinsic
 property of the weight topology, not an artifact of a specific
 hyperparameter setting.
 
-See [docs/SeedSurvey.md](docs/SeedSurvey.md) for full
-Spearman matrices, distribution tables, and cross-benchmark analysis.
-
 ## Why a Hypercube?
 
 A controlled head-to-head experiment
@@ -251,8 +248,8 @@ and streaming mode.
 
 ## Headline Results
 
-All results: per-DIM optimal seed (selected by 500-seed survey, see
-[docs/SeedSurvey.md](docs/SeedSurvey.md)), Ridge readout, full translation layer
+All results: per-DIM optimal seed (selected by 500-seed survey),
+Ridge readout, full translation layer
 (2.5N features), general-purpose defaults (SR=0.90, input_scaling=0.02). MC uses
 Ridge readout with raw features (the standard metric).
 
@@ -341,12 +338,11 @@ The build produces six executables:
 
 | Target | Purpose |
 |--------|---------|
-| `HypercubeRC` | Full benchmark suite (MC, Mackey-Glass, NARMA-10, DIM 5-8; library supports 5-12) |
+| `HypercubeRC` | Full benchmark suite (NARMA-10, DIM 5-8; library supports 5-16) |
 | `BasicPrediction` | Minimal example: sine wave prediction |
 | `SignalClassification` | Multi-class waveform recognition with confusion matrix |
 | `StreamingAnomaly` | Streaming anomaly detection with recovery dynamics |
-| `StandaloneESNSweep` | Parameter sweep tool for SR and input_scaling |
-| `SeedSurvey` | Seed quality survey: per-seed benchmark with distribution stats |
+| `CnnSeedSurvey` | CNN-init seed survey across DIMs |
 
 Start with `BasicPrediction` to see the pipeline end-to-end. Each example has a
 companion `.md` file with a detailed walkthrough.
@@ -373,18 +369,13 @@ HypercubeRC/
     StreamingAnomaly.cpp/md     Streaming anomaly detection
 
   diagnostics/
-    BenchmarkSuite.h      Orchestrates MC + MG + NARMA across DIM
-    MackeyGlass.h/md      Chaotic time series prediction
+    BenchmarkSuite.h      Orchestrates NARMA-10 across DIM
     NARMA10.h/md          Nonlinear memory benchmark
-    MemoryCapacity.h      Total memory capacity (raw features)
-    MemoryCapacityProfile.h/md  Per-lag memory profile (translation features)
+    CnnSeedSurvey.cpp     CNN-init seed survey across DIMs
     SignalGenerators.h    Benchmark signal generators and NRMSE utility
     StateRank.h/md        Reservoir dimensionality and input correlation
-    SeedSurvey.h/cpp      Seed quality survey: per-seed benchmark statistics
-    StandaloneESNSweep.cpp  Grid sweep: SR x input_scaling
 
   docs/
-    SeedSurvey.md         Seed quality survey results and cross-benchmark analysis
     Reservoir.md          Reservoir architecture, connectivity, parameters
     TranslationLayer.md   Translation layer design and feature classes
     Readout.md            Readout algorithms, streaming mode, selection policy
@@ -402,7 +393,6 @@ HypercubeRC/
 | [docs/Readout.md](docs/Readout.md) | RidgeRegression algorithm, feature standardization, selection policy |
 | [docs/ScaleInvariance.md](docs/ScaleInvariance.md) | Why SR=0.90 and input_scaling=0.02 work at every DIM — sweep data and vertex-transitivity analysis |
 | [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) | Hypercube vs random ESN: equivalent performance, different architectural tradeoffs |
-| [docs/SeedSurvey.md](docs/SeedSurvey.md) | Seed quality survey: Spearman rank correlation across SR, IS, and benchmarks (DIM 5-8) |
 | [docs/Tuning.md](docs/Tuning.md) | Practical tuning guide: parameter-by-parameter advice, common scenarios, workflow |
 | [docs/Python_SDK.md](docs/Python_SDK.md) | Python SDK: pip install, fit/predict API, streaming, persistence |
 | [docs/CPP_SDK.md](docs/CPP_SDK.md) | C++ static library: build, install, find_package usage, API reference |

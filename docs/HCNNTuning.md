@@ -6,8 +6,8 @@ on the two chaotic-regression benchmarks. Populated iteratively via
 
 ## Baselines
 
-Numbers in the "Ridge raw" column come from `MackeyGlass<DIM>` /
-`NARMA10<DIM>` with `FeatureMode::Raw` and `output_fraction = 1.0` — the
+Numbers in the "Ridge raw" column come from `NARMA10<DIM>` (or the
+equivalent MG benchmark) with `FeatureMode::Raw` and `output_fraction = 1.0` — the
 apples-to-apples baseline for HCNN, which also operates on raw state.
 "Ridge translated" is `FeatureMode::Translated` (2.5N features) for
 context; HCNN's goal is to match or beat the raw baseline.
@@ -77,7 +77,7 @@ Kept separately from the summary table so the table stays scannable.
 
 **Run 4 (plateau probe + axis-pruning):** ep=500→ep=1000 dropped another 37% to **0.00895** (-62% vs Ridge), still no saturation. Pruned two axes: **lr=0.005 ≡ lr=0.003** (0.01424 vs 0.01431, convergence is epoch-bound); **ch=32** buys 8-16% NRMSE but costs 2× time vs ch=16. Best absolute result: ep=1000+ch=32 = **0.00826** (-65% vs Ridge, 24.3s). Best per-unit-time: ep=1000+ch=16 (12s). Next step: extend epochs (ep=1500, 2000, 3000) at ch=16 to find the actual plateau; probe weight_decay for regularization at high epochs.
 
-**RESET (discovered in run 5):** Runs 1-5 were all on seed=42, which is a sub-optimal DIM-5 reservoir realization. Switching to the per-DIM survey seed (`11822067163148543833`, from `MackeyGlass<DIM>::DefaultSeed()`) dropped Ridge raw from 0.0234 → 0.00616 (~3.8× better) and Ridge translated from 0.0206 → 0.00438. Baselines now match `MackeyGlass.md` exactly. All prior HCNN conclusions about relative performance are invalidated; restart the sweep on the correct reservoir.
+**RESET (discovered in run 5):** Runs 1-5 were all on seed=42, which is a sub-optimal DIM-5 reservoir realization. Switching to the per-DIM survey seed (`11822067163148543833`, from `hcnn_presets::MackeyGlass<DIM>()`) dropped Ridge raw from 0.0234 → 0.00616 (~3.8× better) and Ridge translated from 0.0206 → 0.00438. All prior HCNN conclusions about relative performance are invalidated; restart the sweep on the correct reservoir.
 
 **Run 6 + 7 (after seed fix, on survey reservoir, split into chunks after ThreadPool deadlock investigation):** mg-bench (ep=100, bs=128) = 0.0740 (+1100% vs Ridge raw) — bad as expected. At bs=16: ep=100 → 0.0247, ep=500 → 0.00956, ep=750 → 0.00994, **ep=1000 → 0.00760 (best so far)**, ep=1500 → 0.00839. Curve is non-monotonic past ep=1000 — small deltas at this scale are dominated by single-seed NRMSE variance. HCNN is +23% vs Ridge raw and +74% vs Ridge translated, so the real target is 0.00438 (Ridge translated) and there's still a sizable gap. Next: at ep=1000, probe capacity (ch=32) and regularization (wd=1e-5) to see if either axis moves the needle.
 
@@ -335,5 +335,5 @@ _(pending first run)_
 ## Related
 
 - `diagnostics/OptimizeHRCCNNForMG.h` — the interactive optimizer
-- `diagnostics/MackeyGlass.h` / `diagnostics/NARMA10.h` — underlying benchmarks
+- `diagnostics/NARMA10.h` — NARMA-10 benchmark
 - `readout/CNNReadout.md` — HCNN readout design and hyperparameter reference

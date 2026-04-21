@@ -35,14 +35,12 @@ companion `.md` walkthrough:
 
 ### 3. Understand the benchmarks
 
-The `diagnostics/` directory contains four standard RC benchmarks, each
+The `diagnostics/` directory contains standard RC benchmarks, each
 with educational `.md` documentation:
 
 | Diagnostic | What it measures |
 |------------|-----------------|
-| [MackeyGlass](../diagnostics/MackeyGlass.md) | Chaotic time series prediction (tests nonlinear dynamics tracking) |
 | [NARMA10](../diagnostics/NARMA10.md) | Combined memory + nonlinear computation (the hardest standard benchmark) |
-| [MemoryCapacityProfile](../diagnostics/MemoryCapacityProfile.md) | How far back the reservoir can remember (fading memory profile) |
 | [StateRank](../diagnostics/StateRank.md) | Reservoir dimensionality and input correlation analysis |
 
 ### 4. Go deeper
@@ -63,5 +61,5 @@ in the header files are written for an educational audience:
 | `ESN.h` | `ESN<DIM>` — the pipeline wrapper (warmup, run, collect states) |
 | `Reservoir.h` | `Reservoir<DIM>` — the hypercube reservoir core |
 | `TranslationLayer.h` | `TranslationTransform<DIM>()`, `TranslationTransformSelected<DIM>()` — feature expansion |
-| `diagnostics/SignalGenerators.h` | `GenerateMackeyGlass()`, `GenerateNARMA10()`, `ComputeNRMSE()` |
+| `diagnostics/SignalGenerators.h` | `GenerateNARMA10()`, `ComputeNRMSE()` |
 | `readout/RidgeRegression.h` | `RidgeRegression` — closed-form optimal readout |

@@ -201,7 +201,7 @@ No per-DIM lookup tables or factory functions are needed. Just use
 [ScaleInvariance.md](ScaleInvariance.md) for the full sweep data and
 analysis.
 
-Use `diagnostics/StandaloneESNSweep.cpp` to run your own parameter sweeps.
+See [ScaleInvariance.md](ScaleInvariance.md) for parameter sweep data.
 
 ## Computational properties
 

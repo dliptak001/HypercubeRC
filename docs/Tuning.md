@@ -198,14 +198,9 @@ weight initialization, not a bug.
 1. **Don't bother for prototyping.** Any seed works. Use seed=42 or 0.
 
 2. **Screen seeds for production.** Run your task across 50-500 seeds
-   and pick a top performer. The [SeedSurvey](SeedSurvey.md) results
-   show that seed rankings are stable across nearby SR values
-   (Spearman correlation > 0.82 in the 0.85-0.90 corridor), so seeds
-   screened at the defaults transfer reliably.
-
-3. **Use the sweep tool.** `StandaloneESNSweep` does joint SR x
-   input_scaling sweeps with multi-seed averaging. Run it with your
-   actual task data for production tuning.
+   and pick a top performer. Seed rankings are stable across nearby SR
+   values (Spearman correlation > 0.82 in the 0.85-0.90 corridor), so
+   seeds screened at the defaults transfer reliably.
 
 **How much does seed matter?**
 

@@ -401,7 +401,7 @@ prediction — every position contributes one online gradient update.
 spectral radius (0.90) governs the slowest decay mode: 0.9^t gives
 ~35% at lag 10, ~4% at lag 30, ~0.5% at lag 50.  The true effective
 context window should be empirically measured via
-`diagnostics/MemoryCapacity.h` (total R² over lags 1–50).  Rough
+memory capacity measurement (total R² over lags 1–50).  Rough
 estimate: **20–40 characters** at DIM 13 / SR 0.90, covering word
 boundaries and short phrases.  Paragraph-level structure is out of
 reach.  Increasing DIM further (14, 15) is straightforward with
@@ -548,8 +548,8 @@ Temperature controls generation diversity:
 
 **Phase 4 — diagnostics & tuning.**
 - Entry criterion: BPC has plateaued.
-- **Memory capacity measurement**: run `diagnostics/MemoryCapacity.h`
-  at DIM 13 / SR 0.90 to get empirical R² vs lag.
+- **Memory capacity measurement**: measure empirical R² vs lag
+  at DIM 13 / SR 0.90.
 - DIM sweep (14, 15) — streaming makes higher DIM trivial.
 - nl/ch sweep if readout capacity is the bottleneck.
 - **Multi-char input injection.** If BPC plateaus at bigram level

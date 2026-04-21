@@ -7,8 +7,8 @@
 ///        measure CNN-init noise and identify seeds that work well across
 ///        multiple DIMs.
 ///
-/// Motivation: a reservoir-seed survey (diagnostics/SeedSurvey.cpp) finds
-/// reservoirs that match the task well, but holds CNN init fixed.  The
+/// Motivation: a reservoir-seed survey finds reservoirs that match the
+/// task well, but holds CNN init fixed.  The
 /// CNN-init seed also matters — single-trial NRMSE has significant CV
 /// across CNN seeds on the surveyed reservoir — so the Gold Standards we
 /// freeze may be baking in a lucky (or unlucky) roll of the CNN init.

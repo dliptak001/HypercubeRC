@@ -30,7 +30,7 @@ the reservoir has 32 neurons or 512.
 ## Evidence
 
 Three-pass grid sweeps (coarse, normal, fine) were run for each DIM
-using the `StandaloneESNSweep` tool. Ridge readout, 3-seed average,
+via grid sweep. Ridge readout, 3-seed average,
 jointly optimizing MG h=1 + NARMA-10 + MC.
 
 ### Summary at SR = 0.90, input = 0.02
@@ -84,7 +84,7 @@ per-size retuning.
 
 ## Empirical validation: 500-seed survey
 
-A 500-seed survey ([SeedSurvey.md](SeedSurvey.md)) tested the stability
+A 500-seed survey tested the stability
 of SR=0.90 as a general-purpose default across all three benchmarks
 (DIM 5-8). The survey measured Spearman rank correlation of seed
 performance across SR values {0.80, 0.85, 0.90, 0.95, 1.00} and IS

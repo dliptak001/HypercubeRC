@@ -180,7 +180,7 @@ Creates the reservoir, initializes the selected readout type, and computes outpu
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `dim` | `int` | — | Hypercube dimension (5-12). N = 2^dim neurons. |
-| `seed` | `int` | `0` | RNG seed for weight initialization. Every seed (including 0) produces a valid weight topology; different seeds yield measurably different performance. Use the C++ SeedSurvey diagnostic to find optimal seeds for your task. |
+| `seed` | `int` | `0` | RNG seed for weight initialization. Every seed (including 0) produces a valid weight topology; different seeds yield measurably different performance. Use per-DIM seed surveys to find optimal seeds for your task. |
 | `spectral_radius` | `float` | `0.9` | Target spectral radius. Scale-invariant across all dim values (vertex-transitive topology property). No per-size re-tuning needed. |
 | `input_scaling` | `float` | `0.02` | Input weight magnitude, U(-input_scaling, +input_scaling). Scale-invariant across all dim values. |
 | `leak_rate` | `float` | `1.0` | Leaky integrator coefficient. 1.0 = full replacement. < 1.0 adds smoothing. |

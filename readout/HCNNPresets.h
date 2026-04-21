@@ -52,7 +52,7 @@ struct HCNNPreset
 // fallback.  Do not hardcode 42 anywhere else — route through a preset.
 //
 // Note: the MackeyGlass and NARMA-10 survey seeds below were originally
-// populated in MackeyGlass.h / NARMA10.h `DefaultSeed()` functions,
+// populated in DefaultSeed() functions in each benchmark header,
 // which now delegate here.
 
 // ---------------------------------------------------------------------------
@@ -183,7 +183,7 @@ HCNNPreset NARMA10()
     else if constexpr (DIM == 9) p.reservoir.seed = 10293005394405557670ULL;
     // DIM 10 has no 500-seed NARMA survey; uses the DIM 10 MG SR=0.90 winner
     // as a cross-task proxy (same seed was also the DIM 7 NARMA SR=0.90 winner,
-    // making it a genuine cross-task standout). See docs/SeedSurvey.md.
+    // making it a genuine cross-task standout).
     else if constexpr (DIM == 10) p.reservoir.seed = 6437149480297576047ULL;
     else                         p.reservoir.seed = 42ULL;  // fallback
 

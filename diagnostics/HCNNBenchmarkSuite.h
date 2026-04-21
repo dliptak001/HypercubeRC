@@ -16,7 +16,7 @@
 ///
 /// Runs Mackey-Glass and NARMA-10 at DIM 5-8 using the HCNN readout only,
 /// with the HRCCNN baseline config from `hcnn_presets::HRCCNNBaseline<DIM>()`.
-/// Skips MemoryCapacity.  Does **not** compute Ridge raw or Ridge translated
+/// Does **not** compute Ridge raw or Ridge translated
 /// — the Ridge data path is completely bypassed, so wall time is purely
 /// HCNN training time + reservoir collection.  NRMSE is reported in
 /// absolute terms, with no comparison percentages.

@@ -74,7 +74,7 @@ first-probe results commensurable with the tuned DIMs.
 
 ## Reservoir seed caveat
 
-`hcnn_presets::MackeyGlass<DIM>().reservoir.seed` has MG-surveyed seeds
+`hcnn_presets::MackeyGlass<DIM>().reservoir.seed` has MG-specific surveyed seeds
 only for DIM 5-8. DIM 9-16 fall through to a hard-coded fallback
 (`seed = 42`). This violates the per-DIM survey rule
 (`feedback_per_dim_seeds.md`), but is unavoidable until an MG seed
@@ -226,7 +226,7 @@ the lean baseline, DIM ≥ 7) is available.
 This config is a **starting point, not a destination**. Once a new DIM
 has a baseline number:
 
-1. **Survey the reservoir seed first** (SeedSurvey at the target DIM)
+1. **Survey the reservoir seed first** (seed survey at the target DIM)
    so subsequent tuning is anchored to the canonical seed, not seed 42.
 2. Widen `conv_channels` (`ch=16`, `ch=24`) to probe capacity headroom.
 3. Try `nl=2` once the reservoir is large enough that a second
