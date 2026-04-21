@@ -48,7 +48,7 @@ reservoir computing applications.
 The general-purpose spectral radius (0.90) and input scaling (0.02) are
 **independent of reservoir size**. The same two values produce the best
 general-purpose results at every DIM from 5 to 9 (32 to 512 neurons), verified
-across Mackey-Glass, NARMA-10, and Memory Capacity benchmarks with per-DIM
+across NARMA-10 benchmarks with per-DIM
 optimal seeds (selected by 500-seed survey) and three-pass grid sweeps (coarse,
 normal, fine).
 
@@ -318,7 +318,7 @@ The build produces six executables:
 
 | Target | Purpose |
 |--------|---------|
-| `HypercubeRC` | Full benchmark suite (NARMA-10, DIM 5-8; library supports 5-16) |
+| `HypercubeRC` | Benchmark suite: NARMA-10, Ridge + HCNN comparison (library supports DIM 5-16) |
 | `BasicPrediction` | Minimal example: sine wave prediction |
 | `SignalClassification` | Multi-class waveform recognition with confusion matrix |
 | `StreamingAnomaly` | Streaming anomaly detection with recovery dynamics |

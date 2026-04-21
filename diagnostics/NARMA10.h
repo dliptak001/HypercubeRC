@@ -1,13 +1,17 @@
 #pragma once
 
-#include <iostream>
-#include <iomanip>
-#include <vector>
-#include <cstddef>
+#include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <iomanip>
+#include <iostream>
+#include <vector>
+
 #include "../ESN.h"
 #include "../readout/HCNNPresets.h"
 #include "SignalGenerators.h"
+
+enum class BenchmarkMode { RidgeOnly, HCNNOnly, Both };
 
 /// @brief Diagnostic: NARMA-10 nonlinear benchmark.
 ///
@@ -16,9 +20,7 @@
 ///
 ///   y(t+1) = 0.3*y(t) + 0.05*y(t)*sum(y(t-i), i=0..9) + 1.5*u(t-9)*u(t) + 0.1
 ///
-/// Reports NRMSE for both raw (N) and full translation (2.5N) features.
-/// Readout type (Ridge or HCNN) is configurable.
-/// Standard ESN NRMSE on NARMA-10: 0.2-0.4 (lower is better).
+/// Reports NRMSE and wall-clock timing for Ridge, HCNN, or both.
 template <size_t DIM>
 class NARMA10
 {
@@ -27,42 +29,42 @@ class NARMA10
 public:
     struct Result
     {
-        double nrmse_raw;
+        double nrmse_ridge;      // -1.0 if not run
         double nrmse_hcnn;       // -1.0 if not run
-        double pct_change_hcnn;  // % change raw -> hcnn
+        double pct_change_hcnn;  // % change ridge -> hcnn (0.0 if either missing)
+        double ridge_time_s;     // -1.0 if not run
+        double hcnn_time_s;      // -1.0 if not run
     };
 
-    NARMA10(ReadoutType readout_type = ReadoutType::Ridge,
-            const ReservoirConfig* config = nullptr, float output_fraction = 1.0f,
-            bool run_hcnn = false, const CNNReadoutConfig& hcnn_config = BenchmarkCNNConfig())
-        : readout_type_(readout_type), config_(config), output_fraction_(output_fraction),
-          run_hcnn_(run_hcnn), hcnn_config_(hcnn_config)
+    NARMA10(BenchmarkMode mode = BenchmarkMode::RidgeOnly,
+            const ReservoirConfig* config = nullptr,
+            float output_fraction = 1.0f,
+            const CNNReadoutConfig& hcnn_config = BenchmarkCNNConfig())
+        : mode_(mode), config_(config), output_fraction_(output_fraction),
+          hcnn_config_(hcnn_config)
     {
     }
 
-    /// @brief Default HCNN config used by this benchmark.
-    /// Returns the HRCCNN baseline architecture (uniform across all DIMs,
-    /// see `docs/HRCCNNBaselineConfig.md`).  Callers that want the per-DIM
-    /// Gold Standards can still pass `hcnn_presets::NARMA10<DIM>().cnn`
-    /// explicitly to the constructor.
     static CNNReadoutConfig BenchmarkCNNConfig()
     {
         return hcnn_presets::HRCCNNBaseline<DIM>();
     }
 
-    /// @brief Run the benchmark and return results without printing.
     Result Run()
     {
         constexpr size_t warmup = (N < 256) ? 200 : 500;
         constexpr size_t collect = 18 * N;
 
-        double s_nrmse_raw = 0.0, s_nrmse_hcnn = 0.0;
+        const bool run_ridge = (mode_ == BenchmarkMode::RidgeOnly || mode_ == BenchmarkMode::Both);
+        const bool run_hcnn  = (mode_ == BenchmarkMode::HCNNOnly  || mode_ == BenchmarkMode::Both);
+
+        double s_nrmse_ridge = 0.0, s_nrmse_hcnn = 0.0;
+        double s_time_ridge  = 0.0, s_time_hcnn  = 0.0;
 
         for (uint64_t seed : Seeds())
         {
             auto [u, y] = GenerateNARMA10(seed + 99, warmup + collect);
 
-            // Scale inputs to [-1, 1] for the reservoir (NARMA uses [0, 0.5])
             std::vector<float> ri(warmup + collect);
             for (size_t t = 0; t < ri.size(); ++t)
                 ri[t] = u[t] * 4.0f - 1.0f;
@@ -79,90 +81,63 @@ public:
             if (output_fraction_ != 1.0f)
                 cfg.output_fraction = output_fraction_;
 
-            // Ridge: raw features
-            {
-                ESN<DIM> esn(cfg, readout_type_);
+            if (run_ridge) {
+                ESN<DIM> esn(cfg, ReadoutType::Ridge);
                 esn.Warmup(ri.data(), warmup);
                 esn.Run(ri.data() + warmup, collect);
+
+                auto t0 = std::chrono::steady_clock::now();
                 esn.Train(targets.data(), tr);
-                s_nrmse_raw += esn.NRMSE(targets.data(), tr, te);
+                auto t1 = std::chrono::steady_clock::now();
+
+                s_nrmse_ridge += esn.NRMSE(targets.data(), tr, te);
+                s_time_ridge  += std::chrono::duration<double>(t1 - t0).count();
             }
 
-            // HCNN
-            if (run_hcnn_) {
+            if (run_hcnn) {
                 ReservoirConfig hcnn_cfg = cfg;
                 hcnn_cfg.output_fraction = 1.0f;
+
                 ESN<DIM> esn(hcnn_cfg, ReadoutType::HCNN);
                 esn.Warmup(ri.data(), warmup);
                 esn.Run(ri.data() + warmup, collect);
+
+                auto t0 = std::chrono::steady_clock::now();
                 esn.Train(targets.data(), tr, hcnn_config_);
+                auto t1 = std::chrono::steady_clock::now();
+
                 s_nrmse_hcnn += esn.NRMSE(targets.data(), tr, te);
+                s_time_hcnn  += std::chrono::duration<double>(t1 - t0).count();
             }
         }
 
         double n = static_cast<double>(Seeds().size());
-        double nrmse_raw = s_nrmse_raw / n;
-        double nrmse_hcnn = run_hcnn_ ? s_nrmse_hcnn / n : -1.0;
-        double pct_hcnn = (run_hcnn_ && nrmse_raw > 1e-12)
-                              ? 100.0 * (nrmse_hcnn - nrmse_raw) / nrmse_raw : 0.0;
+        double nrmse_ridge = run_ridge ? s_nrmse_ridge / n : -1.0;
+        double nrmse_hcnn  = run_hcnn  ? s_nrmse_hcnn  / n : -1.0;
+        double time_ridge  = run_ridge ? s_time_ridge  / n : -1.0;
+        double time_hcnn   = run_hcnn  ? s_time_hcnn   / n : -1.0;
+        double pct_hcnn    = (run_ridge && run_hcnn && nrmse_ridge > 1e-12)
+                                 ? 100.0 * (nrmse_hcnn - nrmse_ridge) / nrmse_ridge : 0.0;
 
-        return {nrmse_raw, nrmse_hcnn, pct_hcnn};
+        return {nrmse_ridge, nrmse_hcnn, pct_hcnn, time_ridge, time_hcnn};
     }
-
-    /// @brief Run the benchmark and print a standalone result row.
-    void RunAndPrint()
-    {
-        constexpr size_t warmup = (N < 256) ? 200 : 500;
-        constexpr size_t collect = 18 * N;
-        PrintHeader(warmup, collect);
-
-        auto r = Run();
-
-        std::cout << "  " << std::setw(3) << DIM
-                  << "  | " << std::setw(5) << N
-                  << " | " << std::fixed << std::setprecision(3) << std::setw(7) << r.nrmse_raw;
-        if (r.nrmse_hcnn >= 0.0)
-            std::cout << " | " << std::setprecision(3) << std::setw(7) << r.nrmse_hcnn
-                      << " (" << std::showpos << std::setprecision(1) << std::setw(5) << r.pct_change_hcnn
-                      << "%" << std::noshowpos << ")";
-        std::cout << "\n";
-    }
-
-private:
-    ReadoutType readout_type_;
-    const ReservoirConfig* config_;
-    float output_fraction_;
-    bool run_hcnn_;
-    CNNReadoutConfig hcnn_config_;
 
     static uint64_t DefaultSeed()
     {
         return hcnn_presets::NARMA10<DIM>().reservoir.seed;
     }
 
+    static inline thread_local uint64_t single_seed = 0;
+
+private:
+    BenchmarkMode mode_;
+    const ReservoirConfig* config_;
+    float output_fraction_;
+    CNNReadoutConfig hcnn_config_;
+
     static std::vector<uint64_t> Seeds()
     {
         if (single_seed) return {single_seed};
         return {DefaultSeed()};
-    }
-
-public:
-    static inline thread_local uint64_t single_seed = 0;  // non-zero = use only this seed
-
-private:
-    void PrintHeader(size_t warmup, size_t collect) const
-    {
-        const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "HCNN";
-        std::cout << "=== NARMA-10 (" << rn << " Readout) ===\n";
-        std::cout << "Seed: " << DefaultSeed() << " | Alpha: 1.0 | Leak: 1.0"
-                  << " | SR: 0.90 | Input scaling: 0.02\n";
-        float frac = output_fraction_;
-        size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * frac)));
-        std::cout << "Warmup: " << warmup << " | Collect: " << collect
-                  << " | Outputs: " << M << "/" << N
-                  << " | Features: " << M << "\n\n";
-
-        std::cout << "  DIM |     N |    raw\n";
-        std::cout << "  ----+-------+--------\n";
     }
 };

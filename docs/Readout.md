@@ -158,9 +158,9 @@ discover their own nonlinear features from raw state.
 | 7   | 128  | Ridge or HCNN (HCNN starts being competitive) |
 | 8+  | 256+ | Ridge for fast closed-form; HCNN when accuracy ceiling matters |
 
-The main benchmark suite uses Ridge for MG and NARMA-10 (where optimal
-accuracy matters). Adding `--hcnn` to the suite runs HCNN alongside
-Ridge for apples-to-apples comparison.
+The benchmark suite runs both Ridge and HCNN on NARMA-10 by default
+for apples-to-apples comparison. Edit `main.cpp` to switch to
+`BenchmarkMode::HCNNOnly` for HCNN-only runs at higher DIMs.
 
 For classification tasks, CNNReadout is the natural fit — a single
 multi-class readout replaces N one-vs-rest Ridge heads and tends to
