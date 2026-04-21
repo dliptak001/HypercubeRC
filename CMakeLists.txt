@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)  # Prefer -std=c++23 over GNU extensions
 
-# ——— Static library: core pipeline (Reservoir, ESN, TranslationLayer, readouts) ———
+# ——— Static library: core pipeline (Reservoir, ESN, readouts) ———
 file(GLOB READOUT_SOURCES ${PROJECT_SOURCE_DIR}/readout/*.cpp)
 add_library(HypercubeRCCore STATIC
     ${PROJECT_SOURCE_DIR}/Reservoir.cpp
@@ -67,38 +67,15 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     add_executable(HRCCNN_LLM_Math ${HRCCNN_LLM_MATH_SOURCES})
     file(GLOB HRCCNN_LM_TEXT_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/examples/HRCCNN_LM_Text/*.cpp)
     add_executable(HRCCNN_LM_Text ${HRCCNN_LM_TEXT_SOURCES})
-    add_executable(CnnSeedSurvey diagnostics/CnnSeedSurvey.cpp)
     add_executable(CoreSmokeTest tests/CoreSmokeTest.cpp)
 
-    set(DIAGNOSTIC_TARGETS HypercubeRC CnnSeedSurvey)
     set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly HRCCNN_LLM_Math HRCCNN_LM_Text)
     set(TEST_TARGETS CoreSmokeTest)
-    set(EXE_TARGETS ${DIAGNOSTIC_TARGETS} ${EXAMPLE_TARGETS} ${TEST_TARGETS})
+    set(EXE_TARGETS HypercubeRC ${EXAMPLE_TARGETS} ${TEST_TARGETS})
 
     foreach(tgt IN LISTS EXE_TARGETS)
         target_link_libraries(${tgt} PRIVATE HypercubeRCCore)
     endforeach()
-
-    # ——— OpenMP (diagnostics only) ———
-    # Core library does NOT use OpenMP.  Diagnostic executables use it for
-    # parallel seed sweeps and memory-capacity computation.
-    if(MINGW)
-        foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
-            target_compile_options(${tgt} PRIVATE -fopenmp)
-            target_link_options(${tgt} PRIVATE -fopenmp)
-        endforeach()
-    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
-        find_package(OpenMP QUIET)
-        if(OpenMP_CXX_FOUND)
-            foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
-                target_link_libraries(${tgt} PRIVATE OpenMP::OpenMP_CXX)
-            endforeach()
-        endif()
-    elseif(MSVC)
-        foreach(tgt IN LISTS DIAGNOSTIC_TARGETS)
-            target_compile_options(${tgt} PRIVATE /openmp)
-        endforeach()
-    endif()
 
     foreach(tgt IN LISTS EXE_TARGETS)
         target_compile_options(${tgt} PRIVATE

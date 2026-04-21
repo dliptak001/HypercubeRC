@@ -322,13 +322,8 @@ The build produces six executables:
 | `BasicPrediction` | Minimal example: sine wave prediction |
 | `SignalClassification` | Multi-class waveform recognition with confusion matrix |
 | `StreamingAnomaly` | Streaming anomaly detection with recovery dynamics |
-| `CnnSeedSurvey` | CNN-init seed survey across DIMs |
-
 Start with `BasicPrediction` to see the pipeline end-to-end. Each example has a
 companion `.md` file with a detailed walkthrough.
-
-OpenMP is used in diagnostic executables (SeedSurvey, BenchmarkSuite) for
-parallel seed sweeps. The core library has no OpenMP dependency.
 
 ## Project Structure
 
@@ -350,7 +345,6 @@ HypercubeRC/
   diagnostics/
     BenchmarkSuite.h      Orchestrates NARMA-10 across DIM
     NARMA10.h/md          Nonlinear memory benchmark
-    CnnSeedSurvey.cpp     CNN-init seed survey across DIMs
     SignalGenerators.h    Benchmark signal generators and NRMSE utility
     StateRank.h/md        Reservoir dimensionality and input correlation
 

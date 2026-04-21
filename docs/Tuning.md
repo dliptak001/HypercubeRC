@@ -324,9 +324,9 @@ complete implementation.
   in non-obvious ways. Stick with (0.90, 0.02) unless you have a
   specific reason and a sweep tool.
 
-- **alpha** unless you've exhausted other options. The translation layer
-  already provides the nonlinear features that alpha adjustments are
-  trying to create.
+- **alpha** unless you've exhausted other options. Alpha adjustments
+  have second-order effects; addressing the readout choice or DIM
+  first is almost always more productive.
 
 - **Reservoir internals.** The connectivity pattern (shell masks +
   nearest neighbors) is not configurable and doesn't need to be.

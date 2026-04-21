@@ -12,13 +12,13 @@ order below.
 | Document | What you'll learn |
 |----------|-------------------|
 | [Reservoir.md](Reservoir.md) | How the hypercube reservoir works — topology, connectivity, timestep mechanics, spectral radius, scale-invariant defaults |
-| [Readout.md](Readout.md) | The two readout algorithms (SGD vs. Ridge), when to use each, feature standardization, and streaming mode |
+| [Readout.md](Readout.md) | The two readout algorithms (Ridge vs. HCNN), when to use each, feature standardization, and streaming mode |
 
-These three documents cover the full pipeline:
+These documents cover the full pipeline:
 
 ```
-Input ──> Reservoir (N states) ──> Readout ──> Prediction
-           [Reservoir.md]          [Readout.md]
+Input ──> Reservoir (N states) ──> Output Selection (M vertices) ──> Readout ──> Prediction
+           [Reservoir.md]                                              [Readout.md]
 ```
 
 ### 2. See it in action
