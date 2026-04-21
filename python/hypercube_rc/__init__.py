@@ -69,7 +69,7 @@ class ESN:
         Fraction of N vertices used as readout features, in (0.0, 1.0]. Default: 1.0.
         Reduce for large dim to control Ridge readout cost.
     readout_type : ReadoutType
-        ReadoutType.Ridge (default) or ReadoutType.Linear.
+        ReadoutType.Ridge (default) or ReadoutType.HCNN.
     feature_mode : FeatureMode
         FeatureMode.Translated (default) or FeatureMode.Raw.
 
@@ -293,10 +293,6 @@ class ESN:
         targets: np.ndarray,
         *,
         reg: float | None = None,
-        lr: float | None = None,
-        epochs: int | None = None,
-        weight_decay: float = 1e-4,
-        lr_decay: float = 0.01,
     ) -> None:
         """Train the readout on collected states.
 
@@ -310,58 +306,10 @@ class ESN:
             values. For classification: {-1.0, +1.0}.
         reg : float, optional
             Ridge regularization strength (Ridge readout only). Typical: 0.01-100.
-        lr : float, optional
-            Learning rate (Linear readout only). Pass 0.0 for auto-selection.
-        epochs : int, optional
-            Number of SGD epochs (Linear readout only). Default: 200.
-        weight_decay : float
-            L2 regularization for SGD. Default: 1e-4.
-        lr_decay : float
-            Learning rate decay factor. Default: 0.01.
         """
         self._impl.train(
             _to_float32(targets),
             reg=reg,
-            lr=lr,
-            epochs=epochs,
-            weight_decay=weight_decay,
-            lr_decay=lr_decay,
-        )
-
-    def train_incremental(
-        self,
-        targets: np.ndarray,
-        *,
-        blend: float = 0.1,
-        lr: float = 0.0,
-        epochs: int = 200,
-        weight_decay: float = 1e-4,
-        lr_decay: float = 0.01,
-    ) -> None:
-        """Incrementally update the Linear readout for streaming.
-
-        Trains a fresh model on the provided data, then blends it with the
-        existing model: ``W = (1 - blend) * W_old + blend * W_new``.
-
-        Parameters
-        ----------
-        targets : ndarray
-            Target values for the new data window.
-        blend : float
-            Blending factor in (0, 1]. Default: 0.1.
-        lr : float
-            Learning rate. 0.0 = auto. Default: 0.0.
-        epochs : int
-            SGD epochs. Default: 200.
-        weight_decay : float
-            L2 regularization. Default: 1e-4.
-        lr_decay : float
-            LR decay factor. Default: 0.01.
-        """
-        self._impl.train_incremental(
-            _to_float32(targets),
-            blend=blend, lr=lr, epochs=epochs,
-            weight_decay=weight_decay, lr_decay=lr_decay,
         )
 
     def predict_raw(self, timestep: int) -> float:
@@ -565,7 +513,7 @@ class ESN:
 
     @property
     def readout_type(self) -> ReadoutType:
-        """Readout type (Ridge or Linear)."""
+        """Readout type (Ridge or HCNN)."""
         return self._impl.readout_type
 
     @property

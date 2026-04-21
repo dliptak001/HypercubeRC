@@ -46,10 +46,10 @@ class TestConstruction:
             leak_rate=0.8,
             alpha=1.5,
             output_fraction=0.5,
-            readout_type=ReadoutType.Linear,
+            readout_type=ReadoutType.Ridge,
             feature_mode=FeatureMode.Raw,
         )
-        assert esn.readout_type == ReadoutType.Linear
+        assert esn.readout_type == ReadoutType.Ridge
         assert esn.feature_mode == FeatureMode.Raw
         assert esn.alpha == pytest.approx(1.5)
 
@@ -86,15 +86,15 @@ class TestSinePrediction:
         r2 = esn.r2(targets, 1400, esn.num_collected - 1400)
         assert r2 > 0.95
 
-    def test_linear_prediction(self):
+    def test_ridge_raw_prediction(self):
         signal = _sine_signal()
-        esn = ESN(dim=6, seed=42, readout_type=ReadoutType.Linear)
+        esn = ESN(dim=6, seed=42, feature_mode=FeatureMode.Raw)
         esn.warmup(signal[:200])
         esn.run(signal[200:-1])
         targets = signal[201:]
-        esn.train(targets[:1400], lr=0.0, epochs=300)
+        esn.train(targets[:1400])
         r2 = esn.r2(targets, 1400, esn.num_collected - 1400)
-        assert r2 > 0.8, f"Linear R² too low: {r2}"
+        assert r2 > 0.99, f"Ridge raw R² too low: {r2}"
 
     def test_nrmse(self):
         signal = _sine_signal()
@@ -366,27 +366,6 @@ class TestOutputFraction:
 class TestErrorHandling:
     """Test that misuse raises clear Python exceptions instead of crashing."""
 
-    def test_train_reg_on_linear_esn(self):
-        esn = ESN(dim=5, seed=1, readout_type=ReadoutType.Linear)
-        signal = _sine_signal(500)
-        esn.run(signal[:200])
-        with pytest.raises(Exception, match="Ridge"):
-            esn.train(signal[:200], reg=1.0)
-
-    def test_train_lr_on_ridge_esn(self):
-        esn = ESN(dim=5, seed=1, readout_type=ReadoutType.Ridge)
-        signal = _sine_signal(500)
-        esn.run(signal[:200])
-        with pytest.raises(Exception, match="Linear"):
-            esn.train(signal[:200], lr=0.01)
-
-    def test_train_incremental_on_ridge_esn(self):
-        esn = ESN(dim=5, seed=1, readout_type=ReadoutType.Ridge)
-        signal = _sine_signal(500)
-        esn.run(signal[:200])
-        with pytest.raises(Exception, match="Linear"):
-            esn.train_incremental(signal[:200])
-
     def test_predict_raw_out_of_range(self):
         esn = ESN(dim=5, seed=1)
         signal = _sine_signal(500)
@@ -435,9 +414,9 @@ class TestPersistence:
         r2_after = loaded.r2(signal[201:], start=1400)
         assert abs(r2_before - r2_after) < 1e-6
 
-    def test_pickle_roundtrip_linear(self):
+    def test_pickle_roundtrip_ridge_raw(self):
         signal = _sine_signal()
-        esn = ESN(dim=6, seed=42, readout_type=ReadoutType.Linear)
+        esn = ESN(dim=6, seed=42, feature_mode=FeatureMode.Raw)
         esn.fit(signal, warmup=200)
         r2_before = esn.r2()
 
@@ -445,7 +424,7 @@ class TestPersistence:
         loaded.warmup(signal[:200])
         loaded.run(signal[200:-1])
         r2_after = loaded.r2(signal[201:], start=1400)
-        assert abs(r2_before - r2_after) < 1e-4  # looser for SGD
+        assert abs(r2_before - r2_after) < 1e-6
 
     def test_save_load(self, tmp_path):
         signal = _sine_signal()
@@ -474,7 +453,7 @@ class TestPersistence:
         esn = ESN(dim=8, seed=123, spectral_radius=0.85,
                   input_scaling=0.05, leak_rate=0.7, alpha=1.2,
                   num_inputs=2, output_fraction=0.5,
-                  readout_type=ReadoutType.Linear,
+                  readout_type=ReadoutType.Ridge,
                   feature_mode=FeatureMode.Raw)
         loaded = pickle.loads(pickle.dumps(esn))
         assert loaded.dim == 8
@@ -485,7 +464,7 @@ class TestPersistence:
         assert loaded.alpha == pytest.approx(1.2)
         assert loaded.num_inputs == 2
         assert loaded.output_fraction == pytest.approx(0.5)
-        assert loaded.readout_type == ReadoutType.Linear
+        assert loaded.readout_type == ReadoutType.Ridge
         assert loaded.feature_mode == FeatureMode.Raw
 
     def test_collected_states_not_persisted(self):

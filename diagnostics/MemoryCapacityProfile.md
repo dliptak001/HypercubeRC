@@ -57,7 +57,7 @@ benchmark reports raw MC for comparability with published results.
 
 ## Sample results
 
-Run with Linear Readout, full translation, DIM=8:
+Run with Ridge Readout, full translation, DIM=8:
 
 | Lag | R² |
 |-----|----|

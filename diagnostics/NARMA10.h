@@ -17,7 +17,7 @@
 ///   y(t+1) = 0.3*y(t) + 0.05*y(t)*sum(y(t-i), i=0..9) + 1.5*u(t-9)*u(t) + 0.1
 ///
 /// Reports NRMSE for both raw (N) and full translation (2.5N) features.
-/// Readout type (Linear or Ridge) is configurable.
+/// Readout type (Ridge or HCNN) is configurable.
 /// Standard ESN NRMSE on NARMA-10: 0.2-0.4 (lower is better).
 template <size_t DIM>
 class NARMA10
@@ -34,7 +34,7 @@ public:
         double pct_change_hcnn;  // % change raw -> hcnn
     };
 
-    NARMA10(ReadoutType readout_type = ReadoutType::Linear,
+    NARMA10(ReadoutType readout_type = ReadoutType::Ridge,
             const ReservoirConfig* config = nullptr, float output_fraction = 1.0f,
             bool run_hcnn = false, const CNNReadoutConfig& hcnn_config = BenchmarkCNNConfig())
         : readout_type_(readout_type), config_(config), output_fraction_(output_fraction),
@@ -163,7 +163,7 @@ public:
 private:
     void PrintHeader(size_t warmup, size_t collect) const
     {
-        const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "Linear";
+        const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "HCNN";
         std::cout << "=== NARMA-10 (" << rn << " Readout, raw vs full translation) ===\n";
         std::cout << "Seed: " << DefaultSeed() << " | Alpha: 1.0 | Leak: 1.0"
                   << " | SR: 0.90 | Input scaling: 0.02\n";

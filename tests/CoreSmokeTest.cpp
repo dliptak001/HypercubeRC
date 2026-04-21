@@ -51,23 +51,23 @@ void test_ridge_prediction()
     check(r2 > 0.99 && nrmse < 0.1, label.c_str());
 }
 
-// ── Test: ESN with Linear readout (raw features) ──
+// ── Test: ESN with Ridge readout (raw features) ──
 template <size_t DIM>
-void test_linear_prediction()
+void test_ridge_raw_prediction()
 {
     constexpr size_t N = 1ULL << DIM;
-    std::string label = "DIM " + std::to_string(DIM) + " Linear prediction (N=" + std::to_string(N) + ")";
+    std::string label = "DIM " + std::to_string(DIM) + " Ridge raw prediction (N=" + std::to_string(N) + ")";
 
     auto signal = make_sine(2000, 10.0f);
 
-    ESN<DIM> esn(ReservoirConfig{.seed = 42}, ReadoutType::Linear, FeatureMode::Raw);
+    ESN<DIM> esn(ReservoirConfig{.seed = 42}, ReadoutType::Ridge, FeatureMode::Raw);
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
     esn.Train(signal.data() + 201, 1400);
 
     double r2 = esn.R2(signal.data() + 201, 0, esn.NumCollected());
     printf("         R2=%.6f\n", r2);
-    check(r2 > 0.90, label.c_str());
+    check(r2 > 0.99, label.c_str());
 }
 
 // ── Test: Classification with accuracy check ──
@@ -163,30 +163,6 @@ void test_clear_states()
     double r2 = esn.R2(signal.data() + 201, 0, esn.NumCollected());
     printf("         R2 after clear+re-run=%.6f\n", r2);
     check(r2 > 0.99, (label + " - readout intact").c_str());
-}
-
-// ── Test: TrainIncremental (streaming, Linear readout only) ──
-template <size_t DIM>
-void test_train_incremental()
-{
-    std::string label = "DIM " + std::to_string(DIM) + " TrainIncremental (streaming)";
-
-    auto signal = make_sine(2000, 10.0f);
-
-    ESN<DIM> esn(ReservoirConfig{.seed = 42}, ReadoutType::Linear, FeatureMode::Translated);
-    esn.Warmup(signal.data(), 200);
-    esn.Run(signal.data() + 200, 1799);
-
-    // Initial batch training
-    esn.Train(signal.data() + 201, 1400);
-    double r2_before = esn.R2(signal.data() + 201, 0, esn.NumCollected());
-
-    // Incremental update with same data (should not degrade)
-    esn.TrainIncremental(signal.data() + 201, 1400, /*blend=*/0.3f);
-    double r2_after = esn.R2(signal.data() + 201, 0, esn.NumCollected());
-
-    printf("         R2 before=%.6f after=%.6f\n", r2_before, r2_after);
-    check(r2_after > 0.90, label.c_str());
 }
 
 // ── Test: Multi-input ESN (num_inputs > 1) ──
@@ -349,9 +325,9 @@ int main()
     test_ridge_prediction<7>();
     test_ridge_prediction<8>();
 
-    printf("\n--- Linear prediction ---\n");
-    test_linear_prediction<5>();
-    test_linear_prediction<6>();
+    printf("\n--- Ridge raw prediction ---\n");
+    test_ridge_raw_prediction<5>();
+    test_ridge_raw_prediction<6>();
 
     printf("\n--- Classification ---\n");
     test_classification<6>();
@@ -361,9 +337,6 @@ int main()
 
     printf("\n--- ClearStates ---\n");
     test_clear_states<6>();
-
-    printf("\n--- TrainIncremental ---\n");
-    test_train_incremental<6>();
 
     printf("\n--- Multi-input ---\n");
     test_multi_input<6>();

@@ -86,6 +86,7 @@ bool SaveModelFile(const std::string& path, const ModelFile& mf)
     WritePOD(os, mf.readout.bias);
     WriteVec(os, mf.readout.feature_mean);
     WriteVec(os, mf.readout.feature_scale);
+    WriteVec(os, mf.readout.target_mean);
 
     return static_cast<bool>(os);
 }
@@ -122,10 +123,11 @@ bool LoadModelFile(const std::string& path, ModelFile& mf, std::string* err)
     if (!ReadPOD(is, mf.reservoir_cfg)) return fail("short read (reservoir_cfg)");
     if (!ReadPOD(is, mf.cnn_cfg))       return fail("short read (cnn_cfg)");
 
-    if (!ReadVec(is, mf.readout.weights))      return fail("short read or oversized (weights)");
-    if (!ReadPOD(is, mf.readout.bias))         return fail("short read (bias)");
-    if (!ReadVec(is, mf.readout.feature_mean)) return fail("short read or oversized (feature_mean)");
-    if (!ReadVec(is, mf.readout.feature_scale))return fail("short read or oversized (feature_scale)");
+    if (!ReadVec(is, mf.readout.weights))       return fail("short read or oversized (weights)");
+    if (!ReadPOD(is, mf.readout.bias))          return fail("short read (bias)");
+    if (!ReadVec(is, mf.readout.feature_mean))  return fail("short read or oversized (feature_mean)");
+    if (!ReadVec(is, mf.readout.feature_scale)) return fail("short read or oversized (feature_scale)");
+    if (!ReadVec(is, mf.readout.target_mean))   return fail("short read or oversized (target_mean)");
 
     return true;
 }
@@ -138,6 +140,7 @@ SerialReadoutState ToSerial(const typename ESN<DIM>::ReadoutState& s)
     r.bias          = s.bias;
     r.feature_mean  = s.feature_mean;
     r.feature_scale = s.feature_scale;
+    r.target_mean   = s.target_mean;
     return r;
 }
 
@@ -149,6 +152,7 @@ typename ESN<DIM>::ReadoutState FromSerial(const SerialReadoutState& s)
     r.bias          = s.bias;
     r.feature_mean  = s.feature_mean;
     r.feature_scale = s.feature_scale;
+    r.target_mean   = s.target_mean;
     r.is_trained    = !s.weights.empty();
     return r;
 }

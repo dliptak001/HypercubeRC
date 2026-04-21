@@ -7,8 +7,7 @@
 /// @brief Closed-form Ridge regression readout — the mathematically optimal
 ///        linear readout for reservoir computing evaluation.
 ///
-/// Where LinearReadout iterates toward a solution via SGD, Ridge regression
-/// solves for the globally optimal weights in one shot by solving the normal
+/// Solves for the globally optimal weights in one shot by solving the normal
 /// equations with L2 regularization:
 ///
 ///   [W; b] = (X'X + lambda * I)^{-1} X'y
@@ -41,8 +40,7 @@
 ///
 /// **Cost:** O(N² * samples) to build X'X, O(N³) to solve. This is fast
 /// for reservoir-scale problems (N up to ~2500 features) and provides the
-/// optimal solution that SGD can only approximate. Preferred for DIM >= 8;
-/// for smaller reservoirs, LinearReadout is lighter-weight and sufficient.
+/// optimal solution that SGD can only approximate.
 ///
 /// **Interface conventions:**
 ///   - Features: float, any range (standardized internally)

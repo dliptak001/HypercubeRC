@@ -28,7 +28,7 @@ class MemoryCapacityProfile
     static constexpr size_t MAX_LAG = 50;
 
 public:
-    MemoryCapacityProfile(ReadoutType readout_type = ReadoutType::Linear,
+    MemoryCapacityProfile(ReadoutType readout_type = ReadoutType::Ridge,
                           const ReservoirConfig* config = nullptr,
                           float output_fraction = 1.0f)
         : readout_type_(readout_type), config_(config), output_fraction_(output_fraction)
@@ -87,10 +87,7 @@ public:
 
             for (size_t lag = 1; lag <= MAX_LAG && lag < collect; ++lag)
             {
-                if (readout_type_ == ReadoutType::Ridge)
-                { RidgeRegression r; eval_lag(r, lag); }
-                else
-                { LinearReadout r; eval_lag(r, lag); }
+                RidgeRegression r; eval_lag(r, lag);
             }
         }
 
@@ -142,7 +139,7 @@ private:
 
     void PrintHeader(size_t warmup, size_t collect) const
     {
-        const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "Linear";
+        const char* rn = "Ridge";
         std::cout << "=== Memory Capacity Profile (" << rn << " Readout, full translation) ===\n";
         std::cout << "Seed: " << DefaultSeed() << " | Alpha: 1.0 | Leak: 1.0"
                   << " | SR: 0.90 | Input scaling: 0.02\n";

@@ -125,10 +125,6 @@ detection sensitivity and classification accuracy.
   features). Try 1.0 for all 128 vertices, or 0.5 for half. The HCNN
   path always uses all vertices.
 
-- **Ridge vs. Linear.** Swap `ReadoutType::Ridge` for
-  `ReadoutType::Linear`. Ridge gives slightly better results on this
-  easy task; the difference is more dramatic on harder benchmarks.
-
 - **HCNN epochs / learning rate.** The default is 100 epochs — a
   sweet spot for this task. Training longer (e.g. 200) actually
   *degrades* test NRMSE on sine: the reservoir state is low-rank

@@ -10,17 +10,10 @@ namespace hcnn { class HCNN; }
 /// Task type for the HCNN readout.
 enum class HCNNTask { Regression, Classification };
 
-/// Readout head after the conv/pool stack.
-/// - GAP: global average pool per channel → [channels] → Linear. Translation-invariant across hypercube vertices.
-/// - FLATTEN: every (channel, vertex) activation is a feature → [channels * 2^final_dim] → Linear. Position-sensitive.
-/// Mirrors hcnn::ReadoutType; translated in CNNReadout.cpp so HCNN headers stay out of the RC public API.
-enum class HCNNReadoutType { GAP, FLATTEN };
-
 /// Configuration for the CNN readout's architecture and training.
 struct CNNReadoutConfig {
     int num_outputs   = 1;        ///< Number of output neurons (classes or regression targets).
     HCNNTask task     = HCNNTask::Regression; ///< Task type.
-    HCNNReadoutType readout_type = HCNNReadoutType::GAP; ///< Post-conv readout head (GAP or FLATTEN).
     int num_layers    = 0;        ///< Conv+Pool pairs. 0 = auto: min(DIM-3, 4). Channels double per layer.
     int conv_channels = 16;       ///< Base convolution channels (doubles per layer: 16, 32, 64, 128).
     int epochs        = 200;      ///< Training epochs.
@@ -59,22 +52,21 @@ struct CNNTrainHooks {
 
 /// @brief HypercubeCNN-based readout for reservoir computing.
 ///
-/// Replaces LinearReadout / RidgeRegression with a learned convolutional
+/// Alternative to RidgeRegression: a learned convolutional
 /// readout that operates directly on raw reservoir state (N = 2^DIM floats
 /// per timestep).  The CNN's learned convolution kernels discover which
 /// vertex interactions predict the target -- no hand-crafted feature
 /// extraction, no translation layer, no stride selection.
 ///
 /// **Data path:** raw reservoir state -> input standardization ->
-///   HypercubeCNN (Conv->Pool stack -> GAP|FLATTEN -> Linear) -> de-center -> output.
-///   Readout head is selectable via CNNReadoutConfig::readout_type.
+///   HypercubeCNN (Conv->Pool stack -> FLATTEN -> Linear) -> de-center -> output.
 ///
 /// **Architecture:** Auto-sized from DIM: min(DIM-3, 4) Conv+Pool pairs,
 ///   channels doubling per layer (16, 32, 64, 128).  Override via
 ///   CNNReadoutConfig::num_layers.
 ///
 /// **Interface compatibility:** Provides the same method signatures as
-/// LinearReadout / RidgeRegression so that ESN's std::visit lambdas compile
+/// RidgeRegression so that ESN's std::visit lambdas compile
 /// for prediction, evaluation, and serialization.  Training is handled via
 /// a dedicated ESN code path (not through the generic Train visitor) because
 /// CNN training requires multi-epoch iteration with its own hyperparameters.
@@ -127,6 +119,24 @@ public:
     void TrainOnlineBatch(const float* states, const int* targets,
                           size_t count, float lr, float weight_decay = 0.0f);
 
+    /// @brief Single-sample online gradient step (regression).
+    /// target: num_outputs floats. Internally centered if target_mean_ is set.
+    void TrainOnlineStepRegression(const float* state, const float* target,
+                                   float lr, float weight_decay = 0.0f);
+
+    /// @brief Mini-batch online gradient step (regression).
+    /// states: count rows of 2^dim floats (row-major, raw — standardized internally).
+    /// targets: count * num_outputs contiguous floats (row-major).
+    /// Internally centered if target_mean_ is set.
+    void TrainOnlineBatchRegression(const float* states, const float* targets,
+                                    size_t count, float lr, float weight_decay = 0.0f);
+
+    /// @brief Compute and store per-output target centering from sample targets.
+    /// Call after InitOnline for regression tasks so that online training
+    /// subtracts the mean and PredictRaw adds it back (matching batch behavior).
+    /// targets: num_samples * num_outputs floats (row-major).
+    void ComputeTargetCentering(const float* targets, size_t num_samples);
+
     /// @brief Multi-output prediction: writes num_outputs floats to output.
     /// For regression: de-centered predictions.  For classification: raw logits.
     void PredictRaw(const float* state, float* output) const;
@@ -156,6 +166,7 @@ public:
 
     [[nodiscard]] size_t NumFeatures() const { return num_features_; }
     [[nodiscard]] double Bias() const { return target_mean_.empty() ? 0.0 : target_mean_[0]; }
+    [[nodiscard]] const std::vector<double>& TargetMean() const { return target_mean_; }
 
     [[nodiscard]] const std::vector<float>& FeatureMean() const { return input_mean_; }
     [[nodiscard]] const std::vector<float>& FeatureScale() const { return input_scale_; }
@@ -165,8 +176,10 @@ public:
     [[nodiscard]] const std::vector<double>& Weights() const;
 
     /// @brief Restore a previously trained state.
+    /// target_mean: per-output centering (regression). Empty = no centering.
     void SetState(std::vector<double> weights, double bias,
-                  std::vector<float> feature_mean, std::vector<float> feature_scale);
+                  std::vector<float> feature_mean, std::vector<float> feature_scale,
+                  std::vector<double> target_mean = {});
 
     /// @brief Pre-set architecture config before restoring weights via SetState.
     /// Required when loading a saved model without training — SetState's
@@ -202,7 +215,8 @@ private:
     mutable std::vector<float> scratch_state_;
     mutable std::vector<float> scratch_embedded_;
     mutable std::vector<float> scratch_pred_;
-    std::vector<float> scratch_batch_;  // Persistent buffer for TrainOnlineBatch standardization.
+    std::vector<float> scratch_batch_;        // Persistent buffer for TrainOnlineBatch standardization.
+    std::vector<float> scratch_target_;       // Persistent buffer for online regression target centering.
 
     void standardize(const float* in, float* out, size_t n) const;
     void compute_standardization(const float* states, size_t num_samples, size_t n);

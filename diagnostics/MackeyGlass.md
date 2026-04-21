@@ -70,7 +70,6 @@ Run with Ridge Readout:
 - **NRMSE improves monotonically with DIM.** More neurons = more state
   dimensions = better reconstruction of the chaotic attractor.
 
-- **Ridge vs. Linear readout.** Ridge regression typically outperforms
-  LinearReadout (SGD) on this benchmark because the closed-form solution
-  finds the true optimum. The difference is larger at higher DIM where
-  the feature space is bigger.
+- **Ridge regression** finds the closed-form global optimum for the
+  linear mapping, which is critical for this benchmark. Accuracy
+  improves with DIM as the feature space grows.

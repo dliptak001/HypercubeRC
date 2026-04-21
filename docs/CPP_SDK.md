@@ -27,7 +27,6 @@ After installation, the SDK contains:
     ESN.h              -- The public API (the only header consumers include)
     Reservoir.h        -- Internal: included by ESN.h
     TranslationLayer.h -- Internal: included by ESN.h
-    LinearReadout.h    -- Internal: included by ESN.h
     RidgeRegression.h  -- Internal: included by ESN.h
     CNNReadout.h       -- Internal: included by ESN.h (HCNN readout config)
   lib/
@@ -240,14 +239,13 @@ For DIM 9+, reduce `output_fraction` to control Ridge readout cost (e.g., 0.25 f
 | Value | Description |
 |-------|-------------|
 | `Ridge` | Closed-form Ridge regression. Deterministic, fast, optimal for the given regularization. Default. |
-| `Linear` | Online SGD with L2 decay and pocket selection. Supports streaming via `TrainIncremental()`. |
-| `HCNN` | Learned convolutional readout (HypercubeCNN). Operates directly on raw N-vertex state, bypassing the translation layer. Supports multi-output regression and multi-class classification. Batch training only — no streaming. Trained via the `Train(targets, train_size, CNNReadoutConfig)` overload. See [CNNReadoutConfig](#cnnreadoutconfig). |
+| `HCNN` | Learned convolutional readout (HypercubeCNN). Operates directly on raw N-vertex state, bypassing the translation layer. Supports multi-output regression and multi-class classification. Trained via the `Train(targets, train_size, CNNReadoutConfig)` overload. See [CNNReadoutConfig](#cnnreadoutconfig). |
 
 #### `FeatureMode`
 
 | Value | Description |
 |-------|-------------|
-| `Translated` | Expands M selected states into 2.5M features via [x \| x^2 \| x\*x_antipodal]. Reduces NRMSE by 20-70% on standard benchmarks. Default for Linear/Ridge. |
+| `Translated` | Expands M selected states into 2.5M features via [x \| x^2 \| x\*x_antipodal]. Reduces NRMSE by 20-70% on standard benchmarks. Default for Ridge. |
 | `Raw` | Uses M selected states directly. Fewer features, faster computation, sufficient for simple tasks. |
 
 **Note:** When `ReadoutType::HCNN` is selected, the ESN constructor forces `FeatureMode::Raw` regardless of what you pass. HCNN operates on raw N-vertex state and has its own internal standardization — it never uses the translation layer.
@@ -346,7 +344,7 @@ The complete API. Owns the full Reservoir -> [Translation] -> Readout pipeline (
 ```cpp
 // Construction
 ESN<DIM>(cfg);                                              // Ridge + Translated (defaults)
-ESN<DIM>(cfg, ReadoutType::Linear, FeatureMode::Raw);       // explicit selection
+ESN<DIM>(cfg, ReadoutType::Ridge, FeatureMode::Raw);        // explicit selection
 ESN<DIM>(cfg, ReadoutType::HCNN);                           // HCNN (forces FeatureMode::Raw)
 
 // Reservoir driving
@@ -357,9 +355,7 @@ esn.ClearStates();                          // clear collected data (keeps reado
 // Training
 esn.Train(targets, train_size);                  // default parameters
 esn.Train(targets, train_size, lambda);          // Ridge: custom regularization
-esn.Train(targets, train_size, lr, epochs);      // Linear: custom SGD
 esn.Train(targets, train_size, cnn_cfg);         // HCNN: custom CNN config
-esn.TrainIncremental(targets, train_size, blend);// Linear: streaming update
 
 // Prediction & evaluation
 esn.PredictRaw(timestep);                   // scalar prediction (all readouts)
@@ -367,12 +363,12 @@ esn.PredictRaw(timestep, output);           // multi-output prediction (HCNN)
 esn.R2(targets, start, count);              // R-squared (averaged across outputs)
 esn.NRMSE(targets, start, count);           // normalized RMSE
 esn.Accuracy(labels, start, count);         // classification accuracy
-esn.NumOutputs();                           // 1 for Linear/Ridge, config for HCNN
+esn.NumOutputs();                           // 1 for Ridge, config for HCNN
 
 // State & feature access
 esn.States();                               // raw N-dim state buffer
 esn.SelectedStates();                       // stride-selected M-dim states
-esn.Features();                             // cached feature buffer (Linear/Ridge)
+esn.Features();                             // cached feature buffer (Ridge)
 esn.EnsureFeatures();                       // force feature computation
 esn.NumFeatures();                          // features per timestep (N for HCNN)
 esn.NumCollected();                         // timesteps recorded
@@ -457,18 +453,16 @@ void Train(const float* targets, size_t train_size);
 Trains the readout on the first `train_size` collected states using default parameters for the selected readout type.
 
 - **Ridge** (default): lambda = 1.0
-- **Linear**: lr = auto (1.0 / num_features), epochs = 200, weight_decay = 1e-4, lr_decay = 0.01
 - **HCNN**: delegates to the `Train(targets, train_size, CNNReadoutConfig{})` overload below with default-constructed config.
 
 **Parameters:**
-- `targets` -- Pointer to target values. Must have at least `train_size` elements (or `train_size * num_outputs` for HCNN multi-output regression). For Linear/Ridge regression: continuous float values. For Linear/Ridge classification: {-1.0, +1.0}. For HCNN classification: float class indices.
+- `targets` -- Pointer to target values. Must have at least `train_size` elements (or `train_size * num_outputs` for HCNN multi-output regression). For Ridge regression: continuous float values. For Ridge classification: {-1.0, +1.0}. For HCNN classification: float class indices.
 - `train_size` -- Number of samples to train on, starting from collected state index 0.
 
 **Notes:**
-- Triggers feature computation (`EnsureFeatures()`) if not already done (Linear/Ridge only; HCNN reads raw state directly).
+- Triggers feature computation (`EnsureFeatures()`) if not already done (Ridge only; HCNN reads raw state directly).
 - Features are standardized internally by the readout (zero mean, unit variance).
 - For Ridge, calling `Train()` again replaces the previous solution entirely.
-- For Linear, calling `Train()` again retrains from scratch (use `TrainIncremental()` for streaming updates).
 - For HCNN, calling `Train()` again rebuilds the network from scratch.
 
 ---
@@ -485,29 +479,6 @@ Trains the Ridge readout with a custom regularization strength. **Asserts that `
 - `targets` -- Target values, at least `train_size` elements.
 - `train_size` -- Number of training samples from state index 0.
 - `lambda` -- Regularization strength. Larger values increase bias but reduce overfitting. Typical range: 0.01 to 100.0. Default (in the overload above) is 1.0.
-
----
-
-##### `Train` (Linear with custom SGD parameters)
-
-```cpp
-void Train(const float* targets, size_t train_size,
-           float lr, size_t epochs,
-           float weight_decay = 1e-4f, float lr_decay = 0.01f);
-```
-
-Trains the Linear readout with custom SGD parameters. **Asserts that `readout_type` is `Linear`.**
-
-**Parameters:**
-- `targets` -- Target values, at least `train_size` elements.
-- `train_size` -- Number of training samples from state index 0.
-- `lr` -- Learning rate. Pass 0.0 for auto-selection (1.0 / num_features).
-- `epochs` -- Number of full passes over the training data.
-- `weight_decay` -- L2 regularization coefficient. Applied per-update to all weights (not bias). Default: 1e-4.
-- `lr_decay` -- Learning rate decay factor. Effective LR at epoch e = lr / (1 + lr_decay * e). Default: 0.01.
-
-**Notes:**
-- Uses pocket selection: the weight vector with the lowest training MSE across all epochs is retained as the final model.
 
 ---
 
@@ -535,35 +506,6 @@ Trains the HCNN readout on raw reservoir state, bypassing the translation layer.
 - Training is single-task — a second `Train()` call rebuilds the network from scratch with the new config.
 
 ---
-
-##### `TrainIncremental`
-
-```cpp
-void TrainIncremental(const float* targets, size_t train_size,
-                      float blend = 0.1f,
-                      float lr = 0.0f, size_t epochs = 200,
-                      float weight_decay = 1e-4f, float lr_decay = 0.01f);
-```
-
-Incrementally updates the Linear readout for streaming applications. **Asserts that `readout_type` is `Linear`.**
-
-Trains a fresh model on the provided data, then blends it with the existing model:
-
-```
-W_updated = (1 - blend) * W_existing + blend * W_new
-```
-
-Feature standardization statistics (mean, scale) are blended the same way, allowing the model to track distribution drift over time.
-
-**Parameters:**
-- `targets` -- Target values for the new data window.
-- `train_size` -- Number of new training samples.
-- `blend` -- Blending factor in (0.0, 1.0]. At 0.1 (default), the new model contributes 10% to the updated weights. At 1.0, fully replaces the old model (equivalent to `Train()`).
-- `lr`, `epochs`, `weight_decay`, `lr_decay` -- SGD parameters for training the fresh model (same semantics as `Train()`).
-
-**Notes:**
-- If no prior `Train()` has been called, delegates to `Train()` (blend is ignored).
-- Typical usage: call `Run()` with a new data window, then `TrainIncremental()` to adapt the readout without full retraining.
 
 ---
 

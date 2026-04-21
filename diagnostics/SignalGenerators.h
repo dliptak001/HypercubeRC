@@ -152,7 +152,7 @@ inline double ComputeNRMSE(const float* pred, const float* targets, size_t n)
 }
 
 /// @brief NRMSE from a trained readout (calls PredictRaw per sample).
-/// Works with LinearReadout, RidgeRegression, or any type with PredictRaw().
+/// Works with RidgeRegression, CNNReadout, or any type with PredictRaw().
 template <typename Readout>
 double ComputeNRMSE(const Readout& readout, const float* features,
                     const float* targets, size_t num_samples, size_t num_features)

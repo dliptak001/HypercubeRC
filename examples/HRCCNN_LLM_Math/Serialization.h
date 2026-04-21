@@ -26,6 +26,7 @@ struct SerialReadoutState
     double              bias = 0.0;
     std::vector<float>  feature_mean;
     std::vector<float>  feature_scale;
+    std::vector<double> target_mean;  ///< Per-output target centering (regression).
 };
 
 /// Full serialized model payload. `dim` is the hypercube dimension the
@@ -41,7 +42,7 @@ struct ModelFile
 };
 
 inline constexpr char        kMagic[8]      = {'H','C','N','N','L','L','M','M'};
-inline constexpr std::uint32_t kFormatVersion = 1;
+inline constexpr std::uint32_t kFormatVersion = 2;
 
 /// Write a ModelFile to disk. Returns true on success.
 bool SaveModelFile(const std::string& path, const ModelFile& mf);

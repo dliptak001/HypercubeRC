@@ -103,4 +103,4 @@ retraining needed.
 | FeatureMode::Raw enforcement     | Done      |
 | Auto-sized architecture from DIM | Done      |
 | DIM 5-16 support                 | Done      |
-| Incremental/streaming training   | Won't fix (by design -- use LinearReadout) |
+| Incremental/streaming training   | Won't fix (by design -- use HCNN online training for streaming) |

@@ -7,8 +7,7 @@
 /// side-by-side on the same reservoir for comparison:
 ///   - Ridge: closed-form on stride-selected features (cheap, well suited
 ///            to streaming since it can be re-primed quickly)
-///   - HCNN:  learned CNN on raw reservoir state (frozen after priming —
-///            HCNN is batch-only, not incremental)
+///   - HCNN:  learned CNN on raw reservoir state (frozen after priming)
 ///
 /// Both are trained once in Phase 1 and used frozen during Phase 2
 /// monitoring, so the apples-to-apples comparison is "which readout
@@ -299,11 +298,7 @@ int main(int argc, char* argv[])
     std::cout << "                Takes 1-2 windows to wash out after recovery.\n\n";
     std::cout << "  Freq shift:   RMSE spikes -- changed dynamics break the learned pattern.\n";
     std::cout << "                Slowest recovery: reservoir needs 1-2 extra windows to\n";
-    std::cout << "                wash out the altered frequency from its internal state.\n\n";
-    std::cout << "Note: HCNN is frozen after priming -- it does not support incremental\n";
-    std::cout << "updates, so it monitors in the same way as Ridge here.  For applications\n";
-    std::cout << "where slow drift must be tracked online, use LinearReadout with\n";
-    std::cout << "TrainIncremental instead (see docs/Readout.md).\n";
+    std::cout << "                wash out the altered frequency from its internal state.\n";
 
     return 0;
 }

@@ -101,7 +101,7 @@ static DimSurvey SurveyOne(const std::vector<unsigned>& seeds)
               << "  config=HRCCNNBaseline"
               << "  nl=" << cnn_base.num_layers
               << "  ch=" << cnn_base.conv_channels
-              << "  head=" << (cnn_base.readout_type == HCNNReadoutType::FLATTEN ? "FLAT" : "GAP")
+              << "  head=FLAT"
               << "  ep=" << cnn_base.epochs
               << "  bs=" << cnn_base.batch_size
               << "  lr=" << std::fixed << std::setprecision(5) << cnn_base.lr_max

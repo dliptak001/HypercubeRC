@@ -15,7 +15,7 @@
 /// produces low-dimensional chaos. Task: predict x(t+horizon) from reservoir states.
 ///
 /// Reports NRMSE for both raw (N) and full translation (2.5N) features.
-/// Readout type (Linear or Ridge) is configurable.
+/// Readout type (Ridge or HCNN) is configurable.
 /// Standard ESN NRMSE on MG h=1: 0.01-0.05 (lower is better).
 template <size_t DIM>
 class MackeyGlass
@@ -32,7 +32,7 @@ public:
         double pct_change_hcnn;  // % change raw → hcnn
     };
 
-    MackeyGlass(size_t prediction_horizon = 1, ReadoutType readout_type = ReadoutType::Linear,
+    MackeyGlass(size_t prediction_horizon = 1, ReadoutType readout_type = ReadoutType::Ridge,
                 const ReservoirConfig* config = nullptr, float output_fraction = 1.0f,
                 bool run_hcnn = false, const CNNReadoutConfig& hcnn_config = BenchmarkCNNConfig())
         : prediction_horizon_(prediction_horizon), readout_type_(readout_type),
@@ -159,7 +159,7 @@ public:
 private:
     void PrintHeader(size_t warmup, size_t collect) const
     {
-        const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "Linear";
+        const char* rn = (readout_type_ == ReadoutType::Ridge) ? "Ridge" : "HCNN";
         std::cout << "=== Mackey-Glass h=" << prediction_horizon_
                   << " (" << rn << " Readout, raw vs full translation) ===\n";
         std::cout << "Seed: " << DefaultSeed() << " | Alpha: 1.0 | Leak: 1.0"

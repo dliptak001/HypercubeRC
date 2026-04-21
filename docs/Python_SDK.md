@@ -117,7 +117,6 @@ For dim 9+, reduce `output_fraction` to control Ridge readout cost (e.g., 0.25 f
 | Value | Description |
 |-------|-------------|
 | `ReadoutType.Ridge` | Closed-form Ridge regression. Deterministic, fast, optimal for the given regularization. Default. |
-| `ReadoutType.Linear` | Online SGD with L2 decay and pocket selection. Supports streaming via `train_incremental()`. |
 
 #### `FeatureMode`
 
@@ -137,7 +136,7 @@ import hypercube_rc as hrc
 
 # Construction
 esn = hrc.ESN(dim=7)                                                    # defaults
-esn = hrc.ESN(dim=7, readout_type=hrc.ReadoutType.Linear,
+esn = hrc.ESN(dim=7, readout_type=hrc.ReadoutType.Ridge,
               feature_mode=hrc.FeatureMode.Raw)                          # explicit
 
 # High-level pipeline (recommended)
@@ -152,8 +151,6 @@ esn.run(inputs)                   # drive and collect states
 esn.clear_states()                # clear collected data (keeps readout)
 esn.train(targets)                # default parameters
 esn.train(targets, reg=0.1)   # Ridge: custom regularization
-esn.train(targets, lr=0.01, epochs=300)  # Linear: custom SGD
-esn.train_incremental(targets, blend=0.1)  # Linear: streaming update
 
 # Prediction & evaluation
 esn.predict_raw(timestep)           # single continuous prediction
@@ -289,9 +286,8 @@ Use this between independent sequences: clear the collected data, then `warmup()
 Train the readout using `len(targets)` training samples from the start of the collected states. The targets array must have at most `num_collected` elements.
 
 **Dispatch rules:**
-- No optional args → default parameters for the selected readout type
-- `reg` → Ridge with custom regularization (asserts Ridge readout)
-- `lr` → Linear SGD with custom parameters (asserts Linear readout)
+- No optional args → default parameters for Ridge
+- `reg` → Ridge with custom regularization
 
 **Parameters:**
 
@@ -299,45 +295,11 @@ Train the readout using `len(targets)` training samples from the start of the co
 |-----------|------|---------|-------------|
 | `targets` | `ndarray` | — | Target values, shape `(train_size,)`. Regression: continuous. Classification: {-1, +1}. |
 | `reg` | `float` | `None` | Ridge regularization strength. Typical range: 0.01-100. |
-| `lr` | `float` | `None` | Learning rate. 0.0 = auto (1/num_features). |
-| `epochs` | `int` | `None` | Number of SGD epochs. Default: 200 when using Linear. |
-| `weight_decay` | `float` | `1e-4` | L2 regularization for SGD. |
-| `lr_decay` | `float` | `0.01` | LR decay factor. Effective LR at epoch e = lr / (1 + lr_decay × e). |
 
 **Notes:**
 - Triggers feature computation if not already done.
-- `weight_decay` and `lr_decay` are only used when `lr` is provided (Linear SGD path). They are ignored for Ridge.
-- Raises `ValueError` if `reg` is passed to a Linear ESN, or `lr` to a Ridge ESN.
 - Raises `ValueError` if `len(targets) > num_collected`.
-- For Ridge, calling `train()` again replaces the previous solution entirely.
-- For Linear, calling `train()` again retrains from scratch (use `train_incremental()` for streaming).
-
----
-
-##### `train_incremental(targets, *, blend=0.1, lr=0.0, epochs=200, weight_decay=1e-4, lr_decay=0.01)`
-
-Incrementally update the Linear readout for streaming applications. Asserts Linear readout.
-
-Trains a fresh model on the provided data, then blends it with the existing model:
-
-```
-W_updated = (1 - blend) * W_existing + blend * W_new
-```
-
-**Parameters:**
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `targets` | `ndarray` | — | Target values for the new data window. |
-| `blend` | `float` | `0.1` | Blending factor in (0, 1]. At 1.0, fully replaces old model. |
-| `lr` | `float` | `0.0` | Learning rate. 0.0 = auto. |
-| `epochs` | `int` | `200` | SGD epochs for the fresh model. |
-| `weight_decay` | `float` | `1e-4` | L2 regularization. |
-| `lr_decay` | `float` | `0.01` | LR decay factor. |
-
-**Notes:**
-- If no prior `train()` has been called, delegates to `train()` (blend is ignored).
-- Typical: call `run()` with a new data window, then `train_incremental()` to adapt.
+- Calling `train()` again replaces the previous solution entirely.
 
 ---
 
@@ -489,7 +451,7 @@ signal = np.sin(np.linspace(0, 20 * np.pi, 2000)).astype(np.float32)
 
 The Python bindings validate arguments at the boundary and raise clear exceptions:
 
-- **`ValueError`** — invalid `dim` (not 5-12), `train_size > num_collected`, input array size not divisible by `num_inputs`, or readout type mismatch (e.g., passing `reg` to a Linear ESN, or `lr` to a Ridge ESN).
+- **`ValueError`** — invalid `dim` (not 5-12), `train_size > num_collected`, or input array size not divisible by `num_inputs`.
 - **`IndexError`** — `predict_raw(timestep)` with `timestep >= num_collected`, or `r2`/`nrmse`/`accuracy` with `start + count > num_collected`.
 
 These checks happen before calling into C++, so you get a Python traceback instead of a crash.

@@ -242,12 +242,9 @@ and feature details.
 The readout is the only trained component — a linear mapping from 2.5M translated
 features to the target signal:
 
-- **LinearReadout** — SGD with L2 decay and pocket selection. O(M) per sample.
-  Supports streaming via `TrainIncremental()` for real-time adaptation.
 - **RidgeRegression** — Closed-form optimal via normal equations. O(M³) solve.
-  Preferred for larger feature counts (DIM >= 8).
 
-Both standardize features internally to handle the mixed-scale translation output.
+Standardizes features internally to handle the mixed-scale translation output.
 
 See [docs/Readout.md](docs/Readout.md) for algorithm details, selection policy,
 and streaming mode.
@@ -257,7 +254,7 @@ and streaming mode.
 All results: per-DIM optimal seed (selected by 500-seed survey, see
 [docs/SeedSurvey.md](docs/SeedSurvey.md)), Ridge readout, full translation layer
 (2.5N features), general-purpose defaults (SR=0.90, input_scaling=0.02). MC uses
-Linear readout with raw features (the standard metric).
+Ridge readout with raw features (the standard metric).
 
 ### Mackey-Glass h=1 (chaotic time series, NRMSE, lower is better)
 
@@ -277,7 +274,7 @@ Linear readout with raw features (the standard metric).
 | 7   | 128  | 0.362 | 0.102       | 2-4x better                |
 | 8   | 256  | 0.368 | 0.062       | 3-6x better                |
 
-### Memory Capacity (sum of R², lags 1-50, Linear readout, raw features)
+### Memory Capacity (sum of R², lags 1-50, Ridge readout, raw features)
 
 | DIM | N    | MC    |
 |-----|------|-------|
@@ -368,7 +365,6 @@ HypercubeRC/
   docs/CPP_SDK.md        C++ consumer documentation for the static library
 
   readout/
-    LinearReadout.h/cpp   SGD readout with L2 decay and streaming mode
     RidgeRegression.h/cpp Closed-form optimal readout
 
   examples/
@@ -403,7 +399,7 @@ HypercubeRC/
 |----------|--------|
 | [docs/Reservoir.md](docs/Reservoir.md) | Hypercube graph, connectivity, leaky integrator, spectral radius, scale-invariant defaults |
 | [docs/TranslationLayer.md](docs/TranslationLayer.md) | Feature expansion rationale, antipodal pairing, stride-selected variant, standardization |
-| [docs/Readout.md](docs/Readout.md) | LinearReadout and RidgeRegression algorithms, streaming mode, selection policy |
+| [docs/Readout.md](docs/Readout.md) | RidgeRegression algorithm, feature standardization, selection policy |
 | [docs/ScaleInvariance.md](docs/ScaleInvariance.md) | Why SR=0.90 and input_scaling=0.02 work at every DIM — sweep data and vertex-transitivity analysis |
 | [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) | Hypercube vs random ESN: equivalent performance, different architectural tradeoffs |
 | [docs/SeedSurvey.md](docs/SeedSurvey.md) | Seed quality survey: Spearman rank correlation across SR, IS, and benchmarks (DIM 5-8) |

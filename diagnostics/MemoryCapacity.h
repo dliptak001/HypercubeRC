@@ -7,16 +7,16 @@
 #include <cstddef>
 #include "../ESN.h"
 
-/// @brief Diagnostic: Total memory capacity (raw features, LinearReadout).
+/// @brief Diagnostic: Total memory capacity (raw features, Ridge readout).
 ///
 /// Measures how many past inputs the reservoir can reconstruct via a linear
-/// readout. For each lag L in [1, max_lag], trains a LinearReadout to predict
+/// readout. For each lag L in [1, max_lag], trains a RidgeRegression to predict
 /// input[t - L] from raw reservoir states, and computes R². Total MC is the
 /// sum of R² over all lags.
 ///
 /// Higher is better. Theoretical maximum = N (number of neurons).
 ///
-/// This is the lightweight version — raw N features, LinearReadout only.
+/// This is the lightweight version — raw N features, Ridge only.
 /// See MemoryCapacityProfile for the full translation-layer version with
 /// per-lag breakdown.
 ///
@@ -61,7 +61,7 @@ public:
             cfg.seed = seed;
             if (output_fraction_ != 1.0f)
                 cfg.output_fraction = output_fraction_;
-            ESN<DIM> esn(cfg, ReadoutType::Linear, FeatureMode::Raw);
+            ESN<DIM> esn(cfg, ReadoutType::Ridge, FeatureMode::Raw);
             esn.Warmup(inputs.data(), warmup);
             esn.Run(inputs.data() + warmup, collect);
             esn.EnsureFeatures();
@@ -84,9 +84,9 @@ public:
                 size_t te = valid - tr;
                 if (tr == 0 || te == 0) continue;
 
-                LinearReadout lr;
-                lr.Train(vs, tgt.data(), tr, M);
-                double r2 = lr.R2(vs + tr * M, tgt.data() + tr, te);
+                RidgeRegression rr;
+                rr.Train(vs, tgt.data(), tr, M);
+                double r2 = rr.R2(vs + tr * M, tgt.data() + tr, te);
                 if (r2 > 0.0) mc += r2;
             }
             s_mc += mc;
@@ -134,7 +134,7 @@ public:
 private:
     void PrintHeader(size_t warmup, size_t collect) const
     {
-        std::cout << "=== Memory Capacity (LinearReadout, raw features) ===\n";
+        std::cout << "=== Memory Capacity (Ridge, raw features) ===\n";
         std::cout << "Seed: " << DefaultSeed() << " | Alpha: 1.0 | Leak: 1.0"
                   << " | SR: 0.90 | Input scaling: 0.02\n";
         std::cout << "Warmup: " << warmup << " | Collect: " << collect

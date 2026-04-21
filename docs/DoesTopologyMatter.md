@@ -31,7 +31,7 @@ The `RandomESN<DIM>` was a temporary class built for this experiment and
 has since been removed from the codebase — the experiment answered its
 question.
 
-**Readout:** LinearReadout (SGD), raw features (no translation layer).
+**Readout:** RidgeRegression, raw features (no translation layer).
 This isolates the topology's effect on the reservoir dynamics, without
 the translation layer's nonlinear features masking subtle differences.
 
@@ -157,14 +157,11 @@ in constrained environments.
 
 ### Note on readout type
 
-This experiment used LinearReadout (SGD) with raw features to isolate the
-topology's effect. The project now also supports Ridge regression (see
-`ReadoutType` in `ESN.h`), which provides the closed-form optimal readout.
-Ridge regression generally improves absolute NRMSE numbers (particularly
-for NARMA-10 and MG at higher DIM), but since the readout is independent
-of the reservoir topology, the relative comparison between hypercube and
-random would remain the same — both topologies produce equally rich state
-spaces for the readout to work with.
+This experiment used RidgeRegression with raw features to isolate the
+topology's effect. Since the readout is independent of the reservoir
+topology, the relative comparison between hypercube and random remains
+the same — both topologies produce equally rich state spaces for the
+readout to work with.
 
 ### Implications for the translation layer
 

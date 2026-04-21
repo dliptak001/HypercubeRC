@@ -253,7 +253,7 @@ the SR sweep results above show it does — but only modestly within the
 
 ## Memory Capacity SR Sweep
 
-All runs: Memory Capacity, Linear readout, IS=0.02, 500 seeds,
+All runs: Memory Capacity, Ridge readout, IS=0.02, 500 seeds,
 master RNG seed 12345. SR values: {0.80, 0.85, 0.90, 0.95, 1.00}.
 DIM 5-7 only (DIM 8 omitted due to runtime).
 

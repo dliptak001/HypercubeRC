@@ -232,18 +232,13 @@ washout time.
 
 ## A note on streaming and HCNN
 
-`CNNReadout` is **batch-only**. It does not expose a `TrainIncremental`
-method, and there is no cheap way to blend new training data into an
-existing network while preserving Adam's optimizer state. For
-applications where the model must adapt online to slow drift, use
-`LinearReadout` with `TrainIncremental` — see the streaming workflow
-section of `docs/Readout.md`.
+`CNNReadout` supports online training for streaming applications.
+For workloads that need to track drift, HCNN online training can
+adapt the model incrementally — see `docs/Readout.md` for details.
 
-HCNN is included here to show that its **frozen** prediction error is
-also a usable anomaly signal, and to make it easy to compare the two
-readouts' sensitivity profiles on identical reservoir dynamics. If you
-don't need that comparison and your workload genuinely needs to track
-drift, drop the HCNN path and stick with LinearReadout.
+HCNN is included here to show that its prediction error is a usable
+anomaly signal, and to make it easy to compare readout sensitivity
+profiles on identical reservoir dynamics.
 
 ## Build and run
 

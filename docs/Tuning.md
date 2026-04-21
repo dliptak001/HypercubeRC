@@ -28,10 +28,9 @@ defaults don't serve. Most users will only need to adjust `DIM`,
    - High-capacity research:  DIM 9-12  (512-4096 neurons)
 
 2. Pick readout
-   - DIM <= 7:   ReadoutType::Linear  (SGD regularizes well at small sizes)
-   - DIM >= 8:   ReadoutType::Ridge   (closed-form optimum dominates)
-   - DIM 7:      either works         (crossover zone)
-   - Streaming:  ReadoutType::Linear  (only option for TrainIncremental)
+   - DIM <= 8:   ReadoutType::Ridge   (closed-form optimum, fast and accurate)
+   - DIM 7+:     ReadoutType::HCNN    (when accuracy ceiling matters or classification)
+   - Streaming:  ReadoutType::HCNN    (supports online training for incremental adaptation)
 
 3. Pick feature mode
    - Most tasks:         FeatureMode::Translated  (20-70% lower NRMSE)
@@ -294,9 +293,8 @@ allocate memory).
    Going from 1.0 to 0.5 gives ~4x speedup with minimal accuracy loss.
 2. **Switch to Raw features.** 2.5x fewer features than Translated.
 3. **Reduce DIM.** If DIM 8 is too slow, DIM 7 may be sufficient.
-4. **Use Linear readout.** O(features * samples * epochs) vs.
-   O(features^2 * samples) for Ridge. Linear is faster when features
-   are large and samples are modest.
+4. **Use Ridge readout.** The closed-form solve is a single pass —
+   no epoch tuning needed.
 
 ### "Predictions are noisy / jittery"
 
@@ -318,11 +316,10 @@ allocate memory).
 
 ### "I'm building a streaming / anomaly detection system"
 
-1. **Use LinearReadout** (required for TrainIncremental).
+1. **Use HCNN online training** for incremental adaptation.
 2. **Set leak_rate to 0.2-0.4** for temporal smoothing.
 3. **Prime with a large batch** (500+ warmup, 18*N+ training samples).
-4. **Adapt with small blend** (0.05-0.1) for gradual drift.
-5. **Use ClearStates() between windows** -- it preserves the readout
+4. **Use ClearStates() between windows** -- it preserves the readout
    and reservoir state while freeing collected data.
 
 See [StreamingAnomaly example](../examples/StreamingAnomaly.md) for a

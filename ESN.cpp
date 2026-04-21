@@ -45,10 +45,8 @@ ESN<DIM>::ESN(const ReservoirConfig& cfg, ReadoutType readout_type, FeatureMode 
 
     if (readout_type_ == ReadoutType::HCNN)
         readout_ = CNNReadout{};
-    else if (readout_type_ == ReadoutType::Ridge)
-        readout_ = RidgeRegression{};
     else
-        readout_ = LinearReadout{};
+        readout_ = RidgeRegression{};
 }
 
 template <size_t DIM>
@@ -130,12 +128,8 @@ void ESN<DIM>::Train(const float* targets, size_t train_size)
     }
     EnsureFeatures();
     size_t nf = NumFeatures();
-    std::visit([&](auto& r) {
-        using R = std::decay_t<decltype(r)>;
-        if constexpr (!std::is_same_v<R, CNNReadout>) {
-            r.Train(features_.data(), targets, train_size, nf);
-        }
-    }, readout_);
+    std::get<RidgeRegression>(readout_).Train(
+        features_.data(), targets, train_size, nf);
 }
 
 template <size_t DIM>
@@ -145,18 +139,6 @@ void ESN<DIM>::Train(const float* targets, size_t train_size, double lambda)
     EnsureFeatures();
     std::get<RidgeRegression>(readout_).Train(
         features_.data(), targets, train_size, NumFeatures(), lambda);
-}
-
-template <size_t DIM>
-void ESN<DIM>::Train(const float* targets, size_t train_size,
-                     float lr, size_t epochs,
-                     float weight_decay, float lr_decay)
-{
-    assert(readout_type_ == ReadoutType::Linear);
-    EnsureFeatures();
-    std::get<LinearReadout>(readout_).Train(
-        features_.data(), targets, train_size, NumFeatures(),
-        lr, epochs, weight_decay, lr_decay);
 }
 
 template <size_t DIM>
@@ -178,19 +160,6 @@ void ESN<DIM>::Train(const float* targets, size_t train_size,
     auto sub = HCNNStates(0, train_size);
     std::get<CNNReadout>(readout_).Train(
         sub.data(), targets, train_size, EffectiveDIM(), config, hooks);
-}
-
-template <size_t DIM>
-void ESN<DIM>::TrainIncremental(const float* targets, size_t train_size,
-                                float blend,
-                                float lr, size_t epochs,
-                                float weight_decay, float lr_decay)
-{
-    assert(readout_type_ == ReadoutType::Linear);
-    EnsureFeatures();
-    std::get<LinearReadout>(readout_).TrainIncremental(
-        features_.data(), targets, train_size, NumFeatures(),
-        blend, lr, epochs, weight_decay, lr_decay);
 }
 
 template <size_t DIM>
@@ -234,6 +203,32 @@ void ESN<DIM>::TrainLiveBatch(const float* states, const int* targets,
 }
 
 template <size_t DIM>
+void ESN<DIM>::TrainLiveStepRegression(const float* target, float lr,
+                                       float weight_decay)
+{
+    assert(readout_type_ == ReadoutType::HCNN);
+    const float* sub = SubsampleIntoScratch(reservoir_->Outputs());
+    std::get<CNNReadout>(readout_).TrainOnlineStepRegression(
+        sub, target, lr, weight_decay);
+}
+
+template <size_t DIM>
+void ESN<DIM>::TrainLiveBatchRegression(const float* states, const float* targets,
+                                        size_t count, float lr, float weight_decay)
+{
+    assert(readout_type_ == ReadoutType::HCNN);
+    std::get<CNNReadout>(readout_).TrainOnlineBatchRegression(
+        states, targets, count, lr, weight_decay);
+}
+
+template <size_t DIM>
+void ESN<DIM>::ComputeTargetCentering(const float* targets, size_t num_samples)
+{
+    assert(readout_type_ == ReadoutType::HCNN);
+    std::get<CNNReadout>(readout_).ComputeTargetCentering(targets, num_samples);
+}
+
+template <size_t DIM>
 float ESN<DIM>::PredictRaw(size_t timestep) const
 {
     assert(timestep < num_collected_);
@@ -243,7 +238,7 @@ float ESN<DIM>::PredictRaw(size_t timestep) const
     EnsureFeatures();
     size_t nf = NumFeatures();
     const float* f = features_.data() + timestep * nf;
-    return std::visit([f](const auto& r) { return r.PredictRaw(f); }, readout_);
+    return std::get<RidgeRegression>(readout_).PredictRaw(f);
 }
 
 template <size_t DIM>
@@ -254,11 +249,10 @@ void ESN<DIM>::PredictRaw(size_t timestep, float* output) const
         std::get<CNNReadout>(readout_).PredictRaw(HCNNState(timestep), output);
         return;
     }
-    // Linear/Ridge: single scalar output.
     EnsureFeatures();
     size_t nf = NumFeatures();
     const float* f = features_.data() + timestep * nf;
-    output[0] = std::visit([f](const auto& r) { return r.PredictRaw(f); }, readout_);
+    output[0] = std::get<RidgeRegression>(readout_).PredictRaw(f);
 }
 
 template <size_t DIM>
@@ -270,13 +264,12 @@ float ESN<DIM>::PredictLiveRaw() const
         return std::get<CNNReadout>(readout_).PredictRaw(SubsampleIntoScratch(res_out));
     }
 
-    // Linear/Ridge: one-sample feature vector from the live state.
+    const auto& ridge = std::get<RidgeRegression>(readout_);
     if (feature_mode_ == FeatureMode::Translated) {
         auto feat = TranslationTransformSelected<DIM>(res_out, 1, output_stride_, num_output_verts_);
-        return std::visit([&](const auto& r) { return r.PredictRaw(feat.data()); }, readout_);
+        return ridge.PredictRaw(feat.data());
     }
-    const float* feat = SubsampleIntoScratch(res_out);
-    return std::visit([&](const auto& r) { return r.PredictRaw(feat); }, readout_);
+    return ridge.PredictRaw(SubsampleIntoScratch(res_out));
 }
 
 template <size_t DIM>
@@ -287,7 +280,7 @@ void ESN<DIM>::PredictLiveRaw(float* output) const
             SubsampleIntoScratch(reservoir_->Outputs()), output);
         return;
     }
-    // Linear/Ridge: single scalar output — delegate to scalar overload.
+    // Ridge: single scalar output — delegate to scalar overload.
     output[0] = PredictLiveRaw();
 }
 
@@ -303,7 +296,7 @@ double ESN<DIM>::R2(const float* targets, size_t start, size_t count) const
     EnsureFeatures();
     size_t nf = NumFeatures();
     const float* f = features_.data() + start * nf;
-    return std::visit([&](const auto& r) { return r.R2(f, targets + start, count); }, readout_);
+    return std::get<RidgeRegression>(readout_).R2(f, targets + start, count);
 }
 
 template <size_t DIM>
@@ -355,14 +348,13 @@ double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
     EnsureFeatures();
     size_t nf = NumFeatures();
     const float* f = features_.data() + start * nf;
-    std::visit([&](const auto& r) {
-        for (size_t s = 0; s < count; ++s) {
-            double y  = tgt[s];
-            double yh = r.PredictRaw(f + s * nf);
-            var += (y - mean) * (y - mean);
-            mse += (y - yh) * (y - yh);
-        }
-    }, readout_);
+    const auto& ridge = std::get<RidgeRegression>(readout_);
+    for (size_t s = 0; s < count; ++s) {
+        double y  = tgt[s];
+        double yh = ridge.PredictRaw(f + s * nf);
+        var += (y - mean) * (y - mean);
+        mse += (y - yh) * (y - yh);
+    }
     if (var < 1e-12) return std::numeric_limits<double>::infinity();
     return std::sqrt(mse / count) / std::sqrt(var / count);
 }
@@ -378,7 +370,7 @@ double ESN<DIM>::Accuracy(const float* labels, size_t start, size_t count) const
     EnsureFeatures();
     size_t nf = NumFeatures();
     const float* f = features_.data() + start * nf;
-    return std::visit([&](const auto& r) { return r.Accuracy(f, labels + start, count); }, readout_);
+    return std::get<RidgeRegression>(readout_).Accuracy(f, labels + start, count);
 }
 
 template <size_t DIM>
@@ -462,6 +454,9 @@ typename ESN<DIM>::ReadoutState ESN<DIM>::GetReadoutState() const
         s.feature_scale = r.FeatureScale();
         const auto& w = r.Weights();
         s.weights.assign(w.begin(), w.end());
+        if constexpr (std::is_same_v<std::decay_t<decltype(r)>, CNNReadout>) {
+            s.target_mean = r.TargetMean();
+        }
     }, readout_);
     return s;
 }
@@ -472,13 +467,12 @@ void ESN<DIM>::SetReadoutState(const ReadoutState& state)
     if (!state.is_trained) return;
     std::visit([&](auto& r) {
         using R = std::decay_t<decltype(r)>;
-        if constexpr (std::is_same_v<R, RidgeRegression> ||
-                      std::is_same_v<R, CNNReadout>) {
+        if constexpr (std::is_same_v<R, CNNReadout>) {
             r.SetState(state.weights, state.bias,
-                       state.feature_mean, state.feature_scale);
+                       state.feature_mean, state.feature_scale,
+                       state.target_mean);
         } else {
-            std::vector<float> fw(state.weights.begin(), state.weights.end());
-            r.SetState(std::move(fw), static_cast<float>(state.bias),
+            r.SetState(state.weights, state.bias,
                        state.feature_mean, state.feature_scale);
         }
     }, readout_);

@@ -86,12 +86,11 @@ The three feature classes have different scale distributions:
 | x²    | [0, 1] | Biased positive (always non-negative) |
 | x*x'  | [-1, +1] | Approximately symmetric around zero |
 
-Both LinearReadout and RidgeRegression standardize features internally
+RidgeRegression standardizes features internally
 (zero mean, unit variance) before training. This is critical: without
 standardization, the readout's regularization would penalize the
 feature groups unevenly based on their raw scale, leading to biased
-weight allocation. See the readout class briefs in `readout/LinearReadout.h`
-and `readout/RidgeRegression.h` for details. CNNReadout applies its
+weight allocation. See `readout/RidgeRegression.h` for details. CNNReadout applies its
 own per-vertex standardization to the raw state *before* the translation
 layer, so it never sees this feature-scale imbalance.
 

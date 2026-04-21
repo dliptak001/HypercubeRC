@@ -103,7 +103,6 @@ HCNNPreset MackeyGlass()
     {
         p.cnn.num_layers    = 1;
         p.cnn.conv_channels = 16;
-        p.cnn.readout_type  = HCNNReadoutType::FLATTEN;
         p.cnn.epochs        = 2000;
         p.cnn.batch_size    = 16;
         p.cnn.lr_max        = 0.0015f;
@@ -119,7 +118,6 @@ HCNNPreset MackeyGlass()
         // -10% vs Ridge translated.
         p.cnn.num_layers    = 1;
         p.cnn.conv_channels = 16;
-        p.cnn.readout_type  = HCNNReadoutType::FLATTEN;
         p.cnn.epochs        = 2000;
         p.cnn.batch_size    = 32;
         p.cnn.lr_max        = 0.0015f;
@@ -155,7 +153,6 @@ HCNNPreset MackeyGlass()
         // narrative and the full scouting frontier.
         p.cnn.num_layers    = 2;
         p.cnn.conv_channels = 24;
-        p.cnn.readout_type  = HCNNReadoutType::FLATTEN;
         p.cnn.epochs        = 2000;
         p.cnn.batch_size    = 64;
         p.cnn.lr_max        = 0.0015f;
@@ -202,7 +199,7 @@ HCNNPreset NARMA10()
 ///
 /// Minimum-capacity first-probe architecture, uniform across every DIM:
 ///
-///   nl=1, ch=8, FLATTEN, ep=2000, lr_max=0.0015, bs = 1 << (DIM-1)
+///   nl=1, ch=8, ep=2000, lr_max=0.0015, bs = 1 << (DIM-1)
 ///
 /// `ep=2000` is calibrated for **chaotic** signals (Mackey-Glass, NARMA).
 /// Smooth-signal tasks saturate at `ep=25`; do not reuse this config as-is
@@ -221,7 +218,6 @@ CNNReadoutConfig HRCCNNBaseline()
     CNNReadoutConfig cfg;
     cfg.num_layers    = 1;
     cfg.conv_channels = 8;
-    cfg.readout_type  = HCNNReadoutType::FLATTEN;
     cfg.epochs        = 2000;
     cfg.batch_size    = 1 << (DIM - 1);
     cfg.lr_max        = 0.0015f;

@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h>
+#include <cstring>
 #include "../ESN.h"
 
 namespace py = pybind11;
@@ -61,14 +62,16 @@ void bind_esn(py::module_& m, const char* name)
         .def("clear_states", &E::ClearStates,
              "Clear collected states and cached features. Keeps trained readout.")
 
-        // ── Training ──
+        .def("reset", &E::Reset,
+             "Zero reservoir state and clear collected states/features.")
+
+        .def("reset_reservoir_only", &E::ResetReservoirOnly,
+             "Zero only the reservoir state; collected states/features preserved.")
+
+        // ── Batch training ──
         .def("train", [](E& self,
                          py::array_t<float, py::array::c_style | py::array::forcecast> targets,
-                         py::object reg,
-                         py::object lr,
-                         py::object epochs,
-                         float weight_decay,
-                         float lr_decay) {
+                         py::object reg) {
             auto buf = targets.request();
             size_t n = static_cast<size_t>(buf.size);
             const float* ptr = static_cast<const float*>(buf.ptr);
@@ -78,59 +81,203 @@ void bind_esn(py::module_& m, const char* name)
                     "train_size (" + std::to_string(n) +
                     ") exceeds num_collected (" + std::to_string(self.NumCollected()) + ")");
 
-            if (!lr.is_none()) {
-                // Linear SGD path
-                if (self.GetReadoutType() != ReadoutType::Linear)
-                    throw std::invalid_argument(
-                        "lr/epochs parameters require ReadoutType.Linear");
-                float lr_val = lr.cast<float>();
-                size_t ep = epochs.is_none() ? 200 : epochs.cast<size_t>();
-                self.Train(ptr, n, lr_val, ep, weight_decay, lr_decay);
-            } else if (!reg.is_none()) {
-                // Ridge with custom lambda
+            if (!reg.is_none()) {
                 if (self.GetReadoutType() != ReadoutType::Ridge)
                     throw std::invalid_argument(
                         "reg parameter requires ReadoutType.Ridge");
                 self.Train(ptr, n, reg.cast<double>());
             } else {
-                // Default parameters
                 self.Train(ptr, n);
             }
         },
             py::arg("targets"),
-            py::arg("reg")     = py::none(),
-            py::arg("lr")          = py::none(),
-            py::arg("epochs")      = py::none(),
-            py::arg("weight_decay") = 1e-4f,
-            py::arg("lr_decay")    = 0.01f,
+            py::arg("reg") = py::none(),
             "Train the readout on collected states.\n\n"
             "Default: uses default parameters for the selected readout type.\n"
             "Ridge: pass reg for custom regularization.\n"
-            "Linear: pass lr (and optionally epochs) for custom SGD.")
+            "HCNN: use train_cnn() instead for full control over CNN config.")
 
-        .def("train_incremental", [](E& self,
-                                     py::array_t<float, py::array::c_style | py::array::forcecast> targets,
-                                     float blend, float lr, size_t epochs,
-                                     float weight_decay, float lr_decay) {
-            if (self.GetReadoutType() != ReadoutType::Linear)
-                throw std::invalid_argument(
-                    "train_incremental() requires ReadoutType.Linear");
+        .def("train_cnn", [](E& self,
+                             py::array_t<float, py::array::c_style | py::array::forcecast> targets,
+                             int num_outputs, const char* task,
+                             int num_layers, int conv_channels,
+                             int epochs_val, int batch_size,
+                             float lr_max, float lr_min_frac,
+                             int lr_decay_epochs, float weight_decay,
+                             unsigned seed_val, bool verbose) {
+            if (self.GetReadoutType() != ReadoutType::HCNN)
+                throw std::invalid_argument("train_cnn() requires ReadoutType.HCNN");
             auto buf = targets.request();
             size_t n = static_cast<size_t>(buf.size);
-            if (n > self.NumCollected())
+            const float* ptr = static_cast<const float*>(buf.ptr);
+
+            CNNReadoutConfig cfg;
+            cfg.num_outputs    = num_outputs;
+            cfg.task           = (std::strcmp(task, "classification") == 0)
+                                     ? HCNNTask::Classification
+                                     : HCNNTask::Regression;
+            cfg.num_layers     = num_layers;
+            cfg.conv_channels  = conv_channels;
+            cfg.epochs         = epochs_val;
+            cfg.batch_size     = batch_size;
+            cfg.lr_max         = lr_max;
+            cfg.lr_min_frac    = lr_min_frac;
+            cfg.lr_decay_epochs = lr_decay_epochs;
+            cfg.weight_decay   = weight_decay;
+            cfg.seed           = seed_val;
+            cfg.verbose        = verbose;
+
+            size_t train_size = (cfg.task == HCNNTask::Classification)
+                                    ? n
+                                    : n / static_cast<size_t>(cfg.num_outputs);
+            if (train_size > self.NumCollected())
                 throw std::invalid_argument(
-                    "train_size (" + std::to_string(n) +
-                    ") exceeds num_collected (" + std::to_string(self.NumCollected()) + ")");
-            self.TrainIncremental(static_cast<const float*>(buf.ptr),
-                                 n, blend, lr, epochs, weight_decay, lr_decay);
+                    "train_size exceeds num_collected ("
+                    + std::to_string(self.NumCollected()) + ")");
+
+            self.Train(ptr, train_size, cfg);
         },
             py::arg("targets"),
-            py::arg("blend")        = 0.1f,
-            py::arg("lr")           = 0.0f,
-            py::arg("epochs")       = 200,
-            py::arg("weight_decay") = 1e-4f,
-            py::arg("lr_decay")     = 0.01f,
-            "Incrementally update the Linear readout for streaming applications.")
+            py::arg("num_outputs")    = 1,
+            py::arg("task")           = "regression",
+            py::arg("num_layers")     = 0,
+            py::arg("conv_channels")  = 16,
+            py::arg("epochs")         = 200,
+            py::arg("batch_size")     = 32,
+            py::arg("lr_max")         = 0.005f,
+            py::arg("lr_min_frac")    = 0.1f,
+            py::arg("lr_decay_epochs") = 0,
+            py::arg("weight_decay")   = 0.0f,
+            py::arg("seed")           = 42u,
+            py::arg("verbose")        = false,
+            "Train HCNN readout on collected states.\n\n"
+            "task: 'regression' or 'classification'.\n"
+            "num_layers: Conv+Pool pairs (0 = auto from DIM).\n"
+            "See CNNReadoutConfig for parameter details.")
+
+        // ── Online (streaming) HCNN training ──
+        .def("init_online", [](E& self,
+                               py::array_t<float, py::array::c_style | py::array::forcecast> warmup_inputs,
+                               int num_outputs, const char* task,
+                               int num_layers, int conv_channels,
+                               int batch_size, float lr_max,
+                               unsigned seed_val) {
+            if (self.GetReadoutType() != ReadoutType::HCNN)
+                throw std::invalid_argument("init_online() requires ReadoutType.HCNN");
+            auto buf = warmup_inputs.request();
+            size_t total = static_cast<size_t>(buf.size);
+            size_t K = self.NumInputs();
+            if (total % K != 0)
+                throw std::invalid_argument("warmup_inputs size must be divisible by num_inputs");
+
+            CNNReadoutConfig cfg;
+            cfg.num_outputs   = num_outputs;
+            cfg.task          = (std::strcmp(task, "classification") == 0)
+                                    ? HCNNTask::Classification
+                                    : HCNNTask::Regression;
+            cfg.num_layers    = num_layers;
+            cfg.conv_channels = conv_channels;
+            cfg.batch_size    = batch_size;
+            cfg.lr_max        = lr_max;
+            cfg.seed          = seed_val;
+
+            self.InitOnline(static_cast<const float*>(buf.ptr), total / K, cfg);
+        },
+            py::arg("warmup_inputs"),
+            py::arg("num_outputs")   = 1,
+            py::arg("task")          = "classification",
+            py::arg("num_layers")    = 0,
+            py::arg("conv_channels") = 16,
+            py::arg("batch_size")    = 32,
+            py::arg("lr_max")        = 0.005f,
+            py::arg("seed")          = 42u,
+            "Initialize HCNN for online (streaming) training.\n\n"
+            "Runs warmup_inputs through reservoir, computes input standardization,\n"
+            "builds CNN architecture. Call before train_live_step/train_live_batch.")
+
+        .def("compute_target_centering", [](E& self,
+                                            py::array_t<float, py::array::c_style | py::array::forcecast> targets) {
+            if (self.GetReadoutType() != ReadoutType::HCNN)
+                throw std::invalid_argument("compute_target_centering() requires ReadoutType.HCNN");
+            auto buf = targets.request();
+            size_t total = static_cast<size_t>(buf.size);
+            size_t K = self.NumOutputs();
+            if (total % K != 0)
+                throw std::invalid_argument("targets size must be divisible by num_outputs");
+            self.ComputeTargetCentering(static_cast<const float*>(buf.ptr), total / K);
+        }, py::arg("targets"),
+           "Compute per-output target centering for online regression.\n"
+           "Call after init_online for regression tasks so that online training\n"
+           "centers targets and predictions are de-centered (matching batch behavior).")
+
+        .def("train_live_step", [](E& self, float target_class, float lr, float weight_decay) {
+            if (self.GetReadoutType() != ReadoutType::HCNN)
+                throw std::invalid_argument("train_live_step() requires ReadoutType.HCNN");
+            self.TrainLiveStep(target_class, lr, weight_decay);
+        },
+            py::arg("target_class"), py::arg("lr"), py::arg("weight_decay") = 0.0f,
+            "Single-step online classification training on the live reservoir state.")
+
+        .def("train_live_batch", [](E& self,
+                                    py::array_t<float, py::array::c_style | py::array::forcecast> states,
+                                    py::array_t<int, py::array::c_style | py::array::forcecast> targets,
+                                    float lr, float weight_decay) {
+            if (self.GetReadoutType() != ReadoutType::HCNN)
+                throw std::invalid_argument("train_live_batch() requires ReadoutType.HCNN");
+            auto sbuf = states.request();
+            auto tbuf = targets.request();
+            size_t count = static_cast<size_t>(tbuf.size);
+            self.TrainLiveBatch(static_cast<const float*>(sbuf.ptr),
+                                static_cast<const int*>(tbuf.ptr),
+                                count, lr, weight_decay);
+        },
+            py::arg("states"), py::arg("targets"),
+            py::arg("lr"), py::arg("weight_decay") = 0.0f,
+            "Mini-batch online classification training on pre-accumulated states.\n"
+            "states: (count, num_output_verts) float array from copy_live_state.\n"
+            "targets: (count,) int array of class indices.")
+
+        .def("train_live_step_regression", [](E& self,
+                                              py::array_t<float, py::array::c_style | py::array::forcecast> target,
+                                              float lr, float weight_decay) {
+            if (self.GetReadoutType() != ReadoutType::HCNN)
+                throw std::invalid_argument("train_live_step_regression() requires ReadoutType.HCNN");
+            auto buf = target.request();
+            self.TrainLiveStepRegression(static_cast<const float*>(buf.ptr), lr, weight_decay);
+        },
+            py::arg("target"), py::arg("lr"), py::arg("weight_decay") = 0.0f,
+            "Single-step online regression training on the live reservoir state.\n"
+            "target: (num_outputs,) float array.")
+
+        .def("train_live_batch_regression", [](E& self,
+                                               py::array_t<float, py::array::c_style | py::array::forcecast> states,
+                                               py::array_t<float, py::array::c_style | py::array::forcecast> targets,
+                                               float lr, float weight_decay) {
+            if (self.GetReadoutType() != ReadoutType::HCNN)
+                throw std::invalid_argument("train_live_batch_regression() requires ReadoutType.HCNN");
+            auto sbuf = states.request();
+            auto tbuf = targets.request();
+            size_t K = self.NumOutputs();
+            size_t count = static_cast<size_t>(tbuf.size) / K;
+            self.TrainLiveBatchRegression(static_cast<const float*>(sbuf.ptr),
+                                          static_cast<const float*>(tbuf.ptr),
+                                          count, lr, weight_decay);
+        },
+            py::arg("states"), py::arg("targets"),
+            py::arg("lr"), py::arg("weight_decay") = 0.0f,
+            "Mini-batch online regression training on pre-accumulated states.\n"
+            "states: (count, num_output_verts) float array from copy_live_state.\n"
+            "targets: (count, num_outputs) float array.")
+
+        .def("copy_live_state", [](const E& self) {
+            if (self.GetReadoutType() != ReadoutType::HCNN)
+                throw std::invalid_argument("copy_live_state() requires ReadoutType.HCNN");
+            size_t M = self.NumOutputVerts();
+            py::array_t<float> arr(M);
+            self.CopyLiveState(arr.mutable_data());
+            return arr;
+        }, "Copy the current subsampled reservoir state for external accumulation.\n"
+           "Returns a (num_output_verts,) float array.")
 
         // ── Prediction & evaluation ──
         .def("predict_raw", [](const E& self, size_t timestep) {
@@ -141,6 +288,18 @@ void bind_esn(py::module_& m, const char* name)
             return self.PredictRaw(timestep);
         }, py::arg("timestep"),
            "Return the raw continuous prediction for a collected timestep.")
+
+        .def("predict_live_raw", [](const E& self) {
+            return self.PredictLiveRaw();
+        }, "Predict from the reservoir's current live state (no cached states needed).\n"
+           "For autoregressive / streaming inference loops.")
+
+        .def("predict_live_raw_multi", [](const E& self) {
+            size_t K = self.NumOutputs();
+            py::array_t<float> arr(K);
+            self.PredictLiveRaw(arr.mutable_data());
+            return arr;
+        }, "Multi-output live predict: returns (num_outputs,) float array.")
 
         .def("r2", [](const E& self,
                       py::array_t<float, py::array::c_style | py::array::forcecast> targets,
@@ -197,6 +356,7 @@ void bind_esn(py::module_& m, const char* name)
         // ── Properties ──
         .def_property_readonly("num_collected", &E::NumCollected)
         .def_property_readonly("num_features", &E::NumFeatures)
+        .def_property_readonly("num_outputs", &E::NumOutputs)
         .def_property_readonly("output_fraction", &E::OutputFraction)
         .def_property_readonly("output_stride", &E::OutputStride)
         .def_property_readonly("num_output_verts", &E::NumOutputVerts)
@@ -223,6 +383,8 @@ void bind_esn(py::module_& m, const char* name)
                 {static_cast<py::ssize_t>(s.feature_mean.size())}, s.feature_mean.data());
             d["feature_scale"] = py::array_t<float>(
                 {static_cast<py::ssize_t>(s.feature_scale.size())}, s.feature_scale.data());
+            d["target_mean"] = py::array_t<double>(
+                {static_cast<py::ssize_t>(s.target_mean.size())}, s.target_mean.data());
             return d;
         })
         .def("_set_readout_state", [](E& self, py::dict d) {
@@ -235,8 +397,32 @@ void bind_esn(py::module_& m, const char* name)
             s.feature_mean.assign(fm.data(), fm.data() + fm.size());
             auto fs = d["feature_scale"].cast<py::array_t<float, py::array::c_style | py::array::forcecast>>();
             s.feature_scale.assign(fs.data(), fs.data() + fs.size());
+            if (d.contains("target_mean")) {
+                auto tm = d["target_mean"].cast<py::array_t<double, py::array::c_style | py::array::forcecast>>();
+                s.target_mean.assign(tm.data(), tm.data() + tm.size());
+            }
             self.SetReadoutState(s);
         })
+        .def("set_cnn_config", [](E& self,
+                                  int num_outputs, const char* task,
+                                  int num_layers, int conv_channels) {
+            if (self.GetReadoutType() != ReadoutType::HCNN)
+                throw std::invalid_argument("set_cnn_config() requires ReadoutType.HCNN");
+            CNNReadoutConfig cfg;
+            cfg.num_outputs   = num_outputs;
+            cfg.task          = (std::strcmp(task, "classification") == 0)
+                                    ? HCNNTask::Classification
+                                    : HCNNTask::Regression;
+            cfg.num_layers    = num_layers;
+            cfg.conv_channels = conv_channels;
+            self.SetCNNConfig(cfg);
+        },
+            py::arg("num_outputs")   = 1,
+            py::arg("task")          = "regression",
+            py::arg("num_layers")    = 0,
+            py::arg("conv_channels") = 16,
+            "Pre-set CNN architecture config before restoring weights via _set_readout_state.\n"
+            "Required when loading a saved HCNN model without training.")
         ;
 }
 
@@ -245,10 +431,10 @@ PYBIND11_MODULE(_core, m)
     m.doc() = "HypercubeRC: reservoir computing on Boolean hypercube graphs";
 
     py::enum_<ReadoutType>(m, "ReadoutType")
-        .value("Linear", ReadoutType::Linear,
-               "Online SGD with L2 decay and pocket selection. Supports streaming.")
         .value("Ridge", ReadoutType::Ridge,
-               "Closed-form Ridge regression. Deterministic, fast, optimal.");
+               "Closed-form Ridge regression. Deterministic, fast, optimal.")
+        .value("HCNN", ReadoutType::HCNN,
+               "HypercubeCNN-based learned readout. Operates on raw reservoir state.");
 
     py::enum_<FeatureMode>(m, "FeatureMode")
         .value("Raw", FeatureMode::Raw,

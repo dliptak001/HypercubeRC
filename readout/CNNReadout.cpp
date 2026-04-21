@@ -76,12 +76,9 @@ void CNNReadout::build_architecture()
     auto task_type = (config_.task == HCNNTask::Classification)
                          ? hcnn::TaskType::Classification
                          : hcnn::TaskType::Regression;
-    auto readout_type = (config_.readout_type == HCNNReadoutType::FLATTEN)
-                            ? hcnn::ReadoutType::FLATTEN
-                            : hcnn::ReadoutType::GAP;
     net_ = std::make_unique<hcnn::HCNN>(
         d, config_.num_outputs, /*input_channels=*/1,
-        readout_type, task_type);
+        task_type);
 
     int ch = config_.conv_channels;
     for (int i = 0; i < layers; ++i) {
@@ -304,6 +301,68 @@ void CNNReadout::TrainOnlineBatch(const float* states, const int* targets,
                      lr, /*momentum=*/0.0f, weight_decay);
 }
 
+void CNNReadout::TrainOnlineStepRegression(const float* state, const float* target,
+                                           float lr, float weight_decay)
+{
+    assert(trained_ && net_);
+    const size_t n = num_features_;
+    const size_t K = num_outputs_;
+
+    standardize(state, scratch_state_.data(), n);
+
+    const float* tgt = target;
+    if (!target_mean_.empty()) {
+        if (scratch_target_.size() < K)
+            scratch_target_.resize(K);
+        for (size_t k = 0; k < K; ++k)
+            scratch_target_[k] = target[k] - static_cast<float>(target_mean_[k]);
+        tgt = scratch_target_.data();
+    }
+
+    net_->TrainStepRegression(scratch_state_.data(), static_cast<int>(n), tgt,
+                              lr, /*momentum=*/0.0f, weight_decay);
+}
+
+void CNNReadout::TrainOnlineBatchRegression(const float* states, const float* targets,
+                                            size_t count, float lr, float weight_decay)
+{
+    assert(trained_ && net_);
+    const size_t n = num_features_;
+    const size_t K = num_outputs_;
+    const size_t total = count * n;
+
+    if (scratch_batch_.size() < total)
+        scratch_batch_.resize(total);
+
+    for (size_t i = 0; i < count; ++i)
+        standardize(states + i * n, scratch_batch_.data() + i * n, n);
+
+    const float* tgt = targets;
+    std::vector<float> centered;
+    if (!target_mean_.empty()) {
+        centered.resize(count * K);
+        for (size_t i = 0; i < count; ++i)
+            for (size_t k = 0; k < K; ++k)
+                centered[i * K + k] = targets[i * K + k] - static_cast<float>(target_mean_[k]);
+        tgt = centered.data();
+    }
+
+    net_->TrainBatchRegression(scratch_batch_.data(), static_cast<int>(n),
+                               tgt, static_cast<int>(count),
+                               lr, /*momentum=*/0.0f, weight_decay);
+}
+
+void CNNReadout::ComputeTargetCentering(const float* targets, size_t num_samples)
+{
+    const size_t K = num_outputs_;
+    target_mean_.assign(K, 0.0);
+    for (size_t s = 0; s < num_samples; ++s)
+        for (size_t k = 0; k < K; ++k)
+            target_mean_[k] += targets[s * K + k];
+    for (size_t k = 0; k < K; ++k)
+        target_mean_[k] /= static_cast<double>(num_samples);
+}
+
 // ---------------------------------------------------------------------------
 //  Prediction
 // ---------------------------------------------------------------------------
@@ -445,7 +504,8 @@ void CNNReadout::rebuild_from_blob()
 
 void CNNReadout::SetState(std::vector<double> weights, double bias,
                           std::vector<float> feature_mean,
-                          std::vector<float> feature_scale)
+                          std::vector<float> feature_scale,
+                          std::vector<double> target_mean)
 {
     weights_blob_ = std::move(weights);
     input_mean_ = std::move(feature_mean);
@@ -461,10 +521,11 @@ void CNNReadout::SetState(std::vector<double> weights, double bias,
             dim_ = d;
     }
 
-    // Restore target centering.  For multi-output the full vector should be
-    // preserved via the weights blob round-trip; the single bias parameter
-    // is a backward-compat fallback for scalar readouts.
-    if (target_mean_.empty())
+    // Restore target centering from the explicit vector if provided;
+    // fall back to scalar bias for backward compat with old checkpoints.
+    if (!target_mean.empty())
+        target_mean_ = std::move(target_mean);
+    else
         target_mean_.assign(num_outputs_, bias);
 
     if (!weights_blob_.empty()) {

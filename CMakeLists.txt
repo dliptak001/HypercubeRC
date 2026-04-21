@@ -19,7 +19,6 @@ set(PUBLIC_HEADERS
     ${PROJECT_SOURCE_DIR}/ESN.h
     ${PROJECT_SOURCE_DIR}/Reservoir.h
     ${PROJECT_SOURCE_DIR}/TranslationLayer.h
-    ${PROJECT_SOURCE_DIR}/readout/LinearReadout.h
     ${PROJECT_SOURCE_DIR}/readout/RidgeRegression.h
     ${PROJECT_SOURCE_DIR}/readout/CNNReadout.h
 )
@@ -72,12 +71,10 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     add_executable(HRCCNN_LM_Text ${HRCCNN_LM_TEXT_SOURCES})
     add_executable(StandaloneESNSweep diagnostics/StandaloneESNSweep.cpp)
     add_executable(SeedSurvey diagnostics/SeedSurvey.cpp)
-    add_executable(OptimizeHRCCNNForMG diagnostics/OptimizeHRCCNNForMG.cpp)
-    add_executable(HCNNProfileDriver diagnostics/HCNNProfileDriver.cpp)
     add_executable(CnnSeedSurvey diagnostics/CnnSeedSurvey.cpp)
     add_executable(CoreSmokeTest tests/CoreSmokeTest.cpp)
 
-    set(DIAGNOSTIC_TARGETS HypercubeRC StandaloneESNSweep SeedSurvey OptimizeHRCCNNForMG HCNNProfileDriver CnnSeedSurvey)
+    set(DIAGNOSTIC_TARGETS HypercubeRC StandaloneESNSweep SeedSurvey CnnSeedSurvey)
     set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly HRCCNN_LLM_Math HRCCNN_LM_Text)
     set(TEST_TARGETS CoreSmokeTest)
     set(EXE_TARGETS ${DIAGNOSTIC_TARGETS} ${EXAMPLE_TARGETS} ${TEST_TARGETS})

@@ -290,7 +290,7 @@ int RunTrain()
 
     std::cerr << "[train] CNN cfg: nl=" << cnn_cfg.num_layers
               << " ch=" << cnn_cfg.conv_channels
-              << " head=" << (cnn_cfg.readout_type == HCNNReadoutType::FLATTEN ? "FLATTEN" : "GAP")
+              << " head=FLATTEN"
               << " lr=" << cnn_cfg.lr_max
               << " epochs=" << cnn_cfg.epochs
               << " bs=" << cnn_cfg.batch_size
