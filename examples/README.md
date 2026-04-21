@@ -3,49 +3,51 @@
 ## BasicPrediction
 
 The minimal hello-world for HypercubeRC. Demonstrates the complete pipeline on a
-sine wave: create a reservoir, drive it with input, extract stride-selected output
-features, train a Ridge readout, and evaluate prediction quality.
+sine wave with **two readouts** side-by-side: Ridge regression on stride-selected
+features (fast, closed-form) and HypercubeCNN on raw state (learned convolutional
+readout). Both run on the same reservoir dynamics for an apples-to-apples comparison.
 
 This is the place to start if you want to understand how the pieces fit together.
 
 **What it shows:**
 - ESN construction with a single DIM template parameter
 - Warmup (wash out initial transients) and Run (collect states)
-- Output selection via `output_fraction` (10% of vertices in this example)
-- Raw vs translation feature extraction (command-line selectable)
+- Output selection via `output_fraction` (10% of vertices for Ridge, 100% for HCNN)
 - Ridge readout training and evaluation (R², NRMSE)
-- Sample-by-sample prediction output
+- HCNN readout training with cosine LR schedule
+- Side-by-side comparison of both readouts on the same reservoir
 
 **Expected output (abbreviated):**
 ```
-=== HypercubeRC: Basic Sine Wave Prediction ===
+=== HypercubeRC: Sine Wave Prediction ===
 
-Config: DIM=7  N=128  Outputs=15 (10%)  Features=15 (raw)  Readout=Ridge  Horizon=1
-
---- Results (test set: 600 samples) ---
+--- Ridge readout ---
+  Config: N=128  Outputs=15 (10%)  Features=15
   R2:    ~1.000000   (effectively perfect)
   NRMSE: ~0.000xxx   (sub-0.1% error)
 
---- Sample predictions ---
-  Step  |   Actual   |  Predicted  |    Error
-   1400 |  +0.xxxxx  |   +0.xxxxx  |  +0.00xxx
-   ...
+--- HCNN readout ---
+  Config: N=128  raw state (all vertices)
+  R2:    ~1.000000   (effectively perfect)
+  NRMSE: ~0.00xxxx
 ```
 
-**Make it yours:** Replace the sine wave generation (lines 52-54) with your own time
-series data. Keep values in [-1, 1] (the reservoir clamps out-of-range inputs silently).
-Adjust `DIM` to control reservoir size, and `warmup`/`collect` to match your data volume.
+**Make it yours:** Replace the sine wave generation with your own time series data.
+Keep values in [-1, 1] (the reservoir clamps out-of-range inputs silently). Adjust
+`DIM` to control reservoir size, and `warmup`/`collect` to match your data volume.
 
 ## SignalClassification
 
 Classify four waveform types — sine, square, triangle, chirp — from reservoir state
-alone. One-vs-rest Ridge readouts produce a confusion matrix and transition dynamics
-analysis showing how quickly the reservoir locks on after a waveform switch.
+alone. Two classifiers run side-by-side: Ridge (4 one-vs-rest readouts with argmax)
+and HCNN (single 4-class softmax readout). Both produce a confusion matrix and
+transition dynamics analysis showing how quickly the reservoir locks on after a
+waveform switch.
 
 **What it shows:**
 - Reservoir as a feature extractor for pattern recognition
-- One-vs-rest classification with argmax over readout scores
-- Translation features (2.5N) for improved class separability
+- Ridge: one-vs-rest classification with argmax over readout scores
+- HCNN: native multi-class classification (softmax + cross-entropy)
 - Confusion matrix and per-class accuracy breakdown
 - Transition dynamics: accuracy vs steps after waveform switch
 
@@ -53,15 +55,13 @@ analysis showing how quickly the reservoir locks on after a waveform switch.
 ```
 === HypercubeRC: Signal Classification ===
 
-Config: DIM=7  N=128  Outputs=128 (70%)  Features=320 (translation)  Readout=Ridge
+Ridge config: DIM=7  N=128  Outputs=128 (70%)  Features=128
 
-Overall accuracy: ~96.8%
+--- Ridge results ---
+Overall accuracy: ~97%
 
-Per-class breakdown:
-  Sine       100%  -- perfectly separable
-  Square     100%  -- perfectly separable
-  Triangle   ~99%  -- near-perfect
-  Chirp      ~88%  -- hardest class
+--- HCNN results ---
+Overall accuracy: ~97%
 
   Steps after switch  | Accuracy
   0 - 3               |  ~75%
@@ -89,17 +89,20 @@ separated by normal operation to show both detection and recovery.
 ```
 === HypercubeRC: Streaming Anomaly Detection ===
 
-Config: DIM=8  N=256  Outputs=128 (50%)  Features=128 (raw)  Readout=Ridge
+Config: DIM=8  N=256  Leak=0.3  Threshold=5x baseline
+  Ridge: Outputs=128 (50%)  Features=128
+  HCNN : Outputs=256 (100%)  raw state
 
 --- Phase 1: Learn what "normal" looks like ---
-  Baseline RMSE: ~0.0065
+  Baseline (prime test, RMSE):
+    Ridge: ~0.0068   HCNN: ~0.0064
 
 --- Phase 2: Monitor (30 windows of 200 steps) ---
-  Window | Condition   |     RMSE     | Ratio | Status
-      1  | Normal      |     ~0.006   |  ~1.0 |
-      6  | Noise spike |     ~0.07    | ~12.0 | ** ANOMALY **
-     14  | DC drift    |     ~0.43    | ~67.0 | ** ANOMALY **
-     22  | Freq shift  |     ~0.16    | ~25.0 | ** ANOMALY **
+  Window | Condition   |  Ridge RMSE / Ratio |  HCNN RMSE / Ratio | Status
+      1  | Normal      |  ~0.007 /  ~1.0     |  ~0.006 / ~1.0     |
+      6  | Noise spike |  ~0.080 / ~12.0     |  ~0.075 / ~12.0    | ** R+H **
+     14  | DC drift    |  ~0.50  / ~75.0     |  ~0.40  / ~62.0    | ** R+H **
+     22  | Freq shift  |  ~0.16  / ~24.0     |  ~0.13  / ~20.0    | ** R+H **
 ```
 
 **Make it yours:** Replace `GenerateProcess()` with your real sensor data feed.

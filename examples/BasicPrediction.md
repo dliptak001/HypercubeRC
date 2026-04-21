@@ -48,18 +48,15 @@ Input signal ──> Reservoir ────┤      15 vertices          (traine
    at each step. This is the training + test data — identical for both readouts.
 
 4. **Ridge path — select outputs** — The `output_fraction` parameter
-   (0.1 = 10%) stride-selects 15 of the 128 vertices as readout features.
-   Either use these 15 raw states directly, or apply the translation
-   layer to get 37 features (x, x², x*x'). Translation is overkill for
-   a sine wave but demonstrates the pipeline.
+   (0.1 = 10%) stride-selects 15 of the 128 vertices as raw readout
+   features. Ridge fits a linear mapping from these 15 states to the target.
 
 5. **HCNN path — raw state** — The CNN readout uses `output_fraction = 1.0`
-   and takes the full 128-vertex raw state as input. No feature selection,
-   no translation layer — the convolutional kernels discover their own
-   features on the hypercube.
+   and takes the full 128-vertex raw state as input. No feature selection
+   — the convolutional kernels discover their own features on the hypercube.
 
 6. **Train readouts** — Fit both readouts on the same 70% train split.
-   Ridge is a closed-form solve; HCNN runs 100 epochs of Adam with a
+   Ridge is a closed-form solve; HCNN runs 1100 epochs of Adam with a
    cosine learning-rate schedule.
 
 7. **Evaluate** — Measure R² and NRMSE on the held-out 30% test set for
@@ -74,7 +71,7 @@ for both readouts, so both hit near-perfect scores:
 
 - **Ridge** (10% output, 15 raw features): R² effectively 1.0, NRMSE
   in the sub-0.1% range.
-- **HCNN** (all 128 vertices, 3 Conv+Pool pairs, 100 epochs): R²
+- **HCNN** (all 128 vertices, 1 Conv+Pool pair, 1100 epochs): R²
   effectively 1.0, NRMSE within ~2× of Ridge.
 
 On a task this easy the two readouts are indistinguishable — both
@@ -125,13 +122,9 @@ detection sensitivity and classification accuracy.
   features). Try 1.0 for all 128 vertices, or 0.5 for half. The HCNN
   path always uses all vertices.
 
-- **HCNN epochs / learning rate.** The default is 100 epochs — a
-  sweet spot for this task. Training longer (e.g. 200) actually
-  *degrades* test NRMSE on sine: the reservoir state is low-rank
-  and the CNN starts fitting numerical noise. Dropping to 50 gets
-  most of the accuracy at half the time. Raising `cnn_cfg.lr_max`
-  above ~0.005 is risky — weights can diverge into denormals and
-  the CPU falls off fast-math paths.
+- **HCNN epochs / learning rate.** The default is 1100 epochs.
+  Raising `cnn_cfg.lr_max` above ~0.005 is risky — weights can
+  diverge into denormals and the CPU falls off fast-math paths.
 
 - **HCNN layer count.** Leave `cnn_cfg.num_layers = 0` for the
   DIM-auto default (`min(DIM-3, 4)` pairs). Override with a smaller
@@ -144,17 +137,10 @@ detection sensitivity and classification accuracy.
 - **Increase the horizon.** Change `horizon = 1` to 5 or 10. Multi-step
   prediction is harder because the reservoir must encode more history.
 
-- **Try raw vs. translation features (Ridge only).** Pass `raw` or
-  `translation` as a command-line argument. For a simple sine, raw
-  features are sufficient. The HCNN path always uses raw state
-  regardless of this flag.
-
 ## Build and run
 
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-./build/BasicPrediction              # default: raw features, Ridge readout
-./build/BasicPrediction raw          # explicit raw
-./build/BasicPrediction translation  # translation features (37 vs 15 raw)
+./build/BasicPrediction
 ```

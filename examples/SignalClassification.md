@@ -4,10 +4,14 @@
 
 The reservoir acts as a feature extractor for pattern recognition.
 Four waveform types — sine, square, triangle, chirp — are fed to the
-reservoir in alternating blocks. One-vs-rest linear readouts classify
-each timestep by waveform type using only the reservoir state, never
-the raw input. This is the only example that performs multi-class
-classification, with a confusion matrix and transition dynamics analysis.
+reservoir in alternating blocks. **Two classifiers** run side-by-side
+on the same reservoir for an apples-to-apples comparison:
+
+- **Ridge** — 4 one-vs-rest readouts (one per class), argmax prediction
+- **HCNN** — single multi-class readout (4 outputs, softmax over classes)
+
+This is the only example that performs multi-class classification, with
+a confusion matrix and transition dynamics analysis for each readout.
 
 ## Conceptual background
 
@@ -22,10 +26,15 @@ nonlinear dynamics and fading memory automatically transform the raw input
 into a high-dimensional representation where different signal classes become
 linearly separable.
 
-**One-vs-rest classification.** Since the readout is linear, multi-class
-classification uses the standard one-vs-rest decomposition: train one
-readout per class (target = +1 for that class, -1 for all others), then
-classify by taking the argmax over the four readout scores.
+**Ridge: one-vs-rest classification.** Since the Ridge readout is linear,
+multi-class classification uses the standard one-vs-rest decomposition:
+train one readout per class (target = +1 for that class, -1 for all
+others), then classify by taking the argmax over the four readout scores.
+
+**HCNN: native multi-class.** The CNN readout supports multi-class
+natively via `num_outputs=4` and `HCNNTask::Classification`, using
+softmax + cross-entropy loss. A single readout replaces the 4 one-vs-rest
+Ridge heads.
 
 ## The four waveforms
 
@@ -43,12 +52,15 @@ classes separable from reservoir state alone.
 ## The pipeline
 
 ```
-Waveform blocks ──> Reservoir ──> State features ──> 4 Readouts ──> argmax ──> Class
-  150 steps each     128 neurons   320 features       one-vs-rest             0,1,2,3
+                                ┌──> Ridge: 4 one-vs-rest ──> argmax ──> Class
+Waveform blocks ──> Reservoir ──┤    (70% output, 128 raw features)       0,1,2,3
+  150 steps each     128 neurons │
+                     (fixed)    └──> HCNN: 4-class softmax ──────────> Class
+                                     (all 128 vertices)                 0,1,2,3
 ```
 
-Note: `output_fraction=0.7` is set in the source, but at DIM=7 this rounds
-to stride=1, so all 128 vertices are used. Translation features: 320 (2.5N).
+Note: `output_fraction=0.7` is set for Ridge, but at DIM=7 this rounds
+to stride=1, so all 128 vertices are used. HCNN always uses all vertices.
 
 **Step by step:**
 
@@ -60,22 +72,20 @@ to stride=1, so all 128 vertices are used. Translation features: 320 (2.5N).
 
 3. **Collect** — 12,000 steps with per-step class labels.
 
-4. **Extract features** — Translation layer (2.5N = 320 features) is the
-   default and strongly recommended for classification. Raw features work
-   but accuracy drops significantly.
+4. **Train** — Ridge: four one-vs-rest readouts on 70% of the data
+   (closed-form solve). HCNN: single 4-class readout trained with Adam
+   and cosine LR schedule.
 
-5. **Train** — Four one-vs-rest Ridge readouts on 70% of the data.
-
-6. **Evaluate** — Confusion matrix, per-class accuracy, and transition
+5. **Evaluate** — Confusion matrix, per-class accuracy, and transition
    dynamics (how quickly the reservoir locks onto a new waveform after a
-   block switch).
+   block switch) — reported separately for each readout.
 
 ## What to expect
 
 ### Default configuration (leak_rate = 0.35)
 
-DIM=7, 128 neurons, output_fraction=0.7, translation features (320),
-Ridge readout, leak_rate=0.35:
+DIM=7, 128 neurons, output_fraction=0.7 (Ridge), raw features,
+leak_rate=0.35. Both readouts use the same reservoir seed and dynamics.
 
 | Class | Accuracy | Notes |
 |-------|----------|-------|
@@ -129,10 +139,6 @@ lock-on and slow neurons for better steady-state discrimination.
   is 0.7, which at DIM=7 yields stride=1 (all 128 vertices). Try lower
   values at larger DIM to reduce Ridge readout cost.
 
-- **Raw vs. translation.** Pass `raw` as a command-line argument.
-  Classification accuracy drops sharply — the nonlinear features from
-  the translation layer are critical for separating waveform classes.
-
 - **Change block size.** Shorter blocks (e.g., 50 steps) make classification
   harder because a larger fraction of each block is spent in the transition
   zone where the reservoir hasn't locked on yet.
@@ -142,7 +148,5 @@ lock-on and slow neurons for better steady-state discrimination.
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-./build/SignalClassification              # default: translation features
-./build/SignalClassification translation  # explicit translation
-./build/SignalClassification raw          # raw N features (lower accuracy)
+./build/SignalClassification
 ```

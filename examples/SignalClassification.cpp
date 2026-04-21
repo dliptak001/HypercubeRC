@@ -297,7 +297,7 @@ int main(int argc, char* argv[])
     // HRCCNN baseline architecture (nl=1, ch=8, FLAT, lr=0.0015,
     // bs=1<<(DIM-1)) with smooth-signal epochs: ep=25 is the saturation
     // point for the sinusoidal classification signals here.  The baseline's
-    // default ep=2000 is calibrated for chaotic MG/NARMA.
+    // default ep=2000 is calibrated for chaotic signals (NARMA).
     CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
     cnn_cfg.num_outputs = NUM_CLASSES;
     cnn_cfg.task        = HCNNTask::Classification;

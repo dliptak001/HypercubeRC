@@ -92,8 +92,8 @@ analysis.
 
 ## Seed Quality is Topology-Invariant
 
-A 500-seed survey across Mackey-Glass, NARMA-10, and Memory Capacity
-benchmarks (DIM 5-8, with library support through DIM 12) shows that the rank ordering of seeds by performance
+A 500-seed survey across NARMA-10 and Memory Capacity
+benchmarks (DIM 5-8, with library support through DIM 16) shows that the rank ordering of seeds by performance
 is stable across hyperparameter configurations. Seeds screened at one
 (SR, input_scaling) pair rank similarly at any other pair within the
 operating range.
@@ -110,11 +110,10 @@ collapses at SR=1.00 (edge of chaos), where NARMA-10 even goes negative
 at DIM 7 — low-SR and high-SR regimes select for opposite topological
 properties.
 
-**SR=0.90 is the best general-purpose default.** Mackey-Glass mean NRMSE
-reaches minimum near SR=0.90 at every DIM. Memory Capacity favors
+**SR=0.90 is the best general-purpose default.** Memory Capacity favors
 0.90-0.95, but the improvement from 0.90→0.95 comes with doubled
 variance. NARMA-10 hits minimum at 0.90-0.95. SR=0.90 gives near-optimal
-mean performance on all three tasks with the lowest variance and strongest
+mean performance on both tasks with the lowest variance and strongest
 rank correlation.
 
 The practical consequence: screen seeds once at SR=0.90, IS=0.02 and
@@ -185,12 +184,17 @@ cost by ~4x (quadratic in feature count). This decouples reservoir size from
 readout cost — the reservoir can grow to large DIM while readout computation
 remains fixed.
 
-## Three-Stage Pipeline
+## Pipeline
 
 ```
-Input ──> Reservoir ──> Output Selection ──> Translation ──> Readout ──> Output
-           N states      M vertices           2.5M features   trained
+Ridge path:
+Input ──> Reservoir ──> Output Selection ──> Ridge Readout ──> Output
+           N states      M vertices           trained
                          (stride-selected)
+
+HCNN path:
+Input ──> Reservoir ──────────────────────> CNNReadout ──> Output
+           N states                          trained
 ```
 
 ### Stage 1: Reservoir
@@ -216,59 +220,38 @@ full architectural details.
 
 ### Stage 2: Readout
 
-The readout is the only trained component — a mapping from M raw reservoir
+The readout is the only trained component — a mapping from raw reservoir
 states to the target signal:
 
-- **RidgeRegression** — Closed-form optimal via normal equations. O(M³) solve.
-- **HCNN** — HypercubeCNN learned convolutional readout. Discovers nonlinear
-  feature interactions directly from raw state.
+- **RidgeRegression** — Closed-form optimal via normal equations on M
+  stride-selected vertices. O(M³) solve.
+- **CNNReadout (HCNN)** — HypercubeCNN learned convolutional readout on all
+  N vertices. Discovers nonlinear feature interactions directly from raw state.
 
 See [docs/Readout.md](docs/Readout.md) for algorithm details, selection policy,
 and streaming mode.
 
 ## Headline Results
 
-All results: per-DIM optimal seed (selected by 500-seed survey),
-Ridge readout, full translation layer
-(2.5N features), general-purpose defaults (SR=0.90, input_scaling=0.02). MC uses
-Ridge readout with raw features (the standard metric).
-
-### Mackey-Glass h=1 (chaotic time series, NRMSE, lower is better)
-
-| DIM | N    | Raw    | Translation | vs standard ESN (0.01-0.05) |
-|-----|------|--------|-------------|------------------------------|
-| 5   | 32   | 0.0062 | 0.0044      | 2-11x better                 |
-| 6   | 64   | 0.0052 | 0.0037      | 3-14x better                 |
-| 7   | 128  | 0.0043 | 0.0032      | 3-16x better                 |
-| 8   | 256  | 0.0038 | 0.0024      | 4-21x better                 |
-
 ### NARMA-10 (nonlinear memory, NRMSE, lower is better)
 
-| DIM | N    | Raw   | Translation | vs standard ESN (0.2-0.4) |
-|-----|------|-------|-------------|---------------------------|
-| 5   | 32   | 0.315 | 0.265       | Within range               |
-| 6   | 64   | 0.360 | 0.152       | Beats range                |
-| 7   | 128  | 0.362 | 0.102       | 2-4x better                |
-| 8   | 256  | 0.368 | 0.062       | 3-6x better                |
+All results: per-DIM optimal seed (selected by 500-seed survey),
+general-purpose defaults (SR=0.90, input_scaling=0.02).
 
-### Memory Capacity (sum of R², lags 1-50, Ridge readout, raw features)
+| DIM | N    | Ridge  | HCNN   |
+|-----|------|--------|--------|
+| 5   | 32   | 0.315  | —      |
+| 6   | 64   | 0.360  | —      |
+| 7   | 128  | 0.362  | 0.354  |
+| 8   | 256  | 0.368  | 0.330  |
 
-| DIM | N    | MC    |
-|-----|------|-------|
-| 5   | 32   | 18.9  |
-| 6   | 64   | 27.5  |
-| 7   | 128  | 34.1  |
-| 8   | 256  | 43.4  |
-
-Full results with per-lag profiles in [diagnostics/](diagnostics/).
+Standard ESN baseline: 0.2-0.4 (Jaeger 2001, Rodan & Tino 2011).
 
 *Baseline ESN ranges from Jaeger (2001) "The 'echo state' approach to analysing
 and training recurrent neural networks" and Rodan & Tino (2011) "Minimum
 complexity echo state networks." These represent typical results for standard
 random sparse ESNs with comparable neuron counts and linear readout on raw
-features. HypercubeRC's benchmark advantage comes primarily from the translation
-layer and feature standardization, which are topology-independent enhancements
-(see [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md)).*
+features.*
 
 ## Related Work
 

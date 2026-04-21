@@ -101,7 +101,7 @@ int main(int argc, char* argv[])
     // HRCCNN baseline architecture (nl=1, ch=8, FLAT, lr=0.0015,
     // bs=1<<(DIM-1)) with smooth-signal epochs: ep=100 stays because
     // BasicPrediction is a sine wave (not chaotic), and the baseline's
-    // ep=2000 is calibrated for MG/NARMA.
+    // ep=2000 is calibrated for chaotic signals (NARMA).
     CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
     cnn_cfg.epochs      = 1100;
     cnn_cfg.lr_min_frac = 0.1f;

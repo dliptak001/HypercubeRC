@@ -222,10 +222,6 @@ washout time.
   You'll catch anomalies sooner but may see false positives during
   washout windows.
 
-- **Translation features (Ridge only).** Pass `translation` as a
-  command-line argument. The 2.5M feature set may change Ridge's
-  detection sensitivity. The HCNN path always uses raw state.
-
 - **Window size.** Smaller windows (e.g., 50 steps) make detection faster
   but noisier. Larger windows (e.g., 500) smooth the RMSE estimate but
   delay detection.
@@ -245,7 +241,5 @@ profiles on identical reservoir dynamics.
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
-./build/StreamingAnomaly              # default: raw features
-./build/StreamingAnomaly raw          # explicit raw
-./build/StreamingAnomaly translation  # translation 2.5M features
+./build/StreamingAnomaly
 ```
