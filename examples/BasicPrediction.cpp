@@ -103,7 +103,7 @@ int main(int argc, char* argv[])
     // BasicPrediction is a sine wave (not chaotic), and the baseline's
     // ep=2000 is calibrated for MG/NARMA.
     CNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
-    cnn_cfg.epochs      = 1000;
+    cnn_cfg.epochs      = 1100;
     cnn_cfg.lr_min_frac = 0.1f;
     cnn_cfg.seed        = 42007;
 
