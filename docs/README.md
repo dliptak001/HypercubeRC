@@ -12,13 +12,13 @@ order below.
 | Document | What you'll learn |
 |----------|-------------------|
 | [Reservoir.md](Reservoir.md) | How the hypercube reservoir works — topology, connectivity, timestep mechanics, spectral radius, scale-invariant defaults |
-| [Readout.md](Readout.md) | The two readout algorithms (Ridge vs. HCNN), when to use each, feature standardization, and streaming mode |
+| [HCNNReadout.md](HCNNReadout.md) | HCNN readout architecture, training algorithm, feature standardization, and streaming mode |
 
 These documents cover the full pipeline:
 
 ```
-Input ──> Reservoir (N states) ──> Output Selection (M vertices) ──> Readout ──> Prediction
-           [Reservoir.md]                                              [Readout.md]
+Input ──> Reservoir (N states) ──────────────────────> HCNNReadout ──> Prediction
+           [Reservoir.md]                               [HCNNReadout.md]
 ```
 
 ### 2. See it in action
@@ -60,4 +60,4 @@ in the header files are written for an educational audience:
 | `ESN.h` | `ESN<DIM>` — the pipeline wrapper (warmup, run, collect states) |
 | `Reservoir.h` | `Reservoir<DIM>` — the hypercube reservoir core |
 | `diagnostics/SignalGenerators.h` | `GenerateNARMA10()`, `ComputeNRMSE()` |
-| `readout/RidgeRegression.h` | `RidgeRegression` — closed-form optimal readout |
+| `readout/HCNNReadout.h` | `HCNNReadout` — learned convolutional readout |

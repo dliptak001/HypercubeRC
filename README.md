@@ -228,8 +228,8 @@ states to the target signal:
 - **HCNNReadout (HCNN)** — HypercubeCNN learned convolutional readout on all
   N vertices. Discovers nonlinear feature interactions directly from raw state.
 
-See [docs/Readout.md](docs/Readout.md) for algorithm details, selection policy,
-and streaming mode.
+See [docs/HCNNReadout.md](docs/HCNNReadout.md) for algorithm details,
+architecture auto-sizing, and streaming mode.
 
 ## Headline Results
 
@@ -333,7 +333,7 @@ HypercubeRC/
 
   docs/
     Reservoir.md          Reservoir architecture, connectivity, parameters
-    Readout.md            Readout algorithms, streaming mode, selection policy
+    HCNNReadout.md        HCNN readout: architecture, training, streaming mode  (in readout/)
     ScaleInvariance.md    Scale-invariant hyperparameters: evidence and analysis
     DoesTopologyMatter.md Hypercube vs random sparse ESN experiment
     Tuning.md             Practical tuning guide: parameters, scenarios, workflow
@@ -344,7 +344,7 @@ HypercubeRC/
 | Document | Covers |
 |----------|--------|
 | [docs/Reservoir.md](docs/Reservoir.md) | Hypercube graph, connectivity, leaky integrator, spectral radius, scale-invariant defaults |
-| [docs/Readout.md](docs/Readout.md) | RidgeRegression algorithm, feature standardization, selection policy |
+| [docs/HCNNReadout.md](docs/HCNNReadout.md) | HCNN readout architecture, training algorithm, streaming mode, ESN interface |
 | [docs/ScaleInvariance.md](docs/ScaleInvariance.md) | Why SR=0.90 and input_scaling=0.02 work at every DIM — sweep data and vertex-transitivity analysis |
 | [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) | Hypercube vs random ESN: equivalent performance, different architectural tradeoffs |
 | [docs/Tuning.md](docs/Tuning.md) | Practical tuning guide: parameter-by-parameter advice, common scenarios, workflow |

@@ -230,7 +230,7 @@ washout time.
 
 `HCNNReadout` supports online training for streaming applications.
 For workloads that need to track drift, HCNN online training can
-adapt the model incrementally — see `docs/Readout.md` for details.
+adapt the model incrementally — see `docs/HCNNReadout.md` for details.
 
 HCNN is included here to show that its prediction error is a usable
 anomaly signal, and to make it easy to compare readout sensitivity

@@ -322,7 +322,7 @@ struct HCNNReadoutConfig {
 | 7    | 3           | 16, 32, 64           | 4         |
 | 8-16 | 4 (cap)     | 16, 32, 64, 128      | DIM − 4   |
 
-See `readout/HCNNReadout.md` for the full design notes and benchmark data.
+See `docs/HCNNReadout.md` for the full design notes and benchmark data.
 
 ---
 

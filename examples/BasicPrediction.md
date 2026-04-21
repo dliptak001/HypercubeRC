@@ -127,7 +127,7 @@ detection sensitivity and classification accuracy.
   diverge into denormals and the CPU falls off fast-math paths.
 
 - **HCNN layer count.** Leave `cnn_cfg.num_layers = 0` for the
-  DIM-auto default (`min(DIM-3, 4)` pairs). Override with a smaller
+  DIM-auto default (`min(DIM-2, 2)` pairs). Override with a smaller
   count to see how depth affects fit on a trivial signal.
 
 - **Change the signal.** Replace `sin(0.1t)` with a more complex waveform

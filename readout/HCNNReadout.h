@@ -14,8 +14,8 @@ enum class HCNNTask { Regression, Classification };
 struct HCNNReadoutConfig {
     int num_outputs   = 1;        ///< Number of output neurons (classes or regression targets).
     HCNNTask task     = HCNNTask::Regression; ///< Task type.
-    int num_layers    = 0;        ///< Conv+Pool pairs. 0 = auto: min(DIM-3, 4). Channels double per layer.
-    int conv_channels = 16;       ///< Base convolution channels (doubles per layer: 16, 32, 64, 128).
+    int num_layers    = 0;        ///< Conv+Pool pairs. 0 = auto: min(DIM-2, 2). Channels double per layer.
+    int conv_channels = 16;       ///< Base convolution channels (doubles per layer: 16, 32).
     int epochs        = 200;      ///< Training epochs.
     int batch_size    = 32;       ///< Mini-batch size.
     float lr_max      = 0.005f;   ///< Peak learning rate (cosine annealing).
@@ -60,8 +60,8 @@ struct CNNTrainHooks {
 /// **Data path:** raw reservoir state -> input standardization ->
 ///   HypercubeCNN (Conv->Pool stack -> FLATTEN -> Linear) -> de-center -> output.
 ///
-/// **Architecture:** Auto-sized from DIM: min(DIM-3, 4) Conv+Pool pairs,
-///   channels doubling per layer (16, 32, 64, 128).  Override via
+/// **Architecture:** Auto-sized from DIM: min(DIM-2, 2) Conv+Pool pairs,
+///   channels doubling per layer (16, 32).  Override via
 ///   HCNNReadoutConfig::num_layers.
 ///
 /// **PIMPL:** The hcnn::HCNN object is held via unique_ptr behind a forward

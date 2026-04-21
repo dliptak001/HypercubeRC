@@ -66,10 +66,10 @@ void HCNNReadout::build_architecture()
     const size_t n = 1ULL << dim_;
     const int d = static_cast<int>(dim_);
 
-    // Auto-size layers: min(DIM - 2, 4), at least 1.
+    // Auto-size layers: min(DIM - 2, 2), at least 1.
     int layers = (config_.num_layers > 0)
                      ? config_.num_layers
-                     : std::min(d - 2, 4);
+                     : std::min(d - 2, 2);
     layers = std::max(layers, 1);
     assert(layers <= d - 2);
 
