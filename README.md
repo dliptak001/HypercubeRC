@@ -5,8 +5,10 @@
 
 A reservoir computer whose neurons live on a Boolean hypercube — a
 DIM-dimensional graph where each vertex is addressed by a DIM-bit binary
-index, with all connectivity defined by XOR operations on vertex indices.
-No adjacency list is stored. N = 2^DIM neurons, DIM 5-16.
+index, with all connectivity defined by XOR operations on those indices.
+**Neuron states are continuous real values** (driven through `tanh`
+nonlinearity); only the *addressing scheme* is binary. No adjacency list
+is stored. N = 2^DIM neurons, DIM 5-16.
 
 Licensed under the [Apache License 2.0](LICENSE).
 
