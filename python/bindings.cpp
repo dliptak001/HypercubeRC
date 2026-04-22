@@ -62,6 +62,28 @@ void bind_esn(py::module_& m, const char* name)
         .def("reset_reservoir_only", &E::ResetReservoirOnly,
              "Zero only the reservoir state; collected states preserved.")
 
+        .def("save_reservoir_state", [](const E& self) {
+            py::array_t<float> state(NN);
+            py::array_t<float> output(NN);
+            self.SaveReservoirState(state.mutable_data(), output.mutable_data());
+            return py::make_tuple(state, output);
+        }, "Snapshot the current reservoir state.\n"
+           "Returns (state, output) tuple of (N,) float arrays.")
+
+        .def("restore_reservoir_state", [](E& self,
+                py::array_t<float, py::array::c_style | py::array::forcecast> state,
+                py::array_t<float, py::array::c_style | py::array::forcecast> output) {
+            if (state.size() != static_cast<py::ssize_t>(NN) ||
+                output.size() != static_cast<py::ssize_t>(NN))
+                throw std::invalid_argument(
+                    "state and output must each have N=" + std::to_string(NN) + " elements");
+            self.RestoreReservoirState(
+                static_cast<const float*>(state.request().ptr),
+                static_cast<const float*>(output.request().ptr));
+        }, py::arg("state"), py::arg("output"),
+           "Restore a previously saved reservoir state.\n"
+           "state and output must be (N,) float arrays from save_reservoir_state.")
+
         // ── Batch training ──
         .def("train", [](E& self,
                          py::array_t<float, py::array::c_style | py::array::forcecast> targets) {

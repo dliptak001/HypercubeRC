@@ -64,7 +64,7 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp)
     file(GLOB HRCCNN_LM_TEXT_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/examples/HRCCNN_LM_Text/*.cpp)
     add_executable(HRCCNN_LM_Text ${HRCCNN_LM_TEXT_SOURCES})
-    add_executable(CoreSmokeTest tests/CoreSmokeTest.cpp)
+    add_executable(CoreSmokeTest diagnostics/CoreSmokeTest.cpp)
 
     set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly HRCCNN_LM_Text)
     set(TEST_TARGETS CoreSmokeTest)
