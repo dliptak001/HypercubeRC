@@ -16,7 +16,7 @@
 
 namespace hrccnn_lm_text::config {
 
-inline constexpr std::size_t kDIM = 13;
+inline constexpr std::size_t kDIM = 12;
 
 enum class Mode { Train, Eval, Infer };
 
@@ -34,9 +34,9 @@ struct TrainCfg
     std::string   output_path      = "C:\\temp\\text_v1.bin";
 
     // Seeds.
-    std::uint64_t gen_seed                 = 12345;   ///< master seed
+    std::uint64_t gen_seed                 = 123745;   ///< master seed
     bool          use_fixed_gen_seed       = true;
-    std::uint64_t reservoir_seed           = 0;
+    std::uint64_t reservoir_seed           = 34857575839839;
     bool          use_fixed_reservoir_seed = false;   ///< false → derive from gen_seed
 
     // Streaming training: drive the reservoir one char at a time,
@@ -45,26 +45,25 @@ struct TrainCfg
     std::size_t   warmup_chars       = 64;      ///< transient warmup before training
     std::size_t   warmup_train_chars = 32768;   ///< states collected for CNN standardization
     std::size_t   train_chars        = 900000;  ///< chars streamed for online CNN training
-    int           num_passes         = 3;       ///< corpus passes (reservoir continues, no reset)
+    int           num_passes         = 10;       ///< corpus passes (reservoir continues, no reset)
     std::size_t   val_chars          = 100000;  ///< chars streamed for evaluation
 
     // CNN architecture + training.
     float         spectral_radius   = 0.90f;
-    float         output_fraction   = 0.5f;
+    float         output_fraction   = 1.0f;
     int           cnn_num_layers    = 1;
-    int           cnn_conv_channels = 4;
+    int           cnn_conv_channels = 8;
     int           eval_every_chars  = 100000;  ///< streaming eval interval (0 = end only)
 
     // Gradient accumulation: reservoir streams one char at a time,
     // but CNN weight updates happen every mini_batch_size steps.
     // Parallelized across threads via HCNN::TrainBatch.
-    int           mini_batch_size   = 32;
+    int           mini_batch_size   = 512;
 
-    // LR schedule: constant within each pass, geometric decay across passes.
-    // lr = lr_max * lr_pass_decay^pass, floored at lr_max * lr_floor_frac.
-    float         lr_max            = 0.0015f;
-    float         lr_pass_decay     = 0.95f;   ///< lr multiplier per pass
-    float         lr_floor_frac     = 0.5f;    ///< lr never drops below lr_max * lr_floor_frac
+    // LR schedule: linear decay from lr_max to lr_max * lr_floor_frac
+    // across all mini-batch updates (all passes combined, no reset).
+    float         lr_max            = 0.0015f;  //= 0.0015f;
+    float         lr_floor_frac     = 0.5f;    ///< lr decays linearly to lr_max * lr_floor_frac
 
     // Verbosity / eval.
     bool          verbose           = true;
@@ -105,7 +104,7 @@ struct InferCfg
     std::string   prompt           = "To be, or not to be, ";
     std::size_t   num_chars        = 500;
     float         temperature      = 0.8f;   ///< 0 = greedy argmax
-    unsigned      seed             = 42;
+    unsigned      gen_seed         = 12345;  ///< sampling RNG seed
 };
 
 inline const InferCfg kInfer;

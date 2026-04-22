@@ -188,7 +188,6 @@ int RunTrain()
     // depends on T-1).  We accumulate K subsampled states into a local
     // buffer, then flush as a single parallel TrainBatch call.  This lets
     // HCNN's thread pool parallelize forward+backward across samples.
-    const float lr_max_floor = args.lr_max * args.lr_floor_frac;
     const std::size_t train_start_pos = corpus_pos;
 
     const int K = args.mini_batch_size;
@@ -200,18 +199,23 @@ int RunTrain()
     auto t_train_start = std::chrono::steady_clock::now();
     std::size_t global_step = 0;
 
+    const std::size_t total_batches =
+        (static_cast<std::size_t>(args.train_chars) * args.num_passes + K - 1) / K;
+    const float lr_min = args.lr_max * args.lr_floor_frac;
+    std::size_t batch_index = 0;
+    float step_lr = args.lr_max;
+
     std::cerr << "[train] mini_batch_size=" << K
               << " state_dim=" << state_dim
-              << " lr_schedule=constant_per_pass\n";
+              << " lr_schedule=linear_global"
+              << " lr_max=" << args.lr_max
+              << " lr_min=" << lr_min << "\n";
 
     for (int pass = 0; pass < args.num_passes; ++pass) {
         corpus_pos = train_start_pos;
 
-        float pass_lr = args.lr_max * std::pow(args.lr_pass_decay, pass);
-        if (pass_lr < lr_max_floor) pass_lr = lr_max_floor;
-
         std::cerr << "[train] pass " << (pass + 1) << "/" << args.num_passes
-                  << " lr=" << pass_lr << "\n";
+                  << " lr=" << step_lr << "\n";
 
         for (std::size_t i = 0; i < args.train_chars; ++i) {
             BipolarBits(corpus.text[corpus_pos], step_bits);
@@ -225,8 +229,12 @@ int RunTrain()
             ++global_step;
 
             if (accum_count == K) {
+                float frac = static_cast<float>(batch_index)
+                           / static_cast<float>(total_batches);
+                step_lr = args.lr_max - (args.lr_max - lr_min) * frac;
                 esn.TrainLiveBatch(accum_states.data(), accum_targets.data(),
-                                   K, pass_lr);
+                                   K, step_lr);
+                ++batch_index;
                 accum_count = 0;
             }
 
@@ -236,14 +244,18 @@ int RunTrain()
                 std::cerr << "[train] pass " << (pass + 1) << "/" << args.num_passes
                           << " step " << (i + 1) << "/" << args.train_chars
                           << " global=" << global_step
-                          << " lr=" << pass_lr
+                          << " lr=" << step_lr
                           << " elapsed=" << elapsed << "s\n";
             }
         }
 
         if (accum_count > 0) {
+            float frac = static_cast<float>(batch_index)
+                       / static_cast<float>(total_batches);
+            step_lr = args.lr_max - (args.lr_max - lr_min) * frac;
             esn.TrainLiveBatch(accum_states.data(), accum_targets.data(),
-                               accum_count, pass_lr);
+                               accum_count, step_lr);
+            ++batch_index;
             accum_count = 0;
         }
 

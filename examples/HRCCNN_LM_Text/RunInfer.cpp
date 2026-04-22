@@ -59,7 +59,7 @@ int RunInfer()
               << " gen_chars=" << args.num_chars << "\n";
 
     const std::string gen = GenerateText(esn, corpus, args.prompt, args.num_chars,
-                                           args.temperature, args.seed);
+                                           args.temperature, args.gen_seed);
     std::cout << args.prompt << gen;
     if (gen.empty() || gen.back() != '\n') std::cout << '\n';
     return 0;

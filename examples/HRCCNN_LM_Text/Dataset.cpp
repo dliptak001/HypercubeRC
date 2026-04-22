@@ -1,4 +1,5 @@
 #include "Dataset.h"
+#include "Config.h"
 
 #include <algorithm>
 #include <cmath>
@@ -69,10 +70,10 @@ std::string GenerateText(ESN<DIM>& esn,
     return out;
 }
 
-// DIM 13 only; add more if targeting other sizes.
-template void ResetAndPrime<13>(ESN<13>&, const std::string&);
-template std::string GenerateText<13>(ESN<13>&, const Corpus&,
-                                      const std::string&, std::size_t,
-                                      float, unsigned);
+using namespace hrccnn_lm_text::config;
+template void ResetAndPrime<kDIM>(ESN<kDIM>&, const std::string&);
+template std::string GenerateText<kDIM>(ESN<kDIM>&, const Corpus&,
+                                        const std::string&, std::size_t,
+                                        float, unsigned);
 
 }  // namespace hrccnn_lm_text

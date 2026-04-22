@@ -1,4 +1,5 @@
 #include "Serialization.h"
+#include "Config.h"
 #include "Corpus.h"
 
 #include <algorithm>
@@ -180,7 +181,8 @@ typename ESN<DIM>::ReadoutState FromSerial(const SerialReadoutState& s)
     return r;
 }
 
-template SerialReadoutState ToSerial<13>(const ESN<13>::ReadoutState&);
-template ESN<13>::ReadoutState FromSerial<13>(const SerialReadoutState&);
+using namespace hrccnn_lm_text::config;
+template SerialReadoutState ToSerial<kDIM>(const ESN<kDIM>::ReadoutState&);
+template ESN<kDIM>::ReadoutState FromSerial<kDIM>(const SerialReadoutState&);
 
 }  // namespace hrccnn_lm_text

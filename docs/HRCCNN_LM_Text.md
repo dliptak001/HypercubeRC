@@ -322,8 +322,9 @@ FLATTEN head**.
   the 8-bit input — which vertices are active tells you which
   character was seen. GAP averages this away. FLATTEN preserves it
   end-to-end.
-- **LR**: cosine decay from `lr_max=0.0015` over the full training
-  stream (900k steps).  Adam optimizer for stable online updates.
+- **LR**: linear decay from `lr_max=0.0015` to `lr_max * lr_floor_frac`
+  across all mini-batch updates (all passes, no reset).  Adam optimizer
+  for stable online updates.
 
 ### Eval diagnostics
 
@@ -364,10 +365,12 @@ Layout in the corpus:
   reservoir through these positions, collects states transiently to
   compute input standardization (per-vertex mean and 1/std), builds
   the CNN architecture, and frees the states buffer.
-- **Train stream** (900,000 chars): for each character, the reservoir
-  advances one step and `esn.TrainLiveStep()` applies one CNN gradient
-  update.  The target is the next character's class index.  LR follows
-  cosine decay from `lr_max` to `lr_min` over the full 900k steps.
+- **Train stream** (900,000 chars × num_passes): for each character,
+  the reservoir advances one step and mini-batch gradient updates are
+  applied every `mini_batch_size` steps.  The target is the next
+  character's class index.  LR decays linearly from `lr_max` to
+  `lr_max * lr_floor_frac` across all mini-batch updates (all passes
+  combined, no reset at pass boundaries).
 - **Val stream** (100,000 chars): the reservoir continues into the val
   region.  Each character is predicted via `esn.PredictLiveRaw()` and
   metrics (top-k accuracy, BPC, per-class confusion) are accumulated.
