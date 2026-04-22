@@ -78,8 +78,8 @@ Baseline (prime test, RMSE): ~0.0064   threshold ~0.032
   Window | Condition   |    RMSE     Ratio | Status
       1  | Normal      |  ~0.006     ~1.0  |
       6  | Noise spike |  ~0.075    ~12.0  | ** ANOMALY **
-     14  | DC drift    |  ~0.40     ~62.0  | ** ANOMALY **
-     22  | Freq shift  |  ~0.13     ~20.0  | ** ANOMALY **
+     14  | DC drift    |  ~0.58     ~92.0  | ** ANOMALY **
+     22  | Freq shift  |  ~0.32     ~50.0  | ** ANOMALY **
 ```
 
 **Make it yours:** Replace `GenerateProcess()` with your real sensor data feed.

@@ -92,14 +92,14 @@ Baseline RMSE: ~0.0064, threshold ~0.032.
   Window | Condition          |    RMSE     Ratio | Status
   -------+--------------------+-------------------+---------
   1-5      Normal               ~0.0065    ~1.0
-  6-8      Noise spike          ~0.075     ~11-12   ** ANOMALY **
-  9        Normal               ~0.0063    ~1.0     (instant recovery)
-  10-13    Normal               ~0.0064    ~1.0
-  14-16    DC drift             ~0.37-0.43 ~57-66   ** ANOMALY **
-  17       Normal               ~0.069     ~11      ** ANOMALY ** (slow washout)
+  6-8      Noise spike          ~0.075     ~12      ** ANOMALY **
+  9        Normal               ~0.0065    ~1.0     (instant recovery)
+  10-13    Normal               ~0.0065    ~1.0
+  14-16    DC drift             ~0.58-0.62 ~92-98   ** ANOMALY **
+  17       Normal               ~0.15      ~23      ** ANOMALY ** (slow washout)
   18-21    Normal               ~0.0065    ~1.0
-  22-24    Freq shift           ~0.11-0.17 ~17-27   ** ANOMALY **
-  25       Normal               ~0.12      ~19      ** ANOMALY ** (slow washout)
+  22-24    Freq shift           ~0.22-0.32 ~35-50   ** ANOMALY **
+  25       Normal               ~0.23      ~35      ** ANOMALY ** (slow washout)
   26-30    Normal               ~0.0065    ~1.0
 
 Flagged windows: 11  (9 anomaly + 2 washout)
@@ -113,8 +113,8 @@ Flagged windows: 11  (9 anomaly + 2 washout)
   effect on reservoir state — the next normal window is back to baseline.
 - **Slow washout after DC drift and freq shift.** The leaky integrator
   compounds the offset/dynamics change across steps, producing very high
-  ratios (57-66x for drift). The flip side: it takes 1-2 extra windows
-  to wash out after the anomaly ends.
+  ratios (~92-98x for drift, ~35-50x for freq shift). The flip side:
+  it takes 1-2 extra windows to wash out after the anomaly ends.
 - **The 2 washout windows are features, not false positives.** They
   confirm the reservoir hasn't fully stabilized yet — exactly what you
   want an alarm to signal.
@@ -126,8 +126,8 @@ Same configuration with leak_rate=1.0:
 | Anomaly | Ratio @ leak=0.3 | Ratio @ leak=1.0 |
 |---------|-------------------|-------------------|
 | Noise spike | ~12x | ~12x |
-| DC drift | ~57-66x | ~6.5x |
-| Freq shift | ~17-27x | ~8-10x |
+| DC drift | ~92-98x | ~6.5x |
+| Freq shift | ~35-50x | ~8-10x |
 | Baseline RMSE | 0.0064 | 0.0078 |
 
 ### Effect of leak rate on anomaly detection
@@ -140,11 +140,11 @@ on anomaly detection:
 offset only affects the current step's activation — the neuron fully
 replaces its state. With leak=0.3, 70% of the old (offset-contaminated)
 state persists, so the error compounds across steps. DC drift jumps
-from 6.5x to 57-66x, and frequency shifts from ~8x to ~17-27x.
+from 6.5x to ~92-98x, and frequency shifts from ~8x to ~35-50x.
 
 **Slower recovery after anomalies.** The sticky state takes longer to
 wash out. With leak=1.0, the first normal window after a freq shift
-shows 5.4x (borderline). With leak=0.3, it shows ~19x — the slow
+shows 5.4x (borderline). With leak=0.3, it shows ~35x — the slow
 neurons are still ringing from the altered dynamics.
 
 **Noise spike is unaffected.** Random noise averages out regardless

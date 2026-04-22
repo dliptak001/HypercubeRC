@@ -233,9 +233,9 @@ All results: per-DIM surveyed seed, HCNN baseline config
 | DIM | N    | HCNN NRMSE |
 |-----|------|------------|
 | 7   | 128  | 0.218      |
-| 8   | 256  | 0.152      |
-| 9   | 512  | 0.117      |
-| 10  | 1024 | 0.087      |
+| 8   | 256  | 0.153      |
+| 9   | 512  | 0.134      |
+| 10  | 1024 | 0.122      |
 
 Standard ESN baseline: 0.2-0.4 (Jaeger 2001, Rodan & Tino 2011).
 
