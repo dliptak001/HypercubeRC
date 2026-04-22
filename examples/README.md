@@ -43,11 +43,11 @@ reservoir locks on after a waveform switch.
 ```
 === HypercubeRC: Signal Classification ===
 
-Overall accuracy: ~97%
+Overall accuracy: ~99%
 
   Steps after switch  | Accuracy
-  0 - 3               |  ~75%
-  Entire block        |  ~97%
+  0 - 3               |  ~96%
+  Entire block        |  ~99%
 ```
 
 **Make it yours:** Add your own waveform types to `GenerateWaveform()` and increase

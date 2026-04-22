@@ -5,6 +5,7 @@
 #include <chrono>
 #include <iostream>
 #include <iomanip>
+#include <random>
 #include <vector>
 #include <cmath>
 #include "ESN.h"
@@ -34,7 +35,8 @@ static float GenerateWaveform(size_t waveform, float phase)
     }
 }
 
-static constexpr float CLASS_FREQ[NUM_CLASSES] = { 0.08f, 0.25f, 0.15f, 0.10f };
+static constexpr float CLASS_FREQ[NUM_CLASSES] = { 0.11f, 0.13f, 0.12f, 0.10f };
+static constexpr float NOISE_LEVEL = 0.15f;
 
 static double analyze_and_print(const std::vector<size_t>& predictions,
                                 const size_t* test_labels,
@@ -154,11 +156,11 @@ int main(int argc, char* argv[])
 {
     (void)argc; (void)argv;
 
-    constexpr size_t DIM = 7;
+    constexpr size_t DIM = 5;
     constexpr size_t N = 1ULL << DIM;
     constexpr size_t warmup = 300;
-    constexpr size_t block_size = 150;
-    constexpr size_t num_cycles = 20;
+    constexpr size_t block_size = 40;
+    constexpr size_t num_cycles = 75;
     constexpr size_t collect = block_size * NUM_CLASSES * num_cycles;
     constexpr double train_fraction = 0.7;
 
@@ -167,14 +169,20 @@ int main(int argc, char* argv[])
     std::cout << "Task: identify which waveform is currently being fed to the reservoir,\n";
     std::cout << "using only the reservoir's internal state -- not the input directly.\n\n";
     std::cout << "Four waveforms cycle in blocks of " << block_size << " steps:\n";
-    std::cout << "  Sine (f=0.08)  |  Square (f=0.25)  |  Triangle (f=0.15)  |  Chirp (sweep)\n";
-    std::cout << "Each has a distinct frequency and dynamic signature.\n\n";
+    std::cout << "  Sine (f=0.11)  |  Square (f=0.13)  |  Triangle (f=0.12)  |  Chirp (f=0.10)\n";
+    std::cout << "Frequencies are deliberately close; " << NOISE_LEVEL
+              << " noise forces classification by shape, not frequency.\n";
+    std::cout << "\nThe leak_rate is intentionally detuned to 0.65 to produce visible classification errors.\nChange leak_rate to 0.35 for PERFECT accuracy.\n\n";
 
     std::vector<float> signal(warmup + collect);
     std::vector<size_t> labels(collect);
 
+    std::mt19937_64 noise_rng(seed + 555);
+    std::uniform_real_distribution<float> noise(-NOISE_LEVEL, NOISE_LEVEL);
+
     for (size_t t = 0; t < warmup; ++t)
-        signal[t] = GenerateWaveform(0, CLASS_FREQ[0] * static_cast<float>(t));
+        signal[t] = GenerateWaveform(0, CLASS_FREQ[0] * static_cast<float>(t))
+                    + noise(noise_rng);
 
     for (size_t t = 0; t < collect; ++t)
     {
@@ -184,7 +192,7 @@ int main(int argc, char* argv[])
 
         labels[t] = waveform;
         float phase = CLASS_FREQ[waveform] * static_cast<float>(t_in_block);
-        signal[warmup + t] = GenerateWaveform(waveform, phase);
+        signal[warmup + t] = GenerateWaveform(waveform, phase) + noise(noise_rng);
     }
 
     size_t train_size = static_cast<size_t>(collect * train_fraction);
@@ -193,7 +201,7 @@ int main(int argc, char* argv[])
 
     ReservoirConfig cfg;
     cfg.seed = seed;
-    cfg.leak_rate = 0.35f;
+    cfg.leak_rate = 0.65f;
     cfg.output_fraction = 1.0f;
     ESN<DIM> esn(cfg);
 
@@ -210,7 +218,7 @@ int main(int argc, char* argv[])
     HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>().cnn;
     cnn_cfg.num_outputs = NUM_CLASSES;
     cnn_cfg.task        = HCNNTask::Classification;
-    cnn_cfg.epochs      = 100;
+    cnn_cfg.epochs      = 25;
 
     std::cout << "Training: " << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size
               << ", lr_max=" << std::setprecision(4) << cnn_cfg.lr_max

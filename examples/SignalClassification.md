@@ -32,28 +32,28 @@ softmax + cross-entropy loss. A single readout handles all four classes.
 
 | Waveform | Frequency | Character |
 |----------|-----------|-----------|
-| Sine | 0.08 (slow) | Smooth, continuous |
-| Square | 0.25 (fast) | Discontinuous jumps |
-| Triangle | 0.15 (medium) | Piecewise linear |
-| Chirp | 0.10 (sweep) | Accelerating frequency |
+| Sine | 0.11 | Smooth, continuous |
+| Square | 0.13 | Discontinuous jumps |
+| Triangle | 0.12 | Piecewise linear |
+| Chirp | 0.10 | Accelerating frequency |
 
-Each has a distinct frequency and dynamic signature. The reservoir's
-recent-input trajectory is completely different for each, making the
-classes separable from reservoir state alone.
+Frequencies are deliberately close together and 15% uniform noise is
+added to the signal. This forces the readout to classify by waveform
+shape rather than frequency alone.
 
 ## The pipeline
 
 ```
 Waveform blocks ──> Reservoir ──> HCNN: 4-class softmax ──> Class
-  150 steps each     128 neurons    (all 128 vertices)       0,1,2,3
+  40 steps each      32 neurons     (all 32 vertices)        0,1,2,3
                      (fixed)
 ```
 
 **Step by step:**
 
-1. **Generate signal** — 20 full cycles through all 4 waveforms (80 blocks
-   total, 150 steps each = 12,000 timesteps). Each block starts at phase 0
-   so the reservoir sees the full characteristic shape from the start.
+1. **Generate signal** — 75 full cycles through all 4 waveforms (300 blocks
+   total, 40 steps each = 12,000 timesteps). Each block starts at phase 0.
+   Uniform noise in [-0.15, +0.15] is added to every sample.
 
 2. **Warmup** — 300 steps of sine to wash out initial conditions.
 
@@ -68,62 +68,72 @@ Waveform blocks ──> Reservoir ──> HCNN: 4-class softmax ──> Class
 
 ## What to expect
 
-### Default configuration (leak_rate = 0.35)
+### Default configuration
 
-DIM=7, 128 neurons, leak_rate=0.35, all vertices used by HCNN.
+DIM=5, 32 neurons, leak_rate=0.65, all vertices used by HCNN.
+The leak rate is intentionally detuned from the optimal 0.35 to produce
+visible classification errors — at 0.35 the readout achieves 100%.
+Close frequencies + noise + short blocks + high leak rate make this
+a non-trivial classification challenge.
+
+**Overall accuracy: ~98.9%**
 
 | Class | Accuracy | Notes |
 |-------|----------|-------|
-| Sine | 99.3% | Near-perfect |
-| Square | 100% | Perfectly separable |
-| Triangle | 98.7% | Near-perfect |
-| Chirp | 92.7% | Confused with Square 3% and Triangle 4% |
+| Sine | 98.8% | Slight confusion with square (0.9%) |
+| Square | 99.4% | Near-perfect |
+| Triangle | 99.8% | Near-perfect |
+| Chirp | 97.8% | Hardest class — confused with triangle (1.2%) and sine (0.9%) |
 
-**Overall accuracy: 97.7%**
+Chirp is the hardest class because its accelerating frequency starts
+slowly, resembling both sine and triangle in the early part of each
+block before the sweep becomes distinctive.
 
-Transition lock-on:
+### Transition lock-on
 
 | Steps after switch | Accuracy |
 |--------------------|----------|
-| 0-3 | 50.0% |
-| 0-5 | 60.0% |
-| 0-10 | 77.5% |
-| 0-20 | 88.8% |
-| Entire block | 97.7% |
+| 0-3 | 95.9% |
+| 0-5 | 97.6% |
+| 0-10 | 98.7% |
+| 0-20 | 98.7% |
+| Entire block | 98.9% |
+
+The reservoir needs ~5 steps to lock onto a new waveform after a block
+transition. At leak_rate=0.65, neurons retain 35% of their previous
+state, so old waveform dynamics persist briefly into the new block.
 
 ### Effect of leak rate on classification
 
 The leak rate controls the tradeoff between classification accuracy and
 transition agility.
 
-**Better chirp separation at lower leak rates.** Chirp is the hardest
-class because it starts at a low frequency similar to sine's 0.08. With
-a lower leak rate, the neurons retain recent frequency history, so the
-readout can distinguish chirp's accelerating sweep from sine's constant
-frequency.
+**Lower leak rates (0.3-0.5):** Neurons retain more history, improving
+steady-state accuracy but slowing lock-on after transitions. Better for
+long blocks where classification accuracy matters more than speed.
 
-**Slower lock-on after transitions.** When the waveform switches, the
-leaky neurons retain state from the previous signal. Lower leak rates
-mean old state persists longer — lock-on starts at 50% and climbs through
-77.5% by step 10 as the new signal gradually overwrites the old.
-
-**The tradeoff is task-dependent.** For applications where classification
-accuracy matters more than transition speed (long blocks, stable signals),
-lower leak rates win. For applications where rapid switching is critical
-(short blocks, fast-changing inputs), higher leak rates are better.
+**Higher leak rates (0.7-1.0):** Faster lock-on but less temporal context.
+Better for short blocks or fast-changing inputs.
 
 ## Things to try
 
-- **Leak rate.** Set `cfg.leak_rate` in the source. The default for this
-  example is 0.35. Try 1.0 (instant lock-on, lower accuracy) or 0.2
-  (higher accuracy, slower transitions).
+- **Leak rate.** Set `cfg.leak_rate` in the source. The default is 0.65.
+  Try 0.3 (slower transitions, potentially higher steady-state accuracy)
+  or 1.0 (instant lock-on, less context).
 
-- **Change block size.** Shorter blocks (e.g., 50 steps) make classification
-  harder because a larger fraction of each block is spent in the transition
-  zone where the reservoir hasn't locked on yet.
+- **Block size.** The default is 40 steps. Try 150 for an easier task
+  (more context per block) or 20 for a harder one (transition zone
+  dominates each block).
 
-- **HCNN epochs.** Default is 100 — this task saturates fast. Try 25 to
-  verify saturation, or 200 to confirm no further gain.
+- **Noise level.** `NOISE_LEVEL` is 0.15. Raise to 0.25+ for a harder
+  task, or remove noise entirely to see how much it affects accuracy.
+
+- **DIM.** The default is DIM=5 (32 neurons). Try DIM=7 (128 neurons)
+  for near-perfect results, showing how reservoir capacity affects
+  classification.
+
+- **HCNN epochs.** Default is 25. Try 100 for higher accuracy, or 5
+  to see undertrained behavior.
 
 ## Build and run
 
