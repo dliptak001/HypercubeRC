@@ -330,6 +330,12 @@ std::vector<float> ESN<DIM>::HCNNStates(size_t start, size_t count) const
     return buf;
 }
 
+template <size_t DIM>
+std::vector<float> ESN<DIM>::SelectedStates() const
+{
+    return HCNNStates(0, num_collected_);
+}
+
 // Explicit template instantiations (DIM 5-16)
 template class ESN<5>;
 template class ESN<6>;

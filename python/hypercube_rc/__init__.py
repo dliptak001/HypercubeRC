@@ -22,6 +22,7 @@ import numpy as np
 
 from ._core import (
     _ESN5, _ESN6, _ESN7, _ESN8, _ESN9, _ESN10, _ESN11, _ESN12,
+    _ESN13, _ESN14, _ESN15, _ESN16,
 )
 
 __version__ = "0.2.0"
@@ -30,6 +31,7 @@ __all__ = ["ESN"]
 _ESN_CLASSES = {
     5: _ESN5, 6: _ESN6, 7: _ESN7, 8: _ESN8,
     9: _ESN9, 10: _ESN10, 11: _ESN11, 12: _ESN12,
+    13: _ESN13, 14: _ESN14, 15: _ESN15, 16: _ESN16,
 }
 
 

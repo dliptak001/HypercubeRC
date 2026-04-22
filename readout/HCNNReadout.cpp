@@ -338,13 +338,14 @@ void HCNNReadout::TrainOnlineBatchRegression(const float* states, const float* t
         standardize(states + i * n, scratch_batch_.data() + i * n, n);
 
     const float* tgt = targets;
-    std::vector<float> centered;
     if (!target_mean_.empty()) {
-        centered.resize(count * K);
+        const size_t tgt_total = count * K;
+        if (scratch_centered_batch_.size() < tgt_total)
+            scratch_centered_batch_.resize(tgt_total);
         for (size_t i = 0; i < count; ++i)
             for (size_t k = 0; k < K; ++k)
-                centered[i * K + k] = targets[i * K + k] - static_cast<float>(target_mean_[k]);
-        tgt = centered.data();
+                scratch_centered_batch_[i * K + k] = targets[i * K + k] - static_cast<float>(target_mean_[k]);
+        tgt = scratch_centered_batch_.data();
     }
 
     net_->TrainBatchRegression(scratch_batch_.data(), static_cast<int>(n),

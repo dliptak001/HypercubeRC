@@ -399,4 +399,8 @@ PYBIND11_MODULE(_core, m)
     bind_esn<10>(m, "_ESN10");
     bind_esn<11>(m, "_ESN11");
     bind_esn<12>(m, "_ESN12");
+    bind_esn<13>(m, "_ESN13");
+    bind_esn<14>(m, "_ESN14");
+    bind_esn<15>(m, "_ESN15");
+    bind_esn<16>(m, "_ESN16");
 }

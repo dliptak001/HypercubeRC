@@ -315,12 +315,9 @@ struct HCNNReadoutConfig {
 
 **Architecture auto-sizing table:**
 
-| DIM  | Auto layers | Channels             | Final DIM |
-|------|-------------|----------------------|-----------|
-| 5    | 1           | 16                   | 4         |
-| 6    | 2           | 16, 32               | 4         |
-| 7    | 3           | 16, 32, 64           | 4         |
-| 8-16 | 4 (cap)     | 16, 32, 64, 128      | DIM − 4   |
+| DIM  | Auto layers | Channels | Final DIM |
+|------|-------------|----------|-----------|
+| 5-16 | 2 (cap)     | 16, 32   | DIM − 2   |
 
 See `docs/HCNNReadout.md` for the full design notes and benchmark data.
 

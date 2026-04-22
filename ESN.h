@@ -73,8 +73,18 @@ public:
     [[nodiscard]] float PredictLiveRaw() const;
     void PredictLiveRaw(float* output) const;
 
+    /// @brief R-squared on collected timesteps [start, start+count).
+    /// @param targets  Must span timesteps [0, start+count): for regression,
+    ///                 (start+count)*num_outputs floats (row-major); for
+    ///                 classification, (start+count) floats.  The method
+    ///                 indexes from targets[start*num_outputs].
     [[nodiscard]] double R2(const float* targets, size_t start, size_t count) const;
+
+    /// @param targets  Same layout contract as R2.
     [[nodiscard]] double NRMSE(const float* targets, size_t start, size_t count) const;
+
+    /// @param labels  Must span timesteps [0, start+count): (start+count)
+    ///               floats (class indices).  Indexed from labels[start].
     [[nodiscard]] double Accuracy(const float* labels, size_t start, size_t count) const;
 
     [[nodiscard]] size_t NumOutputs() const;

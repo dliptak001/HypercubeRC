@@ -208,8 +208,9 @@ private:
     mutable std::vector<float> scratch_state_;
     mutable std::vector<float> scratch_embedded_;
     mutable std::vector<float> scratch_pred_;
-    std::vector<float> scratch_batch_;        // Persistent buffer for TrainOnlineBatch standardization.
-    std::vector<float> scratch_target_;       // Persistent buffer for online regression target centering.
+    std::vector<float> scratch_batch_;           // Persistent buffer for TrainOnlineBatch standardization.
+    std::vector<float> scratch_target_;          // Persistent buffer for online single-step target centering.
+    std::vector<float> scratch_centered_batch_;  // Persistent buffer for online batch target centering.
 
     void standardize(const float* in, float* out, size_t n) const;
     void compute_standardization(const float* states, size_t num_samples, size_t n);

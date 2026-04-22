@@ -15,8 +15,7 @@
 /// that can't accidentally use the wrong reservoir seed or a stale CNN
 /// default — both are wired up together.
 ///
-/// The canonical tracker for the per-DIM tuning results, including the
-/// search history that led to each preset, lives in `docs/HCNNTuning.md`.
+/// See `docs/HCNNReadout.md` for architecture details and auto-sizing.
 ///
 /// ## Adding a new preset
 ///
@@ -24,7 +23,6 @@
 ///    a frozen config under `num_cnn_seeds ≥ 3` averaging.
 /// 2. Add an `if constexpr (DIM == N)` block to the relevant template
 ///    function below, filling in both `p.reservoir` and `p.cnn`.
-/// 3. Update `docs/HCNNTuning.md` with the final row and narrative.
 ///
 /// Untuned DIMs fall through to library defaults (`HCNNReadoutConfig{}`
 /// with `num_layers=0` auto-sizing and the generic reservoir defaults),
@@ -87,7 +85,7 @@ HCNNPreset NARMA10()
 //  HRCCNN baseline — uniform first-probe architecture, DIM 5-16.
 // ---------------------------------------------------------------------------
 
-/// @brief HRCCNN baseline HCNN config — see `docs/HRCCNNBaselineConfig.md`.
+/// @brief HRCCNN baseline HCNN config — see `docs/HCNNReadout.md`.
 ///
 /// Minimum-capacity first-probe architecture, uniform across every DIM:
 ///
