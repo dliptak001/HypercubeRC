@@ -1,5 +1,50 @@
 # HCNNReadout — HypercubeCNN as ESN Readout Layer
 
+## HypercubeCNN
+
+[HypercubeCNN](https://github.com/dliptak001/HypercubeCNN) is a standalone
+convolutional neural network library that replaces the familiar 2D pixel
+grid with a DIM-dimensional Boolean hypercube (N = 2^DIM vertices).
+Convolution kernels are defined by Hamming-distance neighborhoods — each
+vertex has exactly DIM neighbors, reached by flipping one bit — making
+weight sharing mathematically exact under the hypercube's Z₂ⁿ symmetry
+group.  There are no adjacency lists, no padding, and no border effects;
+neighbor lookup is a single XOR instruction.
+
+Pooling pairs each vertex with its bitwise complement (the maximally
+distant point) and reduces DIM by 1, producing a perfect sub-hypercube.
+Stacking Conv+Pool stages builds a feature hierarchy analogous to spatial
+CNNs, with DIM shrinking and channel count growing at each stage.  The
+library supports both classification (softmax + cross-entropy) and
+regression (MSE) through a unified pipeline, trained end-to-end with
+backpropagation and Adam.
+
+### Why HypercubeCNN as the readout for HypercubeRC?
+
+The pairing is topology-native.  HypercubeRC's reservoir is a Boolean
+hypercube: N = 2^DIM neurons sit on hypercube vertices, connected by
+XOR-addressed edges.  The reservoir state *is* a signal on a hypercube
+graph.  HypercubeCNN's convolutions are built to operate on exactly that
+structure — Hamming-distance kernels that respect the same vertex
+addressing and neighbor relationships the reservoir uses internally.
+
+This means the readout consumes the reservoir's state with zero
+topological distortion.  There is no reshaping into a flat vector for a
+linear fit, no arbitrary packing into a 2D grid for a spatial CNN — the
+data stays on the hypercube it was born on, and the convolution kernels
+exploit the same adjacency structure that generated the dynamics.
+Locality on the reservoir graph maps directly to locality in the
+convolution kernel: neighbors that influenced each other during reservoir
+evolution are neighbors in the learned feature extraction.
+
+A conventional readout (ridge regression on the flattened state vector)
+treats the N activations as unstructured features and ignores the graph
+entirely.  A spatial CNN would impose a fabricated 2D geometry that has
+no relationship to the reservoir's actual connectivity.  HypercubeCNN is
+the only architecture where the readout's inductive bias matches the
+reservoir's topology — making it the natural learned readout for a
+hypercube reservoir.
+
 ## Role in the Pipeline
 
 ```

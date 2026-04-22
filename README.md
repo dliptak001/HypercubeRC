@@ -187,8 +187,8 @@ from readout cost.
 ## Pipeline
 
 ```
-Input ──> Reservoir ──> HCNNReadout ──> Output
-           N states      trained
+Input ──> Reservoir (hypercube) ──> HCNNReadout (HypercubeCNN) ──> Output
+              fixed random                  trained
 ```
 
 ### Stage 1: Reservoir
@@ -212,14 +212,28 @@ Two connection families create rich mixing:
 All weights are random and fixed. See [docs/Reservoir.md](docs/Reservoir.md) for
 full architectural details.
 
-### Stage 2: Readout
+### Stage 2: Readout — HypercubeCNN
 
 The readout is the only trained component — a mapping from raw reservoir
-states to the target signal:
+states to the target signal.  HypercubeRC uses
+[HypercubeCNN](https://github.com/dliptak001/HypercubeCNN) as its learned
+readout layer: a convolutional neural network whose kernels operate on
+Boolean hypercube topology rather than spatial grids.
 
-- **HCNNReadout** — HypercubeCNN learned convolutional readout on raw
-  reservoir state. Discovers nonlinear feature interactions via learned
-  convolution kernels on the hypercube topology. Supports regression
+**Why this pairing works.** The reservoir state *is* a signal on a
+hypercube graph — N = 2^DIM activations sitting on hypercube vertices,
+shaped by XOR-addressed dynamics.  HypercubeCNN's Hamming-distance
+convolution kernels respect the same vertex addressing and adjacency
+structure, so the readout consumes the reservoir's output with zero
+topological distortion.  There is no reshaping into a flat vector for a
+linear fit, no arbitrary packing into a 2D grid for a spatial CNN — the
+data stays on the hypercube it was born on, and the learned kernels
+exploit the same locality that generated the dynamics.  HypercubeCNN is
+the only architecture whose inductive bias matches the reservoir's
+topology.
+
+- **HCNNReadout** — Discovers nonlinear feature interactions via learned
+  convolution kernels on the native hypercube topology. Supports regression
   (single/multi-output), multi-class classification, and online training.
 
 See [docs/HCNNReadout.md](docs/HCNNReadout.md) for algorithm details,
