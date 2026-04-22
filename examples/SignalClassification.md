@@ -4,14 +4,12 @@
 
 The reservoir acts as a feature extractor for pattern recognition.
 Four waveform types — sine, square, triangle, chirp — are fed to the
-reservoir in alternating blocks. **Two classifiers** run side-by-side
-on the same reservoir for an apples-to-apples comparison:
-
-- **Ridge** — 4 one-vs-rest readouts (one per class), argmax prediction
-- **HCNN** — single multi-class readout (4 outputs, softmax over classes)
+reservoir in alternating blocks. The HCNN readout classifies which
+waveform is active at each timestep, using only the reservoir's
+internal state.
 
 This is the only example that performs multi-class classification, with
-a confusion matrix and transition dynamics analysis for each readout.
+a confusion matrix and transition dynamics analysis.
 
 ## Conceptual background
 
@@ -24,17 +22,11 @@ state space.
 The key insight: you don't need to design features by hand. The reservoir's
 nonlinear dynamics and fading memory automatically transform the raw input
 into a high-dimensional representation where different signal classes become
-linearly separable.
-
-**Ridge: one-vs-rest classification.** Since the Ridge readout is linear,
-multi-class classification uses the standard one-vs-rest decomposition:
-train one readout per class (target = +1 for that class, -1 for all
-others), then classify by taking the argmax over the four readout scores.
+separable.
 
 **HCNN: native multi-class.** The CNN readout supports multi-class
 natively via `num_outputs=4` and `HCNNTask::Classification`, using
-softmax + cross-entropy loss. A single readout replaces the 4 one-vs-rest
-Ridge heads.
+softmax + cross-entropy loss. A single readout handles all four classes.
 
 ## The four waveforms
 
@@ -52,15 +44,10 @@ classes separable from reservoir state alone.
 ## The pipeline
 
 ```
-                                ┌──> Ridge: 4 one-vs-rest ──> argmax ──> Class
-Waveform blocks ──> Reservoir ──┤    (70% output, 128 raw features)       0,1,2,3
-  150 steps each     128 neurons │
-                     (fixed)    └──> HCNN: 4-class softmax ──────────> Class
-                                     (all 128 vertices)                 0,1,2,3
+Waveform blocks ──> Reservoir ──> HCNN: 4-class softmax ──> Class
+  150 steps each     128 neurons    (all 128 vertices)       0,1,2,3
+                     (fixed)
 ```
-
-Note: `output_fraction=0.7` is set for Ridge, but at DIM=7 this rounds
-to stride=1, so all 128 vertices are used. HCNN always uses all vertices.
 
 **Step by step:**
 
@@ -72,20 +59,18 @@ to stride=1, so all 128 vertices are used. HCNN always uses all vertices.
 
 3. **Collect** — 12,000 steps with per-step class labels.
 
-4. **Train** — Ridge: four one-vs-rest readouts on 70% of the data
-   (closed-form solve). HCNN: single 4-class readout trained with Adam
-   and cosine LR schedule.
+4. **Train** — Single 4-class HCNN readout on 70% of the data, trained
+   with Adam and cosine LR schedule.
 
 5. **Evaluate** — Confusion matrix, per-class accuracy, and transition
    dynamics (how quickly the reservoir locks onto a new waveform after a
-   block switch) — reported separately for each readout.
+   block switch).
 
 ## What to expect
 
 ### Default configuration (leak_rate = 0.35)
 
-DIM=7, 128 neurons, output_fraction=0.7 (Ridge), raw features,
-leak_rate=0.35. Both readouts use the same reservoir seed and dynamics.
+DIM=7, 128 neurons, leak_rate=0.35, all vertices used by HCNN.
 
 | Class | Accuracy | Notes |
 |-------|----------|-------|
@@ -125,9 +110,7 @@ mean old state persists longer — lock-on starts at 50% and climbs through
 **The tradeoff is task-dependent.** For applications where classification
 accuracy matters more than transition speed (long blocks, stable signals),
 lower leak rates win. For applications where rapid switching is critical
-(short blocks, fast-changing inputs), higher leak rates are better. A
-multi-timescale reservoir could provide both: fast neurons for quick
-lock-on and slow neurons for better steady-state discrimination.
+(short blocks, fast-changing inputs), higher leak rates are better.
 
 ## Things to try
 
@@ -135,13 +118,12 @@ lock-on and slow neurons for better steady-state discrimination.
   example is 0.35. Try 1.0 (instant lock-on, lower accuracy) or 0.2
   (higher accuracy, slower transitions).
 
-- **Output fraction.** Set `cfg.output_fraction` in the source. The default
-  is 0.7, which at DIM=7 yields stride=1 (all 128 vertices). Try lower
-  values at larger DIM to reduce Ridge readout cost.
-
 - **Change block size.** Shorter blocks (e.g., 50 steps) make classification
   harder because a larger fraction of each block is spent in the transition
   zone where the reservoir hasn't locked on yet.
+
+- **HCNN epochs.** Default is 100 — this task saturates fast. Try 25 to
+  verify saturation, or 200 to confirm no further gain.
 
 ## Build and run
 

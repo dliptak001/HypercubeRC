@@ -15,7 +15,7 @@ is optimal across all DIM values (see [ScaleInvariance.md](ScaleInvariance.md)):
 
 **Start here.** Only tune if your task has specific requirements that the
 defaults don't serve. Most users will only need to adjust `DIM`,
-`output_fraction`, and possibly `leak_rate`.
+`leak_rate`, and HCNN hyperparameters.
 
 ---
 
@@ -27,16 +27,15 @@ defaults don't serve. Most users will only need to adjust `DIM`,
    - Standard tasks:          DIM 7-8   (128-256 neurons)
    - High-capacity research:  DIM 9-12  (512-4096 neurons)
 
-2. Pick readout
-   - DIM <= 8:   ReadoutType::Ridge   (closed-form optimum, fast and accurate)
-   - DIM 7+:     ReadoutType::HCNN    (when accuracy ceiling matters or classification)
-   - Streaming:  ReadoutType::HCNN    (supports online training for incremental adaptation)
+2. Pick HCNN config
+   - Start with HRCCNNBaseline<DIM>() from HCNNPresets.h
+   - Override epochs for your task: ~25-100 for smooth signals, ~2000 for chaotic
+   - Classification: set task=HCNNTask::Classification, num_outputs=num_classes
 
 3. Set output_fraction (DIM 9+)
    - DIM 9:   0.5   (256 selected vertices)
    - DIM 10:  0.25  (256 selected vertices)
    - DIM 11+: 0.125 or lower
-   Ridge cost is quadratic in feature count -- this is the main scaling lever.
 ```
 
 ---
@@ -46,17 +45,17 @@ defaults don't serve. Most users will only need to adjust `DIM`,
 ### DIM -- reservoir size
 
 DIM controls the number of neurons (N = 2^DIM). More neurons = more
-computational capacity, but also more features for the readout to handle.
+computational capacity and richer state for the HCNN readout.
 
-| DIM | N     | Features (M at full) | Ridge solve time | Best for |
-|-----|-------|----------------------|------------------|----------|
-| 5   | 32    | 32                   | instant          | Prototyping, embedded, unit tests |
-| 6   | 64    | 64                   | instant          | Light benchmarks, fast iteration |
-| 7   | 128   | 128                  | ~1 ms            | Standard benchmarks, production (simple tasks) |
-| 8   | 256   | 256                  | ~5 ms            | Production, complex time series |
-| 9   | 512   | 512 (at full)        | ~40 ms           | Research, high-capacity tasks |
-| 10  | 1024  | 1024 (at full)       | ~300 ms          | Research (use output_fraction) |
-| 11+ | 2048+ | 2048+ (at full)      | seconds          | Research (must use output_fraction) |
+| DIM | N     | Best for |
+|-----|-------|----------|
+| 5   | 32    | Prototyping, embedded, unit tests |
+| 6   | 64    | Light benchmarks, fast iteration |
+| 7   | 128   | Standard benchmarks, production (simple tasks) |
+| 8   | 256   | Production, complex time series |
+| 9   | 512   | Research, high-capacity tasks |
+| 10  | 1024  | Research (use output_fraction) |
+| 11+ | 2048+ | Research (must use output_fraction) |
 
 **Rule of thumb:** increase DIM until test performance plateaus, then stop.
 DIM 8 is the sweet spot for most real-world tasks.
@@ -150,32 +149,26 @@ Controls the tanh nonlinearity: `tanh(alpha * weighted_sum)`.
 | 2.0+ | Hard limiter (approaches sign function) | Rarely useful; reduces effective dynamic range |
 
 **Most users never touch this.** The HCNN readout provides its own
-nonlinear feature discovery; for Ridge, tanh states are used directly.
-Adjusting alpha is a second-order effect.
+nonlinear feature discovery via learned convolution kernels.
 
 ---
 
-### output_fraction -- readout cost control
+### output_fraction -- readout input control
 
 Controls what fraction of the N reservoir neurons are used as readout
-features. This is the primary lever for managing Ridge readout cost at
-large DIM values.
+input. Stride-selects a subset of vertices.
 
-| Value | Selected vertices M | Ridge cost relative |
-|-------|---------------------|---------------------|
-| 1.0   | N                   | 1x (baseline)       |
-| 0.5   | N/2                 | ~0.25x              |
-| 0.25  | N/4                 | ~0.0625x            |
-| 0.1   | N/10                | ~0.01x              |
-
-**Ridge cost is quadratic in feature count** (building the Gram matrix
-is O(features^2 * samples)). Halving the feature count gives a 4x
-speedup.
+| Value | Selected vertices M |
+|-------|---------------------|
+| 1.0   | N (all)             |
+| 0.5   | N/2                 |
+| 0.25  | N/4                 |
+| 0.1   | N/10                |
 
 **When to reduce it:**
-- DIM >= 9 (512+ neurons): 0.25-0.5 keeps Ridge practical
-- DIM >= 10 (1024+ neurons): 0.1-0.25 is typical
-- DIM >= 11 (2048+ neurons): 0.05-0.125 to keep solve times reasonable
+- DIM >= 9: 0.25-0.5 keeps HCNN training practical
+- DIM >= 10: 0.1-0.25 is typical
+- DIM >= 11: 0.05-0.125 to keep training times reasonable
 
 **Performance impact:** The hypercube's vertex-transitive topology means
 stride-selected subsets are representative. Reducing output_fraction from
@@ -193,10 +186,13 @@ weight initialization, not a bug.
 
 1. **Don't bother for prototyping.** Any seed works. Use seed=42 or 0.
 
-2. **Screen seeds for production.** Run your task across 50-500 seeds
+2. **Use surveyed seeds for benchmarks.** `SurveyedSeed<DIM>()` in
+   `Reservoir.h` returns the per-DIM 500-seed survey winner. Always
+   use these for benchmarks and comparisons.
+
+3. **Screen seeds for production.** Run your task across 50-500 seeds
    and pick a top performer. Seed rankings are stable across nearby SR
-   values (Spearman correlation > 0.82 in the 0.85-0.90 corridor), so
-   seeds screened at the defaults transfer reliably.
+   values (Spearman correlation > 0.82 in the 0.85-0.90 corridor).
 
 **How much does seed matter?**
 
@@ -208,45 +204,37 @@ Seed selection is free performance -- same compute cost, better results.
 
 ---
 
-## Readout tuning
+## HCNN readout tuning
 
-### Ridge lambda
+The HCNN readout is the only trained component. See
+[docs/HCNNReadout.md](HCNNReadout.md) for architecture details.
 
-Controls the regularization strength in Ridge regression.
+### Starting config
 
-| lambda | Behavior | Use when |
-|--------|----------|----------|
-| 0.01-0.1 | Weak regularization | Large training set, few features, low noise |
-| **1.0** | **Default** | **General-purpose starting point** |
-| 10-100 | Strong regularization | Small training set, many features, noisy data |
+Use `HRCCNNBaseline<DIM>()` from `readout/HCNNPresets.h` as the starting
+point. It provides surveyed reservoir seed + baseline CNN config per DIM.
 
-**Finding the right lambda:**
+### Key HCNN parameters
 
-Lambda trades off bias and variance. Too low: overfitting (train R^2
-near 1.0 but test R^2 much lower). Too high: underfitting (both train
-and test R^2 are mediocre).
+| Parameter | Baseline | Tuning guidance |
+|-----------|----------|-----------------|
+| `epochs` | 2000 | ~25-100 for smooth/periodic signals; ~2000 for chaotic (MG, NARMA) |
+| `lr_max` | 0.0015 | Keep <= 0.005; 0.0015 transfers well across DIM |
+| `batch_size` | 1<<(DIM-1) | Target ~50k total gradient updates |
+| `conv_channels` | 8 | 8 is the baseline; 16-24 for task-specific tuning |
+| `num_layers` | 1 | Auto-rule: min(DIM-2, 2); override for task-specific tuning |
+| `weight_decay` | 0.0 | Start at 0; only add if overfitting |
+| `seed` | per-DIM | CNN weight-init seed; per-DIM winners in HCNNPresets.h |
 
-```cpp
-// Quick lambda sweep
-for (double lambda : {0.01, 0.1, 1.0, 10.0, 100.0}) {
-    esn.Train(targets, train_size, lambda);
-    double r2 = esn.R2(targets, train_size, test_size);
-    printf("lambda=%.2f  R2=%.6f\n", lambda, r2);
-}
-```
+### Epoch selection
 
-### Linear SGD parameters
+The biggest tuning decision. Smooth signals saturate almost instantly;
+chaotic signals need thousands of epochs:
 
-| Parameter | Default | Tuning guidance |
-|-----------|---------|-----------------|
-| `lr` | auto (1/nf) | Increase if training is slow to converge; decrease if loss oscillates |
-| `epochs` | 200 | Pocket selection means more epochs rarely hurts, but also rarely helps past 200 |
-| `weight_decay` | 1e-4 | Increase for more regularization; decrease if underfitting |
-| `lr_decay` | 0.01 | Controls learning rate schedule: lr_effective = lr / (1 + lr_decay * epoch) |
+- **Smooth/periodic** (sine, classification, anomaly detection): 25-100 epochs
+- **Chaotic/nonlinear** (NARMA-10, Mackey-Glass): 1000-2000 epochs
 
-**In practice:** The auto learning rate and 200 epochs work well. If
-you need better performance at DIM 7+, switch to Ridge instead of
-tuning SGD.
+Don't use the default 200 for either case — it's wrong for both.
 
 ---
 
@@ -255,7 +243,7 @@ tuning SGD.
 | Metric | Minimum | Recommended | Why |
 |--------|---------|-------------|-----|
 | Warmup steps | 50 | 200-500 | Wash out initial transient (zero state) |
-| Training samples | 5 * NumFeatures | 18 * N | Ridge needs overdetermined system; more data = better conditioning |
+| Training samples | 5 * N | 18 * N | More data = better generalization |
 | Test samples | 20% of total | 30% of total | Enough to estimate generalization reliably |
 
 **Warmup is critical.** The reservoir starts from all-zeros. Without
@@ -271,27 +259,26 @@ allocate memory).
 
 1. **Check warmup.** Are you using at least 200 warmup steps?
 2. **Check training size.** Do you have at least 10x as many training
-   samples as features?
+   samples as reservoir neurons?
 3. **Increase DIM.** More neurons = more capacity. Go from 7 to 8.
 4. **Screen seeds.** Try 50 seeds and pick the best.
-5. **Sweep lambda** (Ridge) or check that lr isn't too high (Linear).
-6. **Try HCNN.** At DIM 7+ the HCNN readout often beats Ridge by
-   discovering nonlinear features.
+5. **Increase HCNN epochs.** If training on a chaotic signal, ensure
+   epochs >= 1000.
+6. **Try more conv channels.** Increase from 8 to 16 or 24.
 
 ### "Training is too slow"
 
-1. **Reduce output_fraction.** This is the most effective lever.
-   Going from 1.0 to 0.5 gives ~4x speedup with minimal accuracy loss.
+1. **Reduce output_fraction.** Going from 1.0 to 0.5 significantly
+   reduces HCNN input dimensionality.
 2. **Reduce DIM.** If DIM 8 is too slow, DIM 7 may be sufficient.
-3. **Use Ridge readout.** The closed-form solve is a single pass —
-   no epoch tuning needed.
+3. **Lower epochs.** For smooth signals, 25-100 epochs is usually enough.
+4. **Increase batch_size.** Fewer gradient updates per epoch.
 
 ### "Predictions are noisy / jittery"
 
 1. **Lower leak_rate.** Try 0.3-0.5 to smooth the reservoir dynamics.
 2. **Increase warmup.** Transient artifacts cause jitter in early states.
 3. **Increase training size.** More data stabilizes the readout.
-4. **Increase Ridge lambda.** Stronger regularization smooths predictions.
 
 ### "I need longer memory"
 
@@ -325,8 +312,8 @@ complete implementation.
   specific reason and a sweep tool.
 
 - **alpha** unless you've exhausted other options. Alpha adjustments
-  have second-order effects; addressing the readout choice or DIM
-  first is almost always more productive.
+  have second-order effects; addressing DIM or HCNN config first is
+  almost always more productive.
 
 - **Reservoir internals.** The connectivity pattern (shell masks +
   nearest neighbors) is not configurable and doesn't need to be.
@@ -339,28 +326,29 @@ complete implementation.
 ```
 1. Start with defaults:
    ReservoirConfig cfg;
-   cfg.seed = 42;
-   ESN<8> esn(cfg);  // Ridge readout
+   cfg.seed = SurveyedSeed<8>();
+   ESN<8> esn(cfg);
 
 2. Get a baseline:
+   auto cnn_cfg = hcnn_presets::HRCCNNBaseline<8>().cnn;
    esn.Warmup(data, 500);
    esn.Run(data + 500, total);
-   esn.Train(targets, train_size);
+   esn.Train(targets, train_size, cnn_cfg);
    R2 = esn.R2(targets, train_size, test_size);
 
 3. If R2 is insufficient:
    - Increase DIM (7 -> 8 -> 9)
    - Screen 50+ seeds
-   - Sweep Ridge lambda
+   - Increase epochs (for chaotic signals)
    - Lower leak_rate if signal is slow
-   - Try HCNN at DIM 7+
+   - Try more conv channels (8 -> 16 -> 24)
 
 4. If speed is insufficient:
    - Reduce output_fraction
    - Decrease DIM
+   - Lower epochs (for smooth signals)
 
 5. For production:
    - Screen 100-500 seeds at your target DIM
-   - Confirm with a lambda sweep
    - Validate on held-out data
 ```

@@ -60,7 +60,7 @@ State rank tells you whether the reservoir is using its neurons efficiently:
 ## How it works
 
 1. Generate uniform random inputs in [-1, +1] (deterministic per seed).
-2. Drive the reservoir with raw features (no translation layer).
+2. Drive the reservoir and collect raw states.
 3. Mean-center the state matrix.
 4. Compute eigenvalues via deflated power iteration (up to 30 components).
 5. For each vertex, compute R² against 64 lagged inputs.

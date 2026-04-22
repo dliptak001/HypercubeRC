@@ -36,11 +36,10 @@ print(f"NRMSE = {esn.nrmse():.6f}") # NRMSE = 0.000129
 
 - **Simple API** -- `fit()` handles warmup, run, and train in one call
 - **DIM 5-12** -- 32 to 4096 neurons, scale-invariant defaults
-- **Two readouts** -- Ridge regression (closed-form optimal) and Linear SGD (streaming)
+- **HCNN readout** -- learned convolutional readout on raw reservoir state
 - **Multi-input** -- multiple input channels via stride-interleaved driving
-- **Streaming mode** -- incremental weight updates for real-time applications
+- **Streaming mode** -- online training for real-time applications
 - **Model persistence** -- pickle, save/load to disk
-- **Translation layer** -- [x | x^2 | x*x'] feature expansion for 2.5x features
 
 ## Documentation
 

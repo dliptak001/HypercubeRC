@@ -294,8 +294,7 @@ overfitting.
   XOR. Seed lottery variance is cosmetic at DIM 13.
 
 Reservoir state steps once per input character.  The CNN readout
-sees the subsampled live state directly; no translation layer, no
-states buffer.
+sees the subsampled live state directly; no states buffer.
 
 ## Readout
 

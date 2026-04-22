@@ -32,52 +32,39 @@ simultaneously:
    target depends on its own history, not just the input history.
 
 A reservoir that can only remember (high MC) OR only compute nonlinearly
-will fail — it must do both. This is where the translation layer has its
-biggest impact: the x² and x*x' features give the linear readout direct
-access to the quadratic interactions that the NARMA-10 recurrence demands.
+will fail — it must do both.
 
 ## How it works
 
 1. Generate NARMA-10 input/target sequences (deterministic per seed).
 2. Scale inputs to [-1, +1] for reservoir injection (raw NARMA inputs
    are in [0, 0.5]).
-3. Run with raw features (N selected states).
-4. Run with translation features (2.5N).
-5. Train the selected readout on 70%, test on 30%.
-6. Report NRMSE for raw and translation, plus % change.
+3. Run the reservoir and collect raw states (N = 2^DIM floats per step).
+4. Train the HCNN readout on 70%, test on 30%.
+5. Report NRMSE.
 
-Uses a single per-DIM seed selected by 500-seed survey.
+Uses a single per-DIM seed selected by 500-seed survey (`SurveyedSeed<DIM>()`).
 
 ## Sample results
 
-Run with Ridge Readout:
+Run with HCNN readout (`HRCCNNBaseline<DIM>()` config):
 
-| DIM | N    | Raw   | Full Translation | Change |
-|-----|------|-------|------------------|--------|
-| 5   | 32   | 0.315 | 0.265            | -15.9% |
-| 6   | 64   | 0.360 | 0.152            | -57.9% |
-| 7   | 128  | 0.362 | 0.102            | -71.9% |
-| 8   | 256  | 0.368 | 0.062            | -83.1% |
+| DIM | N    | HCNN NRMSE |
+|-----|------|------------|
+| 7   | 128  | 0.218      |
+| 8   | 256  | 0.152      |
+| 9   | 512  | 0.117      |
+| 10  | 1024 | 0.087      |
 
 ## What to look for
 
-- **Translation dominates at DIM >= 6.** Improvement scales dramatically:
-  -37% at DIM=6, -55% at DIM=7, -69% at DIM=8. The quadratic features
-  are essential for reconstructing the product terms in the NARMA recurrence.
+- **NRMSE improves with DIM.** More neurons = deeper memory + richer
+  dynamics. The HCNN readout discovers nonlinear features via learned
+  convolution, breaking through the plateau that linear readouts hit.
 
-- **Raw features plateau.** Without translation, NRMSE stalls around 0.4
-  at DIM 7-8 because the linear readout can't access the nonlinear state
-  interactions. Adding more neurons doesn't help — the bottleneck is the
-  readout, not the reservoir.
-
-- **Translation breaks through the plateau.** With 2.5N features, NRMSE
-  keeps improving with DIM. At DIM=8, translation reaches 0.125 — well
-  below the standard ESN range of 0.2-0.4.
-
-- **This is where the translation layer earns its keep.** On Mackey-Glass
-  (a smoother task), translation helps 20-35%. On NARMA-10, it helps
-  35-70%. The harder the nonlinear computation, the more the quadratic
-  features matter.
+- **HCNN learns the quadratic interactions** that the NARMA-10 recurrence
+  demands (product terms u(t-9)*u(t) and y(t)*Σy), without hand-crafted
+  feature engineering.
 
 ## HCNN seed-lottery variance shrinks with DIM
 

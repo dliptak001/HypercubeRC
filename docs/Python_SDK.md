@@ -8,7 +8,6 @@ Python bindings for reservoir computing on Boolean hypercube graphs.
 - [Quick Start](#quick-start)
 - [API Reference](#api-reference)
   - [The dim parameter](#the-dim-parameter)
-  - [Enums](#enums)
   - [ESN](#esn)
 - [Input Data Layout](#input-data-layout)
 - [Dependencies](#dependencies)
@@ -106,17 +105,7 @@ print(f"R² = {r2:.6f}")
 | 8    | 256       | Production, complex tasks |
 | 9-16 | 512-65536 | Research, high-capacity tasks |
 
-For dim 9+, reduce `output_fraction` to control Ridge readout cost (e.g., 0.25 for dim 10).
-
----
-
-### Enums
-
-#### `ReadoutType`
-
-| Value | Description |
-|-------|-------------|
-| `ReadoutType.Ridge` | Closed-form Ridge regression. Deterministic, fast, optimal for the given regularization. Default. |
+For dim 9+, reduce `output_fraction` to control readout input size (e.g., 0.25 for dim 10).
 
 ---
 
@@ -129,7 +118,7 @@ import hypercube_rc as hrc
 
 # Construction
 esn = hrc.ESN(dim=7)                                                    # defaults
-esn = hrc.ESN(dim=7, readout_type=hrc.ReadoutType.Ridge)                # explicit
+esn = hrc.ESN(dim=7, seed=42, leak_rate=0.3)                            # custom config
 
 # High-level pipeline (recommended)
 esn.fit(signal, warmup=200)                     # warmup + run + train
@@ -141,8 +130,8 @@ esn.nrmse()                                     # test NRMSE
 esn.warmup(inputs)                # drive without recording
 esn.run(inputs)                   # drive and collect states
 esn.clear_states()                # clear collected data (keeps readout)
-esn.train(targets)                # default parameters
-esn.train(targets, reg=0.1)   # Ridge: custom regularization
+esn.train(targets)                # HCNN readout, default config
+esn.train_cnn(targets, epochs=1000, lr_max=0.0015)  # HCNN with custom config
 
 # Prediction & evaluation
 esn.predict_raw(timestep)           # single continuous prediction
@@ -161,17 +150,16 @@ esn.selected_states()               # stride-selected states as ndarray
 
 ```python
 ESN(dim, *, seed=0, spectral_radius=0.9, input_scaling=0.02,
-    leak_rate=1.0, alpha=1.0, num_inputs=1, output_fraction=1.0,
-    readout_type=ReadoutType.Ridge)
+    leak_rate=1.0, alpha=1.0, num_inputs=1, output_fraction=1.0)
 ```
 
-Creates the reservoir, initializes the selected readout type, and computes output selection parameters from `output_fraction`. The reservoir weights are generated and spectral-radius-rescaled at construction time.
+Creates the reservoir and computes output selection parameters from `output_fraction`. The reservoir weights are generated and spectral-radius-rescaled at construction time.
 
 **Parameters:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `dim` | `int` | — | Hypercube dimension (5-12). N = 2^dim neurons. |
+| `dim` | `int` | — | Hypercube dimension (5-16). N = 2^dim neurons. |
 | `seed` | `int` | `0` | RNG seed for weight initialization. Every seed (including 0) produces a valid weight topology; different seeds yield measurably different performance. Use per-DIM seed surveys to find optimal seeds for your task. |
 | `spectral_radius` | `float` | `0.9` | Target spectral radius. Scale-invariant across all dim values (vertex-transitive topology property). No per-size re-tuning needed. |
 | `input_scaling` | `float` | `0.02` | Input weight magnitude, U(-input_scaling, +input_scaling). Scale-invariant across all dim values. |
@@ -179,7 +167,6 @@ Creates the reservoir, initializes the selected readout type, and computes outpu
 | `alpha` | `float` | `1.0` | Gain inside tanh: `tanh(alpha * sum)`. > 1.0 sharpens nonlinearity. |
 | `num_inputs` | `int` | `1` | Number of input channels. Channel k drives every K-th vertex starting at offset k. |
 | `output_fraction` | `float` | `1.0` | Fraction of N vertices used as readout features, in (0.0, 1.0]. |
-| `readout_type` | `ReadoutType` | `Ridge` | Which readout to use. |
 
 ---
 
@@ -272,25 +259,42 @@ Use this between independent sequences: clear the collected data, then `warmup()
 
 #### Training
 
-##### `train(targets, *, reg=None, lr=None, epochs=None, weight_decay=1e-4, lr_decay=0.01)`
+##### `train(targets)`
 
-Train the readout using `len(targets)` training samples from the start of the collected states. The targets array must have at most `num_collected` elements.
-
-**Dispatch rules:**
-- No optional args → default parameters for Ridge
-- `reg` → Ridge with custom regularization
+Train the HCNN readout with default config using `len(targets)` training samples from the start of the collected states.
 
 **Parameters:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `targets` | `ndarray` | — | Target values, shape `(train_size,)`. Regression: continuous. Classification: {-1, +1}. |
-| `reg` | `float` | `None` | Ridge regularization strength. Typical range: 0.01-100. |
+| `targets` | `ndarray` | — | Target values, shape `(train_size,)`. |
 
 **Notes:**
-- Triggers feature computation if not already done.
 - Raises `ValueError` if `len(targets) > num_collected`.
 - Calling `train()` again replaces the previous solution entirely.
+- For full control over CNN config, use `train_cnn()` instead.
+
+##### `train_cnn(targets, **kwargs)`
+
+Train the HCNN readout with explicit config. All CNN hyperparameters are keyword arguments.
+
+**Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `targets` | `ndarray` | — | Target values. Regression: `(train_size,)` or `(train_size * num_outputs,)`. Classification: `(train_size,)` float class labels. |
+| `num_outputs` | `int` | `1` | Number of outputs (classes for classification, targets for regression). |
+| `task` | `str` | `"regression"` | `"regression"` or `"classification"`. |
+| `num_layers` | `int` | `0` | Conv+Pool pairs. 0 = auto: min(DIM-2, 2). |
+| `conv_channels` | `int` | `16` | Base channels (doubles per layer). |
+| `epochs` | `int` | `200` | Training epochs. |
+| `batch_size` | `int` | `32` | Mini-batch size. |
+| `lr_max` | `float` | `0.005` | Cosine annealing peak learning rate. |
+| `lr_min_frac` | `float` | `0.1` | Floor = lr_max * lr_min_frac. |
+| `lr_decay_epochs` | `int` | `0` | Cosine decay horizon. 0 = use `epochs`. |
+| `weight_decay` | `float` | `0.0` | L2 weight decay. |
+| `seed` | `int` | `42` | CNN weight initialization seed. |
+| `verbose` | `bool` | `False` | Print per-epoch learning rate. |
 
 ---
 
@@ -387,12 +391,10 @@ Extract stride-selected vertices from all collected states.
 | `dim` | `int` | Hypercube dimension. |
 | `N` | `int` | Number of neurons (2^dim). |
 | `num_collected` | `int` | Timesteps recorded by `run()`. |
-| `num_features` | `int` | Features per timestep. M selected vertices for Ridge. |
+| `num_outputs` | `int` | Number of readout outputs (after training). |
 | `num_inputs` | `int` | Number of input channels. |
-| `output_fraction` | `float` | Fraction of vertices used as readout features. |
-| `output_stride` | `int` | Stride used for vertex selection: max(1, N/M). |
+| `output_fraction` | `float` | Fraction of vertices used as readout input. |
 | `num_output_verts` | `int` | Number of selected output vertices M. |
-| `readout_type` | `ReadoutType` | Readout type selected at construction. |
 | `alpha` | `float` | Tanh gain parameter. |
 | `seed` | `int` | RNG seed used to initialize reservoir weights. |
 | `spectral_radius` | `float` | Target spectral radius. |

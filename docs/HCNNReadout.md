@@ -200,7 +200,6 @@ uniform `ESN::Train / PredictRaw / R2` interface. HCNN has a dedicated
 
 ### ESN Integration Points
 
-- `ReadoutType::HCNN` selects this readout
 - `ESN::Train(targets, train_size)` routes to `HCNNReadout::Train` with default config
 - `ESN::Train(targets, train_size, HCNNReadoutConfig)` for custom config
 - `ESN::PredictRaw(timestep)` scalar (num_outputs must be 1)

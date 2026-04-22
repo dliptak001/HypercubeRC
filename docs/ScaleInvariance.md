@@ -30,7 +30,7 @@ the reservoir has 32 neurons or 512.
 ## Evidence
 
 Three-pass grid sweeps (coarse, normal, fine) were run for each DIM
-via grid sweep. Ridge readout, 3-seed average,
+via grid sweep. 3-seed average,
 jointly optimizing MG h=1 + NARMA-10 + MC.
 
 ### Summary at SR = 0.90, input = 0.02
@@ -116,8 +116,7 @@ reservoir computing.
 
 Combined with:
 - **XOR addressing**: zero adjacency storage at any scale
-- **Output fraction**: constant readout cost as N grows (use 50%
-  of vertices for features, Ridge cost scales with output count
-  not reservoir size)
+- **Output fraction**: controls how many vertices the readout sees,
+  trading accuracy for compute
 
 The hypercube is an RC architecture designed for painless scaling.

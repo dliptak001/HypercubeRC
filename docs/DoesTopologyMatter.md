@@ -31,9 +31,9 @@ The `RandomESN<DIM>` was a temporary class built for this experiment and
 has since been removed from the codebase — the experiment answered its
 question.
 
-**Readout:** RidgeRegression, raw features (no translation layer).
-This isolates the topology's effect on the reservoir dynamics, without
-the translation layer's nonlinear features masking subtle differences.
+**Readout:** Ridge regression on raw features (used for this experiment;
+the library now uses the HCNN readout exclusively). Raw features isolate
+the topology's effect on reservoir dynamics.
 
 **Seeds:** 3-seed average {42, 1042, 2042}. The same seeds produce the
 same weights in both topologies — only the connectivity pattern differs.
@@ -157,21 +157,6 @@ in constrained environments.
 
 ### Note on readout type
 
-This experiment used RidgeRegression with raw features to isolate the
-topology's effect. Since the readout is independent of the reservoir
-topology, the relative comparison between hypercube and random remains
-the same — both topologies produce equally rich state spaces for the
-readout to work with.
-
-### Implications for the translation layer
-
-The translation layer's antipodal products (x * x', where x' = state[v XOR
-(N-1)]) pair each vertex with the vertex at the opposite corner of the
-hypercube. Since topology doesn't affect reservoir quality, this pairing
-works for geometric convenience, not because antipodal vertices carry
-complementary information. Any random pairing of vertices for cross-term
-products would likely produce equivalent results.
-
-The antipodal pairing is retained for its computational elegance — a single
-XOR with the complement mask — and its natural geometric interpretation on
-the hypercube.
+This experiment used Ridge regression with raw features (since removed from
+the library) to isolate the topology's effect. The conclusion is readout-
+independent: both topologies produce equally rich state spaces.

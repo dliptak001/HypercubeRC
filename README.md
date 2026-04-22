@@ -178,23 +178,15 @@ hierarchies. They become relevant at scale or in constrained environments.
 | Multi-input | Stride-interleaved: channel k drives vertices k, k+K, k+2K, ... |
 
 **Output selection.** The `output_fraction` parameter controls how many vertices
-feed the readout. At the default (1.0), all N vertices contribute features. At
-0.5, a stride-selected subset of N/2 vertices is used, cutting Ridge readout
-cost by ~4x (quadratic in feature count). This decouples reservoir size from
-readout cost — the reservoir can grow to large DIM while readout computation
-remains fixed.
+feed the readout. At the default (1.0), all N vertices contribute. At 0.5, a
+stride-selected subset of N/2 vertices is used. This decouples reservoir size
+from readout cost.
 
 ## Pipeline
 
 ```
-Ridge path:
-Input ──> Reservoir ──> Output Selection ──> Ridge Readout ──> Output
-           N states      M vertices           trained
-                         (stride-selected)
-
-HCNN path:
-Input ──> Reservoir ──────────────────────> HCNNReadout ──> Output
-           N states                          trained
+Input ──> Reservoir ──> HCNNReadout ──> Output
+           N states      trained
 ```
 
 ### Stage 1: Reservoir
@@ -223,10 +215,10 @@ full architectural details.
 The readout is the only trained component — a mapping from raw reservoir
 states to the target signal:
 
-- **RidgeRegression** — Closed-form optimal via normal equations on M
-  stride-selected vertices. O(M³) solve.
-- **HCNNReadout (HCNN)** — HypercubeCNN learned convolutional readout on all
-  N vertices. Discovers nonlinear feature interactions directly from raw state.
+- **HCNNReadout** — HypercubeCNN learned convolutional readout on raw
+  reservoir state. Discovers nonlinear feature interactions via learned
+  convolution kernels on the hypercube topology. Supports regression
+  (single/multi-output), multi-class classification, and online training.
 
 See [docs/HCNNReadout.md](docs/HCNNReadout.md) for algorithm details,
 architecture auto-sizing, and streaming mode.
@@ -235,23 +227,17 @@ architecture auto-sizing, and streaming mode.
 
 ### NARMA-10 (nonlinear memory, NRMSE, lower is better)
 
-All results: per-DIM optimal seed (selected by 500-seed survey),
-general-purpose defaults (SR=0.90, input_scaling=0.02).
+All results: per-DIM surveyed seed, HCNN baseline config
+(`HRCCNNBaseline<DIM>()`), scale-invariant defaults (SR=0.90, input_scaling=0.02).
 
-| DIM | N    | Ridge  | HCNN   |
-|-----|------|--------|--------|
-| 5   | 32   | 0.315  | —      |
-| 6   | 64   | 0.360  | —      |
-| 7   | 128  | 0.362  | 0.354  |
-| 8   | 256  | 0.368  | 0.330  |
+| DIM | N    | HCNN NRMSE |
+|-----|------|------------|
+| 7   | 128  | 0.218      |
+| 8   | 256  | 0.152      |
+| 9   | 512  | 0.117      |
+| 10  | 1024 | 0.087      |
 
 Standard ESN baseline: 0.2-0.4 (Jaeger 2001, Rodan & Tino 2011).
-
-*Baseline ESN ranges from Jaeger (2001) "The 'echo state' approach to analysing
-and training recurrent neural networks" and Rodan & Tino (2011) "Minimum
-complexity echo state networks." These represent typical results for standard
-random sparse ESNs with comparable neuron counts and linear readout on raw
-features.*
 
 ## Related Work
 
@@ -301,7 +287,7 @@ The build produces six executables:
 
 | Target | Purpose |
 |--------|---------|
-| `HypercubeRC` | Benchmark suite: NARMA-10, Ridge + HCNN comparison (library supports DIM 5-16) |
+| `HypercubeRC` | Benchmark suite: NARMA-10 across DIM (library supports DIM 5-16) |
 | `BasicPrediction` | Minimal example: sine wave prediction |
 | `SignalClassification` | Multi-class waveform recognition with confusion matrix |
 | `StreamingAnomaly` | Streaming anomaly detection with recovery dynamics |
@@ -318,7 +304,8 @@ HypercubeRC/
   docs/CPP_SDK.md        C++ consumer documentation for the static library
 
   readout/
-    RidgeRegression.h/cpp Closed-form optimal readout
+    HCNNReadout.h/cpp     Learned convolutional readout (PIMPL)
+    HCNNPresets.h         Per-DIM baseline configs and surveyed seeds
 
   examples/
     BasicPrediction.cpp/md      Minimal sine wave prediction
@@ -333,7 +320,7 @@ HypercubeRC/
 
   docs/
     Reservoir.md          Reservoir architecture, connectivity, parameters
-    HCNNReadout.md        HCNN readout: architecture, training, streaming mode  (in readout/)
+    HCNNReadout.md        HCNN readout: architecture, training, streaming mode
     ScaleInvariance.md    Scale-invariant hyperparameters: evidence and analysis
     DoesTopologyMatter.md Hypercube vs random sparse ESN experiment
     Tuning.md             Practical tuning guide: parameters, scenarios, workflow
