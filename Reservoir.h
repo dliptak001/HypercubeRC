@@ -20,6 +20,23 @@ struct ReservoirConfig
     float                 output_fraction  = 1.0f;     // fraction of N vertices used as readout features (0.0, 1.0]
 };
 
+/// @brief Per-DIM reservoir seed from 500-seed survey.
+///
+/// These seeds produce high-quality reservoir dynamics (spectral spread,
+/// memory capacity) and are strong across tasks. DIMs without a surveyed
+/// seed fall through to 42.
+template <size_t DIM>
+constexpr uint64_t SurveyedSeed()
+{
+    if      constexpr (DIM == 5)  return 2121059498467618174ULL;
+    else if constexpr (DIM == 6)  return 10977843040216038077ULL;
+    else if constexpr (DIM == 7)  return 6437149480297576047ULL;
+    else if constexpr (DIM == 8)  return 13602423379507409791ULL;
+    else if constexpr (DIM == 9)  return 10293005394405557670ULL;
+    else if constexpr (DIM == 10) return 6437149480297576047ULL;
+    else                          return 42ULL;
+}
+
 /// @brief Echo-state reservoir whose neurons live on a Boolean hypercube.
 ///
 /// A Boolean hypercube of dimension DIM is a graph with N = 2^DIM vertices,

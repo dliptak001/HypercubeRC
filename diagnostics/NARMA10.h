@@ -11,14 +11,7 @@
 #include "../readout/HCNNPresets.h"
 #include "SignalGenerators.h"
 
-/// @brief Diagnostic: NARMA-10 nonlinear benchmark.
-///
-/// NARMA-10 (Nonlinear AutoRegressive Moving Average, order 10) is the standard
-/// RC benchmark for combined memory + nonlinear computation. The target is:
-///
-///   y(t+1) = 0.3*y(t) + 0.05*y(t)*sum(y(t-i), i=0..9) + 1.5*u(t-9)*u(t) + 0.1
-///
-/// Reports NRMSE and wall-clock timing for the HCNN readout.
+/// NARMA-10 nonlinear benchmark. Reports NRMSE and wall-clock timing.
 template <size_t DIM>
 class NARMA10
 {
@@ -39,7 +32,7 @@ public:
 
     static HCNNReadoutConfig BenchmarkCNNConfig()
     {
-        return hcnn_presets::HRCCNNBaseline<DIM>();
+        return hcnn_presets::HRCCNNBaseline<DIM>().cnn;
     }
 
     Result Run()
@@ -87,7 +80,7 @@ public:
 
     static uint64_t DefaultSeed()
     {
-        return hcnn_presets::NARMA10<DIM>().reservoir.seed;
+        return SurveyedSeed<DIM>();
     }
 
     static inline thread_local uint64_t single_seed = 0;

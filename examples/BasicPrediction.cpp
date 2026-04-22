@@ -1,11 +1,6 @@
 /// @file BasicPrediction.cpp
-/// @brief Predict a sine wave using HypercubeRC with HCNN readout.
-///
-/// The simplest end-to-end reservoir computing demo.  A sine wave is fed into
-/// the reservoir, and the HypercubeCNN readout learns to predict the next value
-/// from the reservoir's internal state alone.
-///
-/// See BasicPrediction.md for a detailed walkthrough and suggested experiments.
+/// @brief Simplest end-to-end demo: predict sin(t+1) from reservoir state.
+/// See BasicPrediction.md for walkthrough and experiments.
 
 #include <chrono>
 #include <cmath>
@@ -19,28 +14,24 @@ int main(int argc, char* argv[])
 {
     (void)argc; (void)argv;
 
-    // --- Configuration ---
-    constexpr size_t DIM = 7;                // Hypercube dimension (2^7 = 128 neurons)
-    constexpr size_t N = 1ULL << DIM;        // Reservoir size
-    constexpr size_t warmup = 200;           // Steps to wash out initial transients
-    constexpr size_t collect = 2000;         // Steps to collect training + test data
-    constexpr size_t horizon = 1;            // Predict 1 step ahead
-    constexpr double train_fraction = 0.7;   // 70% train, 30% test
-
-    constexpr uint64_t seed = 6437149480297576047ULL;  // NARMA-10 best seed for DIM 7
+    constexpr size_t DIM = 7;
+    constexpr size_t N = 1ULL << DIM;
+    constexpr size_t warmup = 200;
+    constexpr size_t collect = 2000;
+    constexpr size_t horizon = 1;
+    constexpr double train_fraction = 0.7;
+    constexpr uint64_t seed = SurveyedSeed<DIM>();
 
     std::cout << "=== HypercubeRC: Sine Wave Prediction ===\n\n";
     std::cout << "Task: predict the next value of sin(0.1t) from the reservoir's\n";
     std::cout << "internal state.  The readout never sees the input directly -- it\n";
     std::cout << "learns the input-to-output mapping entirely from reservoir dynamics.\n\n";
 
-    // --- Step 1: Generate a sine wave input signal ---
     const size_t total = warmup + collect + horizon;
     std::vector<float> signal(total);
     for (size_t t = 0; t < total; ++t)
         signal[t] = std::sin(0.1f * static_cast<float>(t));
 
-    // --- Step 2: Build targets ---
     std::vector<float> targets(collect);
     for (size_t t = 0; t < collect; ++t)
         targets[t] = signal[warmup + t + horizon];
@@ -48,17 +39,13 @@ int main(int argc, char* argv[])
     size_t train_size = static_cast<size_t>(collect * train_fraction);
     size_t test_size = collect - train_size;
 
-    // --- Step 3: Build and drive the reservoir ---
     ReservoirConfig cfg;
     cfg.seed = seed;
     cfg.leak_rate = 0.2f;
     cfg.output_fraction = 1.0f;
     ESN<DIM> esn(cfg);
 
-    // HRCCNN baseline architecture (nl=1, ch=8, FLAT, lr=0.0015,
-    // bs=1<<(DIM-1)) with smooth-signal epochs: ep=1100 for sine wave.
-    // The baseline's ep=2000 is calibrated for chaotic signals (NARMA).
-    HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
+    HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>().cnn;
     cnn_cfg.epochs      = 1100;
     cnn_cfg.lr_min_frac = 0.1f;
     cnn_cfg.seed        = 42007;
@@ -92,7 +79,6 @@ int main(int argc, char* argv[])
     else if (nrmse < 0.1) std::cout << "  (under 10% error)";
     std::cout << "\n\n";
 
-    // --- Sample predictions ---
     std::cout << "Sample predictions (test set):\n\n";
     std::cout << "  Step  |   Actual   |  Predicted  |    Error\n";
     std::cout << "  ------+------------+-------------+-----------\n";

@@ -140,41 +140,64 @@ void HCNNReadout::Train(const float* states, const float* targets,
         const bool at_interval = (epoch_done_1based % hooks.eval_every_epochs) == 0;
         const bool at_final    = epoch_done_1based == config.epochs;
         if (at_interval || at_final) {
-            // Sync weights_blob_ to the live net_ so the callback can
-            // snapshot via GetReadoutState()/Weights() if desired.
             flatten_weights();
             hooks.epoch_callback(epoch_done_1based, config.epochs, lr);
         }
     };
 
-    // --- Cosine LR annealing with floor ---
+    // --- Cosine LR schedule (loop-invariant pieces) ---
     const float lr_min = config.lr_max * config.lr_min_frac;
     const auto pi = static_cast<float>(std::numbers::pi);
+    const int horizon = (config.lr_decay_epochs > 0)
+                            ? config.lr_decay_epochs
+                            : config.epochs;
+
+    auto cosine_lr = [&](int epoch) -> float {
+        float progress = static_cast<float>(epoch) / static_cast<float>(horizon);
+        if (progress > 1.0f) progress = 1.0f;
+        return lr_min + 0.5f * (config.lr_max - lr_min) *
+               (1.0f + std::cos(pi * progress));
+    };
+
+    // --- Prepare task-specific targets ---
+    std::vector<int> int_targets;
+    std::vector<float> centered_targets;
 
     if (is_classification) {
-        // Targets are float class indices — convert to int.
-        std::vector<int> int_targets(num_samples);
+        int_targets.resize(num_samples);
         for (size_t s = 0; s < num_samples; ++s)
             int_targets[s] = static_cast<int>(targets[s]);
+        target_mean_.clear();
+    } else {
+        target_mean_.assign(num_outputs_, 0.0);
+        for (size_t s = 0; s < num_samples; ++s)
+            for (size_t k = 0; k < num_outputs_; ++k)
+                target_mean_[k] += targets[s * num_outputs_ + k];
+        for (size_t k = 0; k < num_outputs_; ++k)
+            target_mean_[k] /= static_cast<double>(num_samples);
 
-        target_mean_.clear();  // no centering for classification
+        centered_targets.resize(num_samples * num_outputs_);
+        for (size_t s = 0; s < num_samples; ++s)
+            for (size_t k = 0; k < num_outputs_; ++k)
+                centered_targets[s * num_outputs_ + k] =
+                    targets[s * num_outputs_ + k] - static_cast<float>(target_mean_[k]);
+    }
 
-        // verbose_train_acc: preallocate buffer for per-epoch training-set
-        // forward pass. This is the expensive path; verbose alone (no
-        // train-acc) is effectively free.
-        std::vector<float> verbose_logits;
-        if (config.verbose && config.verbose_train_acc)
+    // --- Verbose reporting buffers ---
+    std::vector<float> verbose_logits;
+    std::vector<float> verbose_preds;
+    if (config.verbose && config.verbose_train_acc) {
+        if (is_classification)
             verbose_logits.resize(num_samples * num_outputs_);
+        else
+            verbose_preds.resize(num_samples * num_outputs_);
+    }
 
-        for (int e = 0; e < config.epochs; ++e) {
-            const int horizon = (config.lr_decay_epochs > 0)
-                                    ? config.lr_decay_epochs
-                                    : config.epochs;
-            float progress = static_cast<float>(e) / static_cast<float>(horizon);
-            if (progress > 1.0f) progress = 1.0f;  // floor lr at lr_min past horizon
-            float lr = lr_min + 0.5f * (config.lr_max - lr_min) *
-                       (1.0f + std::cos(pi * progress));
+    // --- Epoch loop (shared for both tasks) ---
+    for (int e = 0; e < config.epochs; ++e) {
+        float lr = cosine_lr(e);
 
+        if (is_classification) {
             net_->TrainEpoch(
                 std_states.data(), static_cast<int>(n),
                 int_targets.data(),
@@ -182,9 +205,18 @@ void HCNNReadout::Train(const float* states, const float* targets,
                 lr, /*momentum=*/0.0f, config.weight_decay,
                 /*class_weights=*/nullptr,
                 /*shuffle_seed=*/static_cast<unsigned>(e + 1));
+        } else {
+            net_->TrainEpochRegression(
+                std_states.data(), static_cast<int>(n),
+                centered_targets.data(),
+                static_cast<int>(num_samples), config.batch_size,
+                lr, /*momentum=*/0.0f, config.weight_decay,
+                /*shuffle_seed=*/static_cast<unsigned>(e + 1));
+        }
 
-            if (config.verbose) {
-                if (config.verbose_train_acc) {
+        if (config.verbose) {
+            if (config.verbose_train_acc) {
+                if (is_classification) {
                     net_->ForwardBatch(std_states.data(), static_cast<int>(n),
                                        static_cast<int>(num_samples),
                                        verbose_logits.data());
@@ -201,54 +233,31 @@ void HCNNReadout::Train(const float* states, const float* targets,
                     std::printf("  epoch %3d/%d  lr=%.5f  train_acc=%.2f%%\n",
                                 e + 1, config.epochs, lr, acc);
                 } else {
-                    std::printf("  epoch %3d/%d  lr=%.5f\n",
-                                e + 1, config.epochs, lr);
+                    net_->ForwardBatch(std_states.data(), static_cast<int>(n),
+                                       static_cast<int>(num_samples),
+                                       verbose_preds.data());
+                    double mse = 0.0;
+                    for (size_t i = 0; i < num_samples * num_outputs_; ++i) {
+                        double d = verbose_preds[i] - centered_targets[i];
+                        mse += d * d;
+                    }
+                    mse /= static_cast<double>(num_samples * num_outputs_);
+                    std::printf("  epoch %3d/%d  lr=%.5f  train_mse=%.6f\n",
+                                e + 1, config.epochs, lr, mse);
                 }
-                std::fflush(stdout);
+            } else {
+                std::printf("  epoch %3d/%d  lr=%.5f\n",
+                            e + 1, config.epochs, lr);
             }
-
-            fire_hook(e + 1, lr);
-            if (hooks.stop_requested) break;
+            std::fflush(stdout);
         }
-    } else {
-        // Regression: per-output target centering.
-        target_mean_.assign(num_outputs_, 0.0);
-        for (size_t s = 0; s < num_samples; ++s)
-            for (size_t k = 0; k < num_outputs_; ++k)
-                target_mean_[k] += targets[s * num_outputs_ + k];
-        for (size_t k = 0; k < num_outputs_; ++k)
-            target_mean_[k] /= static_cast<double>(num_samples);
 
-        std::vector<float> centered_targets(num_samples * num_outputs_);
-        for (size_t s = 0; s < num_samples; ++s)
-            for (size_t k = 0; k < num_outputs_; ++k)
-                centered_targets[s * num_outputs_ + k] =
-                    targets[s * num_outputs_ + k] - static_cast<float>(target_mean_[k]);
-
-        for (int e = 0; e < config.epochs; ++e) {
-            const int horizon = (config.lr_decay_epochs > 0)
-                                    ? config.lr_decay_epochs
-                                    : config.epochs;
-            float progress = static_cast<float>(e) / static_cast<float>(horizon);
-            if (progress > 1.0f) progress = 1.0f;  // floor lr at lr_min past horizon
-            float lr = lr_min + 0.5f * (config.lr_max - lr_min) *
-                       (1.0f + std::cos(pi * progress));
-
-            net_->TrainEpochRegression(
-                std_states.data(), static_cast<int>(n),
-                centered_targets.data(),
-                static_cast<int>(num_samples), config.batch_size,
-                lr, /*momentum=*/0.0f, config.weight_decay,
-                /*shuffle_seed=*/static_cast<unsigned>(e + 1));
-
-            fire_hook(e + 1, lr);
-            if (hooks.stop_requested) break;
-        }
+        fire_hook(e + 1, lr);
+        if (hooks.stop_requested) break;
     }
 
     // --- Flatten weights for serialization ---
     flatten_weights();
-    trained_ = true;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,13 +1,6 @@
 /// @file StreamingAnomaly.cpp
-/// @brief Streaming anomaly detection — industrial process monitoring.
-///
-/// A reservoir learns normal process behavior, then monitors a live stream
-/// for deviations. Three anomaly types are injected — noise spike, DC drift,
-/// frequency shift — each separated by normal operation. The HCNN readout is
-/// trained once during priming and used frozen during monitoring.
-///
-/// See StreamingAnomaly.md for a detailed walkthrough, expected output, and
-/// suggested experiments.
+/// @brief Anomaly detection: learn normal behavior, flag deviations.
+/// See StreamingAnomaly.md for walkthrough and experiments.
 
 #include <chrono>
 #include <iostream>
@@ -18,7 +11,6 @@
 #include "ESN.h"
 #include "readout/HCNNPresets.h"
 
-// --- Signal generation ---
 static void GenerateProcess(float* out, size_t n, size_t t_start,
                              float noise_level, float dc_drift, float freq_mult,
                              std::mt19937_64& rng)
@@ -63,7 +55,7 @@ int main(int argc, char* argv[])
     constexpr float normal_noise = 0.01f;
     constexpr float anomaly_threshold = 5.0f;
 
-    constexpr uint64_t seed = 6437149480297576047ULL;
+    constexpr uint64_t seed = SurveyedSeed<DIM>();
     std::mt19937_64 signal_rng(seed + 777);
 
     const Event normal    = { "Normal     ",      0.01f, 0.0f,  1.0f };
@@ -101,9 +93,6 @@ int main(int argc, char* argv[])
               << "  Leak=" << cfg.leak_rate
               << "  Threshold=" << anomaly_threshold << "x baseline\n\n";
 
-    // =================================================================
-    // PHASE 1: PRIME on normal operation
-    // =================================================================
     std::cout << "--- Phase 1: Learn what \"normal\" looks like ---\n\n";
 
     size_t t_global = 0;
@@ -122,11 +111,7 @@ int main(int argc, char* argv[])
     size_t train_n = static_cast<size_t>(prime_steps * 0.7);
     size_t test_n = prime_steps - train_n;
 
-    // HRCCNN baseline architecture (nl=1, ch=8, FLAT, lr=0.0015,
-    // bs=1<<(DIM-1)) with smooth-signal epochs: ep=1000 for the anomaly
-    // process here.  The baseline's default ep=2000 is calibrated for
-    // chaotic signals (NARMA).
-    HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
+    HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>().cnn;
     cnn_cfg.num_outputs = 1;
     cnn_cfg.task        = HCNNTask::Regression;
     cnn_cfg.epochs      = 1000;
@@ -141,7 +126,6 @@ int main(int argc, char* argv[])
     double train_secs = std::chrono::duration<double>(t1 - t0).count();
     std::cout << " done (" << std::fixed << std::setprecision(2) << train_secs << "s)\n\n";
 
-    // --- Baseline RMSE on the held-out prime test set ---
     std::vector<float> prime_pred(test_n);
     for (size_t i = 0; i < test_n; ++i)
         prime_pred[i] = esn.PredictRaw(train_n + i);
@@ -152,9 +136,6 @@ int main(int argc, char* argv[])
     std::cout << "Baseline (prime test, RMSE): " << std::setprecision(6) << baseline
               << "   threshold " << threshold << "\n\n";
 
-    // =================================================================
-    // PHASE 2: STREAMING MONITOR
-    // =================================================================
     std::cout << "--- Phase 2: Monitor the process (" << schedule.size()
               << " windows of " << window << " steps) ---\n\n";
     std::cout << "Each window is fed to the reservoir, and the readout predicts\n";

@@ -7,36 +7,13 @@
 #include <random>
 #include <vector>
 
-/// @brief Shared signal generators for benchmarks and diagnostics.
-///
-/// Canonical implementations — all benchmarks and diagnostics should use these
-/// rather than maintaining local copies.
+/// Shared signal generators for benchmarks and diagnostics.
 
-// ---------------------------------------------------------------------------
-// NARMA-10 nonlinear autoregressive benchmark
-// ---------------------------------------------------------------------------
-
-/// Input-target pair returned by GenerateNARMA10.
 struct NARMASeq { std::vector<float> inputs; std::vector<float> targets; };
 
-/// @brief Generate a NARMA-10 input/target sequence.
-///
-/// NARMA-10 (Nonlinear AutoRegressive Moving Average, order 10) is the
-/// standard reservoir computing benchmark for combined memory and nonlinear
-/// computation. The target recurrence is:
-///
-///   y(t+1) = 0.3*y(t) + 0.05*y(t)*sum(y(t-i), i=0..9) + 1.5*u(t-9)*u(t) + 0.1
-///
-/// The product term u(t-9)*u(t) requires remembering input from 10 steps ago,
-/// while the y(t)*sum(...) term requires nonlinear mixing — a reservoir must
-/// have both memory depth and computational capacity to perform well.
-///
-/// Inputs u(t) are uniform random in [0, 0.5]. Targets y(t) are clamped to [0, 1].
-///
-/// @param input_seed  RNG seed for deterministic input generation.
-/// @param total_steps Length of the returned sequences.
-/// @return NARMASeq with .inputs (u) and .targets (y), each of total_steps floats.
-/// @pre total_steps >= 11 (the recurrence needs 10 history steps).
+/// Generate NARMA-10 input/target sequence.
+/// y(t+1) = 0.3*y(t) + 0.05*y(t)*sum(y(t-i),i=0..9) + 1.5*u(t-9)*u(t) + 0.1
+/// Inputs u(t) uniform in [0, 0.5]. Targets clamped to [0, 1].
 inline NARMASeq GenerateNARMA10(uint64_t input_seed, size_t total_steps)
 {
     std::mt19937_64 rng(input_seed);
@@ -59,15 +36,7 @@ inline NARMASeq GenerateNARMA10(uint64_t input_seed, size_t total_steps)
     return {u, y};
 }
 
-// ---------------------------------------------------------------------------
-// NRMSE computation
-// ---------------------------------------------------------------------------
-
-/// @brief Normalized Root Mean Squared Error from raw prediction arrays.
-///
-/// NRMSE = RMSE / std(targets). A value of 1.0 means the model predicts
-/// no better than the target mean; 0.0 is perfect. Standard RC benchmarks
-/// report NRMSE so results are comparable across different target scales.
+/// NRMSE = RMSE / std(targets). 0.0 = perfect, 1.0 = no better than mean.
 inline double ComputeNRMSE(const float* pred, const float* targets, size_t n)
 {
     double mean = 0.0;
@@ -85,7 +54,7 @@ inline double ComputeNRMSE(const float* pred, const float* targets, size_t n)
     return std::sqrt(mse / n) / std::sqrt(var / n);
 }
 
-/// @brief NRMSE from a trained readout (calls PredictRaw per sample).
+/// NRMSE from a trained readout (calls PredictRaw per sample).
 template <typename Readout>
 double ComputeNRMSE(const Readout& readout, const float* features,
                     const float* targets, size_t num_samples, size_t num_features)

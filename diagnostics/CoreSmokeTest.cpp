@@ -1,7 +1,5 @@
 /// CoreSmokeTest — exercises the full HypercubeRCCore pipeline.
-///
-/// Links against the static library exactly as an SDK consumer would.
-/// Returns 0 on success, 1 on any failure. No external dependencies.
+/// Returns 0 on success, 1 on any failure.
 
 #include "ESN.h"
 #include <cmath>
@@ -21,7 +19,6 @@ static void check(bool ok, const char* name)
     }
 }
 
-// ── Generate sine signal ──
 static std::vector<float> make_sine(size_t n, float freq = 1.0f)
 {
     std::vector<float> s(n);
@@ -30,7 +27,6 @@ static std::vector<float> make_sine(size_t n, float freq = 1.0f)
     return s;
 }
 
-// ── Test: ESN construction across all supported DIMs ──
 void test_all_dims_construct()
 {
     ESN<5>  e5 (ReservoirConfig{.seed = 1});
@@ -49,7 +45,6 @@ void test_all_dims_construct()
     check(ok, "all DIMs construct with correct output vert counts");
 }
 
-// ── Test: HCNN prediction (scalar regression) ──
 template <size_t DIM>
 void test_hcnn_prediction()
 {
@@ -79,7 +74,6 @@ void test_hcnn_prediction()
     check(r2 > 0.90, label.c_str());
 }
 
-// ── Test: HCNN classification (multi-class) ──
 template <size_t DIM>
 void test_hcnn_classification()
 {
@@ -108,7 +102,6 @@ void test_hcnn_classification()
     check(acc > 0.85, label.c_str());
 }
 
-// ── Test: HCNN multi-output regression ──
 template <size_t DIM>
 void test_hcnn_multi_output()
 {
@@ -150,7 +143,6 @@ void test_hcnn_multi_output()
     check(r2 > 0.80, label.c_str());
 }
 
-// ── Test: Persistence round-trip (GetReadoutState / SetReadoutState) ──
 template <size_t DIM>
 void test_persistence()
 {
@@ -185,7 +177,6 @@ void test_persistence()
     check(diff < 1e-6f, label.c_str());
 }
 
-// ── Test: ClearStates preserves trained readout ──
 template <size_t DIM>
 void test_clear_states()
 {
@@ -213,7 +204,6 @@ void test_clear_states()
     check(r2 > 0.80, (label + " - readout intact").c_str());
 }
 
-// ── Test: Multi-input ESN (num_inputs > 1) ──
 template <size_t DIM>
 void test_multi_input()
 {

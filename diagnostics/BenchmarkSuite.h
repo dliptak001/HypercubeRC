@@ -4,7 +4,7 @@
 #include <iomanip>
 #include "NARMA10.h"
 
-/// @brief Unified NARMA-10 benchmark suite across configurable DIM ranges.
+/// Unified NARMA-10 benchmark suite across DIM 7-10.
 struct BenchmarkSuite
 {
     static void RunAll(const ReservoirConfig* config = nullptr)

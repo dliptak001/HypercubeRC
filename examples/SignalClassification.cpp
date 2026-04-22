@@ -1,13 +1,6 @@
 /// @file SignalClassification.cpp
-/// @brief Classify waveform types from reservoir states using HCNN.
-///
-/// The reservoir acts as a feature extractor for pattern recognition. Four
-/// waveform types -- sine, square, triangle, chirp -- cycle in alternating blocks.
-/// A single multi-class HCNN readout (num_outputs=4, softmax over classes)
-/// classifies the current waveform from reservoir state alone.
-///
-/// See SignalClassification.md for a detailed walkthrough, expected output, and
-/// suggested experiments.
+/// @brief Multi-class waveform classification from reservoir state.
+/// See SignalClassification.md for walkthrough and experiments.
 
 #include <chrono>
 #include <iostream>
@@ -25,21 +18,16 @@ static float GenerateWaveform(size_t waveform, float phase)
 {
     switch (waveform)
     {
-    case 0: // Sine — slow, smooth (freq 0.08)
-        return std::sin(phase);
-
-    case 1: // Square — fast, discontinuous (freq 0.25)
-        return std::sin(phase) >= 0.0f ? 0.9f : -0.9f;
-
-    case 2: // Triangle — medium, piecewise linear (freq 0.15)
+    case 0: return std::sin(phase);
+    case 1: return std::sin(phase) >= 0.0f ? 0.9f : -0.9f;
+    case 2:
     {
         float p = std::fmod(phase, 2.0f * PI);
         if (p < 0) p += 2.0f * PI;
         return (p < PI) ? (-1.0f + 2.0f * p / PI) : (3.0f - 2.0f * p / PI);
     }
 
-    case 3: // Chirp — accelerating frequency
-        return std::sin(phase + 0.3f * phase * phase);
+    case 3: return std::sin(phase + 0.3f * phase * phase);
 
     default:
         return 0.0f;
@@ -48,9 +36,6 @@ static float GenerateWaveform(size_t waveform, float phase)
 
 static constexpr float CLASS_FREQ[NUM_CLASSES] = { 0.08f, 0.25f, 0.15f, 0.10f };
 
-/// @brief Compute and print accuracy, per-class breakdown, confusion matrix,
-///        and lock-on dynamics for a given set of predictions.
-/// @return Overall accuracy (0-100%)
 static double analyze_and_print(const std::vector<size_t>& predictions,
                                 const size_t* test_labels,
                                 size_t test_size,
@@ -169,7 +154,6 @@ int main(int argc, char* argv[])
 {
     (void)argc; (void)argv;
 
-    // --- Configuration ---
     constexpr size_t DIM = 7;
     constexpr size_t N = 1ULL << DIM;
     constexpr size_t warmup = 300;
@@ -178,7 +162,7 @@ int main(int argc, char* argv[])
     constexpr size_t collect = block_size * NUM_CLASSES * num_cycles;
     constexpr double train_fraction = 0.7;
 
-    constexpr uint64_t seed = 6437149480297576047ULL;  // NARMA-10 best seed for DIM 7
+    constexpr uint64_t seed = SurveyedSeed<DIM>();
     std::cout << "=== HypercubeRC: Signal Classification ===\n\n";
     std::cout << "Task: identify which waveform is currently being fed to the reservoir,\n";
     std::cout << "using only the reservoir's internal state -- not the input directly.\n\n";
@@ -186,7 +170,6 @@ int main(int argc, char* argv[])
     std::cout << "  Sine (f=0.08)  |  Square (f=0.25)  |  Triangle (f=0.15)  |  Chirp (sweep)\n";
     std::cout << "Each has a distinct frequency and dynamic signature.\n\n";
 
-    // --- Step 1: Generate the input signal and labels ---
     std::vector<float> signal(warmup + collect);
     std::vector<size_t> labels(collect);
 
@@ -208,7 +191,6 @@ int main(int argc, char* argv[])
     size_t test_size = collect - train_size;
     const size_t* test_labels = labels.data() + train_size;
 
-    // --- Step 2: Build and drive the reservoir ---
     ReservoirConfig cfg;
     cfg.seed = seed;
     cfg.leak_rate = 0.35f;
@@ -221,16 +203,11 @@ int main(int argc, char* argv[])
     esn.Warmup(signal.data(), warmup);
     esn.Run(signal.data() + warmup, collect);
 
-    // HCNN classification takes float class indices, not one-hot.
     std::vector<float> float_labels(collect);
     for (size_t t = 0; t < collect; ++t)
         float_labels[t] = static_cast<float>(labels[t]);
 
-    // HRCCNN baseline architecture (nl=1, ch=8, FLAT, lr=0.0015,
-    // bs=1<<(DIM-1)) with smooth-signal epochs: ep=100 is the saturation
-    // point for the sinusoidal classification signals here.  The baseline's
-    // default ep=2000 is calibrated for chaotic signals (NARMA).
-    HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>();
+    HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>().cnn;
     cnn_cfg.num_outputs = NUM_CLASSES;
     cnn_cfg.task        = HCNNTask::Classification;
     cnn_cfg.epochs      = 100;
@@ -245,7 +222,6 @@ int main(int argc, char* argv[])
     double secs = std::chrono::duration<double>(t1 - t0).count();
     std::cout << " done (" << std::fixed << std::setprecision(1) << secs << "s)\n\n";
 
-    // Per-sample predictions via argmax of the logit vector.
     std::vector<size_t> predictions(test_size);
     std::vector<float> logits(NUM_CLASSES);
     for (size_t t = 0; t < test_size; ++t)

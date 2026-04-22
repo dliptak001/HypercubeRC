@@ -8,16 +8,9 @@
 #include <cmath>
 #include "../ESN.h"
 
-/// @brief Diagnostic: Analyze effective rank of reservoir state space
-/// and the input-correlated subspace.
-///
-/// Computes:
-/// 1. Eigenvalue spectrum of state covariance (X'X) via power iteration — total state rank
-/// 2. Per-vertex R2 from 64 lagged inputs — how much of each vertex's variance
-///    is input-driven vs autonomous dynamics
-///
-/// Uses raw reservoir states (not translated) since this analyzes intrinsic
-/// reservoir properties, not prediction quality. 3-seed average.
+/// Effective rank of reservoir state space and input-correlated subspace.
+/// Eigenvalue spectrum via power iteration + per-vertex R2 from 64 lagged inputs.
+/// 3-seed average.
 template <size_t DIM>
 class StateRank
 {
@@ -37,7 +30,6 @@ public:
 
         PrintHeader(warmup, collect, max_components);
 
-        // Accumulate eigenvalues and input correlation across seeds
         std::vector<double> ev_sum(max_components, 0.0);
         size_t ev_count = 0;
         double s_mean_r2 = 0.0, s_min_r2 = 0.0, s_max_r2 = 0.0;
@@ -66,7 +58,6 @@ public:
             auto selected = esn.SelectedStates();
             const float* states = selected.data();
 
-            // Mean-center
             std::vector<double> mean(M, 0.0);
             for (size_t t = 0; t < collect; ++t)
                 for (size_t v = 0; v < M; ++v)
@@ -79,13 +70,11 @@ public:
                 for (size_t v = 0; v < M; ++v)
                     centered[t * M + v] = states[t * M + v] - mean[v];
 
-            // Eigenvalues
             auto eigenvalues = ComputeEigenvalues(centered, collect, M, max_components, seed);
             ev_count = std::max(ev_count, eigenvalues.size());
             for (size_t i = 0; i < eigenvalues.size(); ++i)
                 ev_sum[i] += eigenvalues[i];
 
-            // Input correlation
             auto [mean_r2, min_r2, max_r2, input_pct, high_r2_pct] =
                 ComputeInputCorrelation(states, inputs.data() + warmup, collect, M);
 
@@ -98,7 +87,6 @@ public:
 
         double n = static_cast<double>(Seeds().size());
 
-        // Print eigenvalues
         std::cout << "State covariance eigenvalues (top 10):\n";
         std::cout << "  #  | Eigenvalue | % of max | Cumulative %\n";
         std::cout << "  ---+------------+----------+-------------\n";
@@ -122,14 +110,12 @@ public:
                       << (ev / max_ev * 100.0) << "%"
                       << " | " << std::setw(7) << (cumulative / total_ev * 100.0) << "%\n";
         }
-        // Count full effective rank beyond top 10
         for (size_t i = show; i < ev_count; ++i)
             if (ev_sum[i] / n > max_ev * 0.01) ++eff_rank;
 
         std::cout << "  Effective rank (>1% of max): " << eff_rank
                   << " of " << ev_count << " computed\n";
 
-        // Print input correlation
         std::cout << "\nInput-correlated variance (64 lags, 3-seed avg):\n";
         std::cout << std::fixed << std::setprecision(1);
         std::cout << "  Input-correlated: " << s_input_pct / n << "%\n";
@@ -152,7 +138,7 @@ private:
     }
 
 public:
-    static inline thread_local uint64_t single_seed = 0;  // non-zero = use only this seed
+    static inline thread_local uint64_t single_seed = 0;
 
 private:
 
@@ -265,7 +251,6 @@ private:
                 for (size_t v = 0; v < num_verts; ++v)
                     z[v] /= collect;
 
-                // Deflate
                 for (size_t p = 0; p < eigenvectors.size(); ++p)
                 {
                     double dot = 0.0;
