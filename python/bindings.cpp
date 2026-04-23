@@ -62,7 +62,7 @@ void bind_esn(py::module_& m, const char* name)
         .def("reset_reservoir_only", &E::ResetReservoirOnly,
              "Zero only the reservoir state; collected states preserved.")
 
-        .def("save_reservoir_state", [](const E& self) {
+        .def("save_reservoir_state", [=](const E& self) {
             py::array_t<float> state(NN);
             py::array_t<float> output(NN);
             self.SaveReservoirState(state.mutable_data(), output.mutable_data());
@@ -70,7 +70,7 @@ void bind_esn(py::module_& m, const char* name)
         }, "Snapshot the current reservoir state.\n"
            "Returns (state, output) tuple of (N,) float arrays.")
 
-        .def("restore_reservoir_state", [](E& self,
+        .def("restore_reservoir_state", [=](E& self,
                 py::array_t<float, py::array::c_style | py::array::forcecast> state,
                 py::array_t<float, py::array::c_style | py::array::forcecast> output) {
             if (state.size() != static_cast<py::ssize_t>(NN) ||
@@ -348,7 +348,7 @@ void bind_esn(py::module_& m, const char* name)
         .def_property_readonly("output_fraction", &E::OutputFraction)
         .def_property_readonly("num_output_verts", &E::NumOutputVerts)
         .def_property_readonly("dim", [](const E&) { return DIM; })
-        .def_property_readonly("N", [](const E&) { return NN; })
+        .def_property_readonly("N", [=](const E&) { return NN; })
         .def_property_readonly("num_inputs", &E::NumInputs)
         .def_property_readonly("seed", [](const E& self) { return self.GetConfig().seed; })
         .def_property_readonly("spectral_radius", [](const E& self) { return self.GetConfig().spectral_radius; })
