@@ -24,10 +24,10 @@ class TestConstruction:
         assert esn.num_collected == 0
 
     def test_invalid_dim(self):
-        with pytest.raises(ValueError, match="dim must be 5-12"):
+        with pytest.raises(ValueError, match="dim must be 5-16"):
             ESN(dim=4)
-        with pytest.raises(ValueError, match="dim must be 5-12"):
-            ESN(dim=13)
+        with pytest.raises(ValueError, match="dim must be 5-16"):
+            ESN(dim=17)
 
     def test_defaults(self):
         esn = ESN(dim=5)

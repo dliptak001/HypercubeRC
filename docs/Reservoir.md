@@ -6,12 +6,16 @@ In reservoir computing, a recurrent neural network (the "reservoir") is
 used as a fixed, nonlinear dynamical system. Unlike conventional RNNs,
 the reservoir's internal weights are never trained — they are set once
 at initialization and frozen. Only the output layer (the "readout") is
-trained, typically via simple linear regression.
+trained.
 
 This works because the reservoir transforms a 1-dimensional input signal
 into an N-dimensional state vector that nonlinearly encodes the input's
-recent history. The readout just needs to find the right linear
-combination of those N dimensions to reconstruct the target.
+recent history. The readout learns to extract the right features from
+those N dimensions to reconstruct the target. Traditional reservoir
+computing uses a linear readout (ridge regression); HypercubeRC uses a
+learned convolutional readout (HCNN) that operates directly on the
+hypercube state and discovers nonlinear features automatically — see
+[HCNNReadout.md](HCNNReadout.md).
 
 The quality of the reservoir depends on two things:
 1. **Rich dynamics** — different inputs produce distinguishably different
@@ -128,7 +132,7 @@ is fully replaced; at lower values (e.g., 0.3), 70% of the old state
 persists, creating a leaky integrator that smooths dynamics and extends
 temporal memory.
 
-### Phase 2: Synchronous swap
+### Phase 2: Publish new states
 
 ```
 memcpy(output, state, N * sizeof(float))
@@ -182,7 +186,7 @@ spectral radius in reservoir computing — see the comment in
 ## Scale-invariant defaults
 
 The `ReservoirConfig` struct provides universal defaults that work
-across all DIM values (verified DIM 5-9):
+across all DIM values:
 
 | Parameter | Default | Notes |
 |-----------|---------|-------|
@@ -194,14 +198,14 @@ every DIM. This is a consequence of the hypercube's vertex-transitive
 topology: every vertex has an identical local neighborhood structure
 (same degree, same shell distances, same symmetry), so the dynamics
 that produce good reservoir computing at one scale produce good dynamics
-at every scale.
+at every scale. Empirically verified at DIM 5-9 via three-pass grid
+sweeps; the vertex-transitive property guarantees the same holds at
+higher DIM.
 
 No per-DIM lookup tables or factory functions are needed. Just use
 `ReservoirConfig{}` and the defaults are correct. See
 [ScaleInvariance.md](ScaleInvariance.md) for the full sweep data and
 analysis.
-
-See [ScaleInvariance.md](ScaleInvariance.md) for parameter sweep data.
 
 ## Computational properties
 

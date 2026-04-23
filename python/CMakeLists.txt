@@ -29,21 +29,33 @@ endif()
 
 # ── Core sources compiled directly into the module (PIC required) ──
 set(CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
+file(GLOB READOUT_SOURCES ${CORE_DIR}/readout/*.cpp)
 set(CORE_SOURCES
     ${CORE_DIR}/Reservoir.cpp
     ${CORE_DIR}/ESN.cpp
-    ${CORE_DIR}/readout/RidgeRegression.cpp
+    ${READOUT_SOURCES}
 )
+
+# ── HypercubeCNN dependency ──
+set(HCNN_DIR "${CORE_DIR}/../HypercubeCNN" CACHE PATH "Path to HypercubeCNN source tree")
+set(HCNN_BUILD_DIR "${HCNN_DIR}/cmake-build-release" CACHE PATH "Path to HypercubeCNN build directory")
 
 # ── Build the Python extension module ──
 pybind11_add_module(_core bindings.cpp ${CORE_SOURCES})
-target_include_directories(_core PRIVATE ${CORE_DIR} ${CORE_DIR}/readout)
+target_include_directories(_core PRIVATE ${CORE_DIR} ${CORE_DIR}/readout ${HCNN_DIR})
+target_link_libraries(_core PRIVATE ${HCNN_BUILD_DIR}/libHypercubeCNNCore.a)
 
 # ── Linking ──
 if(MINGW)
     # Statically link MinGW runtime DLLs so the .pyd is self-contained.
     target_link_options(_core PRIVATE -static-libgcc -static-libstdc++)
-    target_link_libraries(_core PRIVATE -Wl,-Bstatic winpthread -Wl,-Bdynamic)
+    target_link_libraries(_core PRIVATE -Wl,-Bstatic pthread winpthread -Wl,-Bdynamic)
+    # Posix-model MinGW always needs libwinpthread-1.dll at runtime.
+    # Ship it inside the package so the .pyd loads without MinGW on PATH.
+    find_file(WINPTHREAD_DLL libwinpthread-1.dll PATHS ENV PATH NO_DEFAULT_PATH)
+    if(WINPTHREAD_DLL)
+        install(FILES ${WINPTHREAD_DLL} DESTINATION hypercube_rc)
+    endif()
 endif()
 
 # ── Install into the hypercube_rc package directory ──

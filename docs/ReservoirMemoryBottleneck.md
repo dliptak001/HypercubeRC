@@ -260,10 +260,12 @@ These would require architectural changes, not hyperparameter tuning:
    fading memory.  Cost: doubles input channels (halves vertices per
    channel at fixed DIM).
 
-2. **Stacked or deep reservoirs.**  A second reservoir driven by the
-   first reservoir's output could extract higher-order temporal features.
-   This remains within the ESN paradigm (no gradient through the
-   reservoir) but adds a learned intermediate transformation.
+2. **Reservoir cascades.**  Chain multiple reservoirs so that
+   downstream stages operate on the output of upstream stages,
+   extracting slower, higher-order temporal features.  Each reservoir
+   remains fixed-weight (no gradient), but the cascade extends the
+   effective memory horizon without pushing any single reservoir
+   toward chaotic instability.
 
 3. **Hybrid architecture.**  Train the reservoir weights (or a subset)
    via backpropagation through time, converting the ESN into a standard

@@ -27,7 +27,7 @@ After installation, the SDK contains:
   include/HypercubeRC/
     ESN.h              -- The public API (the only header consumers include)
     Reservoir.h        -- Internal: included by ESN.h
-    HCNNReadout.h      -- Internal: included by ESN.h (HCNN readout config)
+    HCNNReadout.h      -- Transitive: types used by the ESN API (HCNNReadoutConfig, HCNNTask, CNNTrainHooks)
   lib/
     libHypercubeRCCore.a
   lib/cmake/HypercubeRC/
@@ -36,7 +36,7 @@ After installation, the SDK contains:
     HypercubeRCConfigVersion.cmake
 ```
 
-Consumers include `<HypercubeRC/ESN.h>` and link against `HypercubeRC::HypercubeRCCore`. The internal headers are present because ESN.h includes them, but there is no need to include or interact with them directly.
+Consumers include `<HypercubeRC/ESN.h>` (installed SDK) or `"ESN.h"` (FetchContent) and link against `HypercubeRC::HypercubeRCCore`. The other headers are present because ESN.h includes them; there is no need to include them directly, but their public types (`HCNNReadoutConfig`, `HCNNTask`, `CNNTrainHooks`) are part of the API surface.
 
 The SDK depends on a second static library — **HypercubeCNN** — that provides the convolutional readout. HypercubeRCCore transitively links to it, so consumers don't need to reference it explicitly, but it must be buildable at configure time. See [Dependencies](#dependencies).
 
@@ -59,7 +59,7 @@ manual downloads -- CMake pulls the source from GitHub and builds it alongside
 your project.
 
 ```cmake
-cmake_minimum_required(VERSION 3.20)
+cmake_minimum_required(VERSION 4.1)
 project(MyApp)
 
 set(CMAKE_CXX_STANDARD 23)
@@ -83,6 +83,10 @@ cmake --build build
 
 Pin `GIT_TAG` to a release tag (e.g., `v0.2.0`) for reproducible builds.
 Include paths are set automatically -- just `#include "ESN.h"`.
+
+**Note:** HypercubeCNN must be available at `../HypercubeCNN` relative to the
+fetched HypercubeRC source tree (or override `HCNN_DIR` in the CMakeLists).
+See [Dependencies](#dependencies).
 
 ### Installed SDK (find_package)
 
@@ -116,8 +120,11 @@ cmake --build build
 
 ### Minimal example
 
+This example uses FetchContent-style includes (`"ESN.h"`). For an installed SDK,
+use `<HypercubeRC/ESN.h>` instead.
+
 ```cpp
-#include <HypercubeRC/ESN.h>
+#include "ESN.h"
 #include <cmath>
 #include <vector>
 #include <iostream>
@@ -257,15 +264,9 @@ struct HCNNReadoutConfig {
 | `weight_decay` | `float` | `0.0` | L2 weight decay applied by the Adam optimizer. |
 | `seed` | `unsigned` | `42` | Seed for weight initialization. |
 | `verbose` | `bool` | `false` | Print per-epoch lr to stdout. |
-| `verbose_train_acc` | `bool` | `false` | Also compute and print training accuracy each epoch (classification). Costs one extra forward pass per epoch. |
+| `verbose_train_acc` | `bool` | `false` | Also compute and print training accuracy (classification) or MSE (regression) each epoch. Costs one extra forward pass per epoch. |
 
-**Architecture auto-sizing table:**
-
-| DIM  | Auto layers | Channels | Final DIM |
-|------|-------------|----------|-----------|
-| 5-16 | 2 (cap)     | 16, 32   | DIM - 2   |
-
-See `docs/HCNNReadout.md` for the full design notes.
+**Architecture auto-sizing:** For all supported DIMs (5-16), auto-sizing produces 2 Conv+Pool layers with channels 16, 32 and a final hypercube dimension of DIM - 2. Override `num_layers` to change this. See `docs/HCNNReadout.md` for the full design notes.
 
 ---
 
@@ -353,7 +354,7 @@ esn.SetCNNConfig(cfg);
 explicit ESN(const ReservoirConfig& cfg);
 ```
 
-Creates the reservoir from `cfg` and initializes the HCNN readout. Reservoir weights are generated and spectral-radius-rescaled at construction time.
+Creates the reservoir from `cfg`. Reservoir weights are generated and spectral-radius-rescaled at construction time. The HCNN readout is initialized lazily when `Train()` or `InitOnline()` is called.
 
 **Parameters:**
 - `cfg` -- Reservoir configuration. See [ReservoirConfig](#reservoirconfig).
@@ -482,10 +483,10 @@ void InitOnline(const float* warmup_inputs, size_t warmup_count,
                 const HCNNReadoutConfig& config);
 ```
 
-Initializes the HCNN readout for online training. Runs `warmup_inputs` through the reservoir, computes per-vertex standardization statistics from the resulting states, builds the CNN architecture, and sets the Adam optimizer. Call before any `TrainLive*` method.
+Initializes the HCNN readout for online training. Internally calls `Run()` (not `Warmup()`) on the warmup inputs, computes per-vertex standardization statistics from the resulting states, builds the CNN architecture, sets the Adam optimizer, then clears collected states. After this call the reservoir's live state reflects having processed `warmup_count` steps, but `NumCollected()` is 0. Call before any `TrainLive*` method.
 
 **Parameters:**
-- `warmup_inputs` -- Warmup signal: `warmup_count * num_inputs` floats.
+- `warmup_inputs` -- Warmup signal: `warmup_count * num_inputs` floats. These drive the reservoir forward (not discarded like `Warmup()`).
 - `warmup_count` -- Number of warmup timesteps. Must be large enough for representative standardization statistics.
 - `config` -- HCNN architecture config. `config.epochs` is unused in online mode.
 
@@ -694,8 +695,8 @@ The ESN exposes its trained readout state for save/restore. The reservoir weight
 |-------|------|-------------|
 | `weights` | `std::vector<double>` | Opaque flattened blob of all conv kernels, biases, and dense-head weights. Round-trip only -- do not interpret. |
 | `bias` | `double` | Fallback for per-output target centering (backward compat with old checkpoints). |
-| `feature_mean` | `std::vector<float>` | Per-vertex mean from the raw N-vertex standardization. |
-| `feature_scale` | `std::vector<float>` | Per-vertex 1/std. |
+| `feature_mean` | `std::vector<float>` | Per-vertex mean for the selected output vertices (`NumOutputVerts()` entries). |
+| `feature_scale` | `std::vector<float>` | Per-vertex 1/std for the selected output vertices. |
 | `target_mean` | `std::vector<double>` | Per-output target centering (regression). Empty for classification. |
 | `is_trained` | `bool` | True if the readout has been trained. |
 

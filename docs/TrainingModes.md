@@ -48,8 +48,6 @@ subsampling.  Half or more of the stored data may never be read.
 
 - **Multiple epochs** over the same data.  The CNN sees each state
   many times, with shuffled ordering for gradient diversity.
-- **Batch normalization** in the CNN benefits from full-dataset
-  statistics computed per epoch.
 - **Input standardization** computed exactly from all training states.
 - **Rich eval diagnostics**: stored states allow per-position
   `PredictRaw()` for BPC, top-k, and per-class confusion.
@@ -66,7 +64,8 @@ subsampling.  Half or more of the stored data may never be read.
 ### Config (batch mode)
 
 ```cpp
-// Config.h — batch mode (DIM 12 example)
+// Illustrative batch config (DIM 12 example).
+// Current Config.h uses streaming mode exclusively.
 kDIM = 12;
 train_chars = 900000;
 val_chars   = 100000;
@@ -88,37 +87,44 @@ esn.PredictRaw(timestep, logits);          // predict from stored state
 
 ## Streaming Training
 
-Online mode. Train the CNN one gradient step per character as the
-reservoir processes the corpus.  No states buffer.
+Online mode. The reservoir advances one character at a time;
+subsampled states are accumulated into mini-batches and flushed as
+parallelized gradient updates.  No full states buffer needed.
 
 ```
-Warmup(64)  →  InitOnline(32k states)  →  Stream(train_chars)  →  Stream(val_chars)
-                      ↓                        ↓                       ↓
-               standardization           TrainLiveStep()        PredictLiveRaw()
-               + architecture            per-char CNN update    accumulate metrics
+Warmup(64)  →  InitOnline(32k)  →  [Stream(train) → Eval(val)] × num_passes  →  Save
+                     ↓                     ↓                ↓
+              standardization      CopyLiveState() +  PredictLiveRaw()
+              + architecture       TrainLiveBatch()   accumulate metrics
 ```
 
 ### Pipeline
 
-1. **Warmup**: drive reservoir through 64 chars (same as batch).
+1. **Warmup**: drive reservoir through `warmup_chars` (64) characters
+   without recording state.
 2. **InitOnline**: `esn.InitOnline()` drives the reservoir through
    `warmup_train_chars` (default 32768) positions, collects the
    states transiently, computes input standardization (per-vertex
    mean and 1/std), builds the CNN architecture, and frees the
    states buffer.  The reservoir is now at position
    `warmup_chars + warmup_train_chars`, ready for streaming.
-3. **Stream training**: for each of `train_chars` characters:
+3. **Stream training** (repeated for `num_passes`): for each of
+   `train_chars` characters:
    - Encode char as bipolar bits.
    - `esn.Warmup(bits, 1)` — advance reservoir one step.
-   - `esn.TrainLiveStep(target_class, lr)` — subsample live state,
-     standardize, run one CNN `TrainStep()` (forward + backward +
-     Adam update).
-   - Discard the state.  Nothing stored.
-4. **Stream evaluation**: for each of `val_chars` characters:
-   - `esn.Warmup(bits, 1)` — advance reservoir.
-   - `esn.PredictLiveRaw(logits)` — predict from live state.
-   - Accumulate top-k accuracy, BPC, per-class confusion.
-   - No weight updates.
+   - `esn.CopyLiveState(buf)` — snapshot the subsampled state into
+     an accumulation buffer.  Record the target class.
+   - When `mini_batch_size` samples have accumulated, flush via
+     `esn.TrainLiveBatch(states, targets, count, lr)` — standardize,
+     then one parallelized Adam update across all samples in the batch.
+   - Learning rate decays linearly from `lr_max` to
+     `lr_max * lr_floor_frac` across all batches in all passes
+     (global schedule, no per-pass reset).
+4. **Mid-pass evaluation** (after each pass): save the reservoir's
+   live state via `esn.SaveReservoirState()`, stream through
+   `val_chars` positions scoring top-k accuracy and BPC via
+   `esn.PredictLiveRaw()`, then restore the reservoir state to resume
+   training from where the pass ended.
 5. **Save model**.
 
 ### RAM Cost
@@ -137,12 +143,12 @@ Freed immediately after standardization is computed.
 
 **Steady-state (during streaming training and eval):**
 
-| Component               | Size                     | Example (DIM 13, of=0.5) |
-|-------------------------|--------------------------|--------------------------|
-| Reservoir state         | N × 4 bytes              | 32 KiB                   |
-| Subsampled scratch      | of × N × 4 bytes         | 16 KiB                   |
-| CNN weights + optimizer | architecture-dependent   | ~10 MiB                  |
-| **Steady-state total**  |                          | **< 50 MiB**             |
+| Component               | Size                       | Example (DIM 13, of=0.5) |
+|-------------------------|----------------------------|--------------------------|
+| Reservoir state         | N × 4 bytes                | 32 KiB                   |
+| Mini-batch accumulator  | mini_batch × of × N × 4   | 8 MiB                    |
+| CNN weights + optimizer | architecture-dependent     | ~10 MiB                  |
+| **Steady-state total**  |                            | **< 50 MiB**             |
 
 Compared to 34 GiB for batch mode at DIM 13.  DIM 14, 15, 16 are all
 feasible with no RAM constraint.
@@ -154,8 +160,10 @@ feasible with no RAM constraint.
   for a full collection pass before training starts.
 - **Natural for sequential data**.  The reservoir processes the corpus
   in order; streaming training updates the CNN in the same order.
-- **Simple code path**.  No states buffer, no HCNNStates copy, no
-  epoch loop.
+- **Multi-pass without RAM cost**.  The `num_passes` parameter
+  re-feeds the training region sequentially (reservoir state
+  continues, no reset), getting multiple exposures without storing
+  states.
 
 ### Weaknesses
 
@@ -163,29 +171,49 @@ feasible with no RAM constraint.
   states, not the full 900k.  The distribution may shift across the
   corpus.  Increasing `warmup_train_chars` improves accuracy at
   trivial RAM cost.
+- **Sequential gradient order**.  Unlike batch mode's shuffled
+  mini-batches, streaming presents samples in corpus order.
+  Mini-batch accumulation (`mini_batch_size` > 1) amortizes
+  per-sample variance but doesn't shuffle.
 
 ### Config (streaming mode)
 
 ```cpp
 // Config.h — streaming mode (DIM 13 example)
 kDIM = 13;
-warmup_train_chars = 32768; // for standardization
-train_chars = 900000;
-val_chars   = 100000;
-spectral_radius  = 0.90f;
-output_fraction  = 0.5f;    // CNN sees 4096 of 8192 vertices
-cnn_num_layers   = 1;
-cnn_conv_channels = 4;
-lr_max = 0.0015f;
+warmup_chars       = 64;
+warmup_train_chars = 32768;   // states for CNN standardization
+train_chars        = 900000;
+num_passes         = 3;       // corpus passes (reservoir continues, no reset)
+val_chars          = 100000;
+spectral_radius    = 0.90f;
+leak_rate          = 1.0f;
+output_fraction    = 0.5f;    // CNN sees 4096 of 8192 vertices
+cnn_num_layers     = 1;
+cnn_conv_channels  = 4;
+mini_batch_size    = 512;     // gradient accumulation window
+lr_max             = 0.0015f;
+lr_floor_frac      = 0.5f;   // linear LR decay floor
 ```
 
 ### API
 
 ```cpp
-esn.InitOnline(warmup_bits, warmup_count, cnn_cfg);  // build + standardize
-esn.Warmup(step_bits, 1);                             // advance reservoir
-esn.TrainLiveStep(target_class, lr);                   // online CNN update
+esn.InitOnline(warmup_bits, warmup_count, cnn_cfg);   // build + standardize
+
+// Training loop (per character):
+esn.Warmup(step_bits, 1);                              // advance reservoir
+esn.CopyLiveState(buf + i * state_dim);                // snapshot for batch
+// ... accumulate mini_batch_size samples, then:
+esn.TrainLiveBatch(states, targets, count, lr);        // parallelized update
+
+// Eval loop (per character):
 esn.PredictLiveRaw(logits);                            // predict from live state
+
+// Mid-pass eval with state preservation:
+esn.SaveReservoirState(state, output);                 // save before eval
+// ... stream val region ...
+esn.RestoreReservoirState(state, output);              // restore after eval
 ```
 
 ---
@@ -194,15 +222,16 @@ esn.PredictLiveRaw(logits);                            // predict from live stat
 
 | Aspect               | Batch                          | Streaming                      |
 |----------------------|--------------------------------|--------------------------------|
-| States in RAM        | All positions × N              | 1 state (live)                 |
+| States in RAM        | All positions × N              | 1 mini-batch (live)            |
 | RAM at DIM 13        | ~34 GiB                        | < 100 MiB                     |
 | Max practical DIM    | 12 (32 GiB) / 13 (64 GiB)     | 16+ (no RAM limit)            |
 | Passes over data     | Multiple (epochs, shuffled)    | Multiple (sequential re-feed)  |
-| Gradient diversity   | Shuffled mini-batches          | Sequential (corpus order)      |
+| Gradient diversity   | Shuffled mini-batches          | Sequential accumulation        |
+| LR schedule          | Cosine decay (per epoch)       | Linear decay (global)          |
 | Standardization      | Exact (all states)             | Approximate (warmup buffer)    |
-| Time to first eval   | Collection + 1 epoch           | After streaming through val    |
-| Overfitting risk     | High (model peaks at epoch 10) | Lower (no repeated shuffled batches) |
-| Code complexity      | Higher (hooks, checkpoints)    | Lower (linear loop)            |
+| Time to first eval   | Collection + 1 epoch           | After first pass through val   |
+| Overfitting risk     | High (model peaks at epoch 10) | Lower (sequential, no shuffle) |
+| Code complexity      | Higher (hooks, checkpoints)    | Moderate (accumulation + state save/restore) |
 | Eval flexibility     | Score any stored position      | Must stream through val data   |
 
 ## When to Use Each
@@ -215,9 +244,9 @@ esn.PredictLiveRaw(logits);                            // predict from live stat
 
 **Streaming** is appropriate when:
 - DIM 13+ (RAM constraint makes batch infeasible or wasteful).
-- The model plateaus in one pass (our DIM 12 experiments confirm this).
 - You want fast iteration — streaming starts training immediately.
 - You want simple, predictable resource usage.
+- Multi-pass re-feeding suffices (no shuffled cross-epoch gradient diversity).
 
 ## Experiment History
 

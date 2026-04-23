@@ -50,7 +50,7 @@ class ESN:
     Parameters
     ----------
     dim : int
-        Hypercube dimension (5-12). Determines the number of neurons: N = 2^dim.
+        Hypercube dimension (5-16). Determines the number of neurons: N = 2^dim.
     seed : int
         RNG seed for weight initialization. Default: 0.
     spectral_radius : float
@@ -106,7 +106,7 @@ class ESN:
         output_fraction: float = 1.0,
     ):
         if dim not in _ESN_CLASSES:
-            raise ValueError(f"dim must be 5-12, got {dim}")
+            raise ValueError(f"dim must be 5-16, got {dim}")
         cls = _ESN_CLASSES[dim]
         self._impl = cls(
             seed=seed,
@@ -295,6 +295,72 @@ class ESN:
         """
         self._impl.train(_to_float32(targets))
 
+    def train_cnn(
+        self,
+        targets: np.ndarray,
+        *,
+        num_outputs: int = 1,
+        task: str = "regression",
+        num_layers: int = 0,
+        conv_channels: int = 16,
+        epochs: int = 200,
+        batch_size: int = 32,
+        lr_max: float = 0.005,
+        lr_min_frac: float = 0.1,
+        lr_decay_epochs: int = 0,
+        weight_decay: float = 0.0,
+        seed: int = 42,
+        verbose: bool = False,
+    ) -> None:
+        """Train the HCNN readout with full control over CNN configuration.
+
+        Parameters
+        ----------
+        targets : ndarray
+            For regression: shape ``(train_size * num_outputs,)``.
+            For classification: shape ``(train_size,)`` with class indices
+            as floats (0.0, 1.0, ...).
+        num_outputs : int
+            Number of regression outputs or number of classes.
+        task : str
+            ``"regression"`` or ``"classification"``.
+        num_layers : int
+            Conv+Pool pairs (0 = auto from DIM).
+        conv_channels : int
+            Base channel count (doubles per layer).
+        epochs : int
+            Training epochs.
+        batch_size : int
+            Mini-batch size.
+        lr_max : float
+            Peak learning rate for cosine annealing.
+        lr_min_frac : float
+            LR floor as fraction of lr_max.
+        lr_decay_epochs : int
+            Cosine decay horizon (0 = use epochs).
+        weight_decay : float
+            L2 regularization.
+        seed : int
+            CNN weight initialization seed.
+        verbose : bool
+            Print per-epoch diagnostics.
+        """
+        self._impl.train_cnn(
+            _to_float32(targets),
+            num_outputs=num_outputs,
+            task=task,
+            num_layers=num_layers,
+            conv_channels=conv_channels,
+            epochs=epochs,
+            batch_size=batch_size,
+            lr_max=lr_max,
+            lr_min_frac=lr_min_frac,
+            lr_decay_epochs=lr_decay_epochs,
+            weight_decay=weight_decay,
+            seed=seed,
+            verbose=verbose,
+        )
+
     def predict_raw(self, timestep: int) -> float:
         """Return the raw continuous prediction for a collected timestep.
 
@@ -395,8 +461,10 @@ class ESN:
         Parameters
         ----------
         labels : ndarray, optional
-            Labels with values {-1.0, +1.0}. Same alignment convention as
-            ``r2()``. If omitted, uses targets stored by ``fit()``.
+            Class labels. For multi-class (num_outputs > 1): class indices
+            (0.0, 1.0, 2.0, ...). For binary (num_outputs == 1): values
+            in {-1.0, +1.0}. Same alignment convention as ``r2()``.
+            If omitted, uses targets stored by ``fit()``.
         start : int, optional
             First timestep index. Default: 0, or ``train_size`` after ``fit()``.
         count : int, optional
@@ -468,6 +536,11 @@ class ESN:
     def num_collected(self) -> int:
         """Number of timesteps recorded by ``run()``."""
         return self._impl.num_collected
+
+    @property
+    def num_outputs(self) -> int:
+        """Number of readout outputs (after training)."""
+        return self._impl.num_outputs
 
     @property
     def num_inputs(self) -> int:

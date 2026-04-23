@@ -9,6 +9,7 @@ Python bindings for reservoir computing on Boolean hypercube graphs.
 - [API Reference](#api-reference)
   - [The dim parameter](#the-dim-parameter)
   - [ESN](#esn)
+  - [Streaming / Online Training](#streaming--online-training)
 - [Input Data Layout](#input-data-layout)
 - [Dependencies](#dependencies)
 
@@ -111,7 +112,9 @@ For dim 9+, reduce `output_fraction` to control readout input size (e.g., 0.25 f
 
 ### ESN
 
-The complete API. Owns the full Reservoir → Readout pipeline.
+Owns the full Reservoir → Readout pipeline. The core API covers construction,
+batch training, prediction, and evaluation. Additional streaming/online methods
+are available for advanced use (see [Streaming / Online Training](#streaming--online-training)).
 
 ```python
 import hypercube_rc as hrc
@@ -307,7 +310,7 @@ Return the raw continuous prediction for a single collected timestep.
 **Parameters:**
 - `timestep` — Index into collected states, in [0, num_collected).
 
-**Returns:** Continuous float prediction. For classification, threshold at 0.0.
+**Returns:** Continuous float prediction. For regression: the predicted value. For binary classification (single output): threshold at 0.0. For multi-class classification: a single logit (use `accuracy()` for evaluation, which applies argmax internally).
 
 ---
 
@@ -366,9 +369,12 @@ NRMSE = sqrt(MSE) / sqrt(Var(targets))
 
 ##### `accuracy(labels=None, start=None, count=None) → float`
 
-Compute classification accuracy on a slice of collected states. Predictions are thresholded at 0.0.
+Compute classification accuracy on a slice of collected states.
 
-**Parameters:** Same conventions as `r2()`. Pass labels with values {-1.0, +1.0}.
+- **Multi-class** (`num_outputs > 1`): computes argmax over class logits and compares to the label. Labels are float class indices (0.0, 1.0, 2.0, ...).
+- **Binary** (`num_outputs == 1`): thresholds prediction at 0.0 and compares sign to label. Labels are {-1.0, +1.0}.
+
+**Parameters:** Same conventions as `r2()`.
 
 **Returns:** Fraction correct in [0.0, 1.0].
 
@@ -402,6 +408,33 @@ Extract stride-selected vertices from all collected states.
 | `input_scaling` | `float` | Input weight magnitude. |
 | `train_size` | `int \| None` | Training samples from `fit()`, or None. |
 | `test_size` | `int \| None` | Test samples from `fit()`, or None. |
+
+---
+
+#### Streaming / Online Training
+
+For applications where data arrives continuously. These methods mirror the C++
+streaming API (see `docs/CPP_SDK.md` for detailed parameter documentation).
+
+| Method | Description |
+|--------|-------------|
+| `init_online(warmup_inputs, **kwargs)` | Initialize HCNN for streaming. Runs warmup, computes standardization, builds CNN. Call before `train_live_*`. |
+| `compute_target_centering(targets)` | Set per-output target means for online regression (matching batch centering behavior). |
+| `train_live_step(target_class, lr)` | Single-sample online gradient step (classification). |
+| `train_live_batch(states, targets, lr)` | Mini-batch online gradient step (classification). |
+| `train_live_step_regression(target, lr)` | Single-sample online gradient step (regression). |
+| `train_live_batch_regression(states, targets, lr)` | Mini-batch online gradient step (regression). |
+| `copy_live_state()` | Copy current subsampled reservoir state for batch accumulation. Returns `(num_output_verts,)` array. |
+| `predict_live_raw()` | Scalar prediction from current live state. |
+| `predict_live_raw_multi()` | Multi-output prediction from current live state. Returns `(num_outputs,)` array. |
+
+#### Reservoir State Management
+
+| Method | Description |
+|--------|-------------|
+| `reset_reservoir_only()` | Zero the reservoir state; collected states and trained readout are preserved. For episodic tasks. |
+| `save_reservoir_state()` | Snapshot internal state. Returns `(state, output)` tuple of `(N,)` arrays. |
+| `restore_reservoir_state(state, output)` | Restore a previously saved snapshot. |
 
 ---
 
@@ -443,7 +476,7 @@ signal = np.sin(np.linspace(0, 20 * np.pi, 2000)).astype(np.float32)
 
 The Python bindings validate arguments at the boundary and raise clear exceptions:
 
-- **`ValueError`** — invalid `dim` (not 5-12), `train_size > num_collected`, or input array size not divisible by `num_inputs`.
+- **`ValueError`** — invalid `dim` (not 5-16), `train_size > num_collected`, or input array size not divisible by `num_inputs`.
 - **`IndexError`** — `predict_raw(timestep)` with `timestep >= num_collected`, or `r2`/`nrmse`/`accuracy` with `start + count > num_collected`.
 
 These checks happen before calling into C++, so you get a Python traceback instead of a crash.
@@ -498,7 +531,7 @@ restored = pickle.loads(data)
 ## Limitations
 
 - **No scikit-learn compatibility.** The ESN is a temporal pipeline (input order matters, warmup required, states accumulate sequentially), not a static feature→label model. The sklearn estimator protocol assumes i.i.d. samples and row-shuffled cross-validation, which would destroy the temporal structure.
-- **No raw buffer access.** The C++ SDK exposes `States()` and `Features()` raw pointers for diagnostics. The Python bindings do not expose these — use `selected_states()` and `predictions()` instead.
+- **No raw buffer access.** The C++ SDK exposes raw state buffers for diagnostics. The Python bindings provide `selected_states()` and `predictions()` instead, which return NumPy arrays.
 
 ---
 
@@ -506,6 +539,6 @@ restored = pickle.loads(data)
 
 **Runtime:** NumPy >= 1.21
 
-**Build time:** scikit-build-core >= 0.10, pybind11 >= 2.13, C++23 compiler (GCC 13+, Clang 17+, MSVC 2022+), CMake 3.20+
+**Build time:** scikit-build-core >= 0.10, pybind11 >= 2.13, C++23 compiler (GCC 13+, Clang 17+, MSVC 2022+), CMake 3.20+, HypercubeCNN (sibling static library, linked at build time)
 
-No external dependencies beyond the C++ standard library and NumPy.
+Pre-built wheels bundle HypercubeCNN statically, so no action is needed when installing from PyPI. When building from source, HypercubeCNN must be available at `../HypercubeCNN` relative to the HypercubeRC source tree (override `HCNN_DIR` in `python/CMakeLists.txt` if elsewhere).

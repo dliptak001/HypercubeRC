@@ -25,7 +25,7 @@ defaults don't serve. Most users will only need to adjust `DIM`,
 1. Pick DIM
    - Prototyping / embedded:  DIM 5-6   (32-64 neurons)
    - Standard tasks:          DIM 7-8   (128-256 neurons)
-   - High-capacity research:  DIM 9-12  (512-4096 neurons)
+   - High-capacity research:  DIM 9-16  (512-65536 neurons)
 
 2. Pick HCNN config
    - Start with HRCCNNBaseline<DIM>() from HCNNPresets.h
@@ -133,7 +133,7 @@ avoid instability.
 **Examples in the codebase:**
 - `BasicPrediction`: leak_rate = 0.2 (slow sine wave, heavy smoothing)
 - `StreamingAnomaly`: leak_rate = 0.3 (process monitoring, moderate smoothing)
-- `SignalClassification`: leak_rate = 0.35 (waveform classification, moderate smoothing)
+- `SignalClassification`: leak_rate = 0.65 (intentionally detuned to show classification errors; 0.35 gives perfect accuracy)
 
 ---
 
@@ -158,17 +158,22 @@ nonlinear feature discovery via learned convolution kernels.
 Controls what fraction of the N reservoir neurons are used as readout
 input. Stride-selects a subset of vertices.
 
-| Value | Selected vertices M |
-|-------|---------------------|
-| 1.0   | N (all)             |
-| 0.5   | N/2                 |
-| 0.25  | N/4                 |
-| 0.1   | N/10                |
+| Value  | Selected vertices M | Stride |
+|--------|---------------------|--------|
+| 1.0    | N (all)             | 1      |
+| 0.5    | N/2                 | 2      |
+| 0.25   | N/4                 | 4      |
+| 0.125  | N/8                 | 8      |
+| 0.0625 | N/16                | 16     |
+
+**Valid values:** output_fraction must yield a power-of-2 stride.
+Use values from `{1.0, 0.5, 0.25, 0.125, 0.0625, ...}`. Other values
+(e.g., 0.1, 0.3) will throw at construction time.
 
 **When to reduce it:**
 - DIM >= 9: 0.25-0.5 keeps HCNN training practical
-- DIM >= 10: 0.1-0.25 is typical
-- DIM >= 11: 0.05-0.125 to keep training times reasonable
+- DIM >= 10: 0.125-0.25 is typical
+- DIM >= 11: 0.0625-0.125 to keep training times reasonable
 
 **Performance impact:** The hypercube's vertex-transitive topology means
 stride-selected subsets are representative. Reducing output_fraction from

@@ -80,24 +80,12 @@ Each Conv+Pool pair reduces DIM by 1. HCNNConv requires DIM >= 3, so
 the maximum pairs for a given start DIM is `DIM - 2`.
 
 Default behavior (`num_layers = 0`): auto-compute `min(DIM - 2, 2)`.
-Channels double per layer from `conv_channels` base (16 -> 32).
+For all supported DIMs (5-16), the cap of 2 is always hit, producing a
+2-layer Conv+Pool stack with channels doubling per layer (16 → 32 at
+default `conv_channels`). Final DIM after pooling = DIM - 2.
 
-| DIM  | auto layers | channels | final DIM |
-|------|-------------|----------|-----------|
-| 5    | 2 (cap)     | 16, 32   | 3         |
-| 6    | 2 (cap)     | 16, 32   | 4         |
-| 7    | 2 (cap)     | 16, 32   | 5         |
-| 8    | 2 (cap)     | 16, 32   | 6         |
-| 9    | 2 (cap)     | 16, 32   | 7         |
-| 10   | 2 (cap)     | 16, 32   | 8         |
-| 11   | 2 (cap)     | 16, 32   | 9         |
-| 12   | 2 (cap)     | 16, 32   | 10        |
-| 13   | 2 (cap)     | 16, 32   | 11        |
-| 14   | 2 (cap)     | 16, 32   | 12        |
-| 15   | 2 (cap)     | 16, 32   | 13        |
-| 16   | 2 (cap)     | 16, 32   | 14        |
-
-Manual override: set `config.num_layers` to a specific count (asserted <= DIM - 2).
+Manual override: set `config.num_layers` to a specific count (asserted
+<= DIM - 2). The auto-computed value is also clamped to at least 1.
 
 ## Training Algorithm
 
@@ -135,16 +123,19 @@ and `HCNNReadoutConfig::num_outputs`.
 
 ```cpp
 struct HCNNReadoutConfig {
-    int num_outputs   = 1;        // classes or regression targets
-    HCNNTask task     = HCNNTask::Regression;
-    int num_layers    = 0;        // 0 = auto: min(DIM-2, 2)
-    int conv_channels = 16;       // base channels (doubles per layer)
-    int epochs        = 200;
-    int batch_size    = 32;
-    float lr_max      = 0.005f;   // cosine annealing peak
-    float lr_min_frac = 0.1f;     // floor = lr_max * lr_min_frac
-    float weight_decay = 0.0f;
-    unsigned seed     = 42;
+    int num_outputs      = 1;        // classes or regression targets
+    HCNNTask task        = HCNNTask::Regression;
+    int num_layers       = 0;        // 0 = auto: min(DIM-2, 2)
+    int conv_channels    = 16;       // base channels (doubles per layer)
+    int epochs           = 200;
+    int batch_size       = 32;
+    float lr_max         = 0.005f;   // cosine annealing peak
+    float lr_min_frac    = 0.1f;     // floor = lr_max * lr_min_frac
+    int   lr_decay_epochs = 0;       // cosine decay horizon; 0 = use epochs
+    float weight_decay   = 0.0f;
+    unsigned seed        = 42;
+    bool verbose         = false;    // print per-epoch lr
+    bool verbose_train_acc = false;  // also print train accuracy/MSE each epoch
 };
 ```
 
@@ -223,33 +214,36 @@ via the ESN `ReadoutState` struct.
 and `dim_` via `build_architecture()`, then injects the weight blob -- no
 retraining needed.
 
-## ESN Interface
+## HCNNReadout Public Interface
 
-| Method                              | Returns |
-|-------------------------------------|---------|
-| `Train(features, targets, n, nf)`   | void (via CNN-specific config) |
-| `PredictRaw(features)`              | float (scalar, single-output) |
-| `PredictRaw(features, out)`         | void (multi-output) |
-| `PredictClass(features)`            | int |
-| `R2(features, targets, n)`          | double |
-| `Accuracy(features, labels, n)`     | double |
-| `Weights()`                         | vector (flattened blob) |
-| `Bias()`                            | float (target mean fallback) |
-| `NumFeatures()`                     | size_t (= N for raw state) |
-| `NumOutputs()`                      | size_t |
+`HCNNReadout` is the readout class used by `ESN<DIM>`. ESN holds it as a
+direct `HCNNReadout readout_` member and delegates training, prediction,
+and evaluation to it. The methods below are on HCNNReadout; see
+`docs/CPP_SDK.md` for the ESN-level wrappers.
 
-ESN wraps the readout and dispatches via `std::visit`; call sites see a
-uniform `ESN::Train / PredictRaw / R2` interface. HCNN has a dedicated
-`Train(targets, n, HCNNReadoutConfig)` overload for its hyperparameters.
+| Method | Returns |
+|--------|---------|
+| `Train(states, targets, num_samples, dim, config)` | void |
+| `Train(states, targets, num_samples, dim, config, hooks)` | void |
+| `PredictRaw(state)` | float (scalar, single-output) |
+| `PredictRaw(state, output)` | void (multi-output) |
+| `PredictClass(state)` | int (argmax over logits) |
+| `R2(states, targets, num_samples)` | double |
+| `Accuracy(states, labels, num_samples)` | double |
+| `Weights()` | `vector<double>` (flattened blob) |
+| `Bias()` | double (target mean fallback) |
+| `NumFeatures()` | size_t (= N for raw state) |
+| `NumOutputs()` | size_t |
 
 ### ESN Integration Points
 
-- `ESN::Train(targets, train_size)` routes to `HCNNReadout::Train` with default config
-- `ESN::Train(targets, train_size, HCNNReadoutConfig)` for custom config
-- `ESN::PredictRaw(timestep)` scalar (num_outputs must be 1)
-- `ESN::PredictRaw(timestep, float* output)` multi-output
-- `ESN::NumOutputs()` returns config-based for HCNN
-- `ESN::R2/NRMSE/Accuracy` handle multi-output target layout for HCNN
+- `ESN::Train(targets, train_size)` → `HCNNReadout::Train` with default config
+- `ESN::Train(targets, train_size, config)` → custom config
+- `ESN::Train(targets, train_size, config, hooks)` → with mid-training callbacks
+- `ESN::PredictRaw(timestep)` → scalar (asserts `num_outputs == 1`)
+- `ESN::PredictRaw(timestep, float* output)` → multi-output
+- `ESN::NumOutputs()` → delegates to `HCNNReadout::NumOutputs()`
+- `ESN::R2/NRMSE/Accuracy` → handle multi-output target layout and state subsampling
 
 ## Implementation Notes
 
