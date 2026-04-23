@@ -58,7 +58,7 @@ else()
     FetchContent_Declare(
         HypercubeCNN
         GIT_REPOSITORY https://github.com/dliptak001/HypercubeCNN.git
-        GIT_TAG        master
+        GIT_TAG        main
         GIT_SHALLOW    TRUE
     )
     set(HCNN_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
