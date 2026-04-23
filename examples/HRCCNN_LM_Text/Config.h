@@ -16,7 +16,7 @@
 
 namespace hrccnn_lm_text::config {
 
-inline constexpr std::size_t kDIM = 12;
+inline constexpr std::size_t kDIM = 13;
 
 enum class Mode { Train, Eval, Infer };
 
@@ -34,7 +34,7 @@ struct TrainCfg
     std::string   output_path      = "C:\\temp\\text_v1.bin";
 
     // Seeds.
-    std::uint64_t gen_seed                 = 123745;   ///< master seed
+    std::uint64_t gen_seed                 = 1235437745;   ///< master seed
     bool          use_fixed_gen_seed       = true;
     std::uint64_t reservoir_seed           = 34857575839839;
     bool          use_fixed_reservoir_seed = false;   ///< false → derive from gen_seed
@@ -45,14 +45,17 @@ struct TrainCfg
     std::size_t   warmup_chars       = 64;      ///< transient warmup before training
     std::size_t   warmup_train_chars = 32768;   ///< states collected for CNN standardization
     std::size_t   train_chars        = 900000;  ///< chars streamed for online CNN training
-    int           num_passes         = 10;       ///< corpus passes (reservoir continues, no reset)
+    int           num_passes         = 3;        ///< corpus passes (reservoir continues, no reset)
     std::size_t   val_chars          = 100000;  ///< chars streamed for evaluation
 
-    // CNN architecture + training.
+    // Reservoir dynamics.
     float         spectral_radius   = 0.90f;
-    float         output_fraction   = 1.0f;
+    float         leak_rate         = 1.0f;    ///< 1.0 = full replacement, <1.0 = leaky integrator
+    float         output_fraction   = 0.5f;
+
+    // CNN architecture + training.
     int           cnn_num_layers    = 1;
-    int           cnn_conv_channels = 8;
+    int           cnn_conv_channels = 4;
     int           eval_every_chars  = 100000;  ///< streaming eval interval (0 = end only)
 
     // Gradient accumulation: reservoir streams one char at a time,
@@ -62,7 +65,7 @@ struct TrainCfg
 
     // LR schedule: linear decay from lr_max to lr_max * lr_floor_frac
     // across all mini-batch updates (all passes combined, no reset).
-    float         lr_max            = 0.0015f;  //= 0.0015f;
+    float         lr_max            = 0.0015f;
     float         lr_floor_frac     = 0.5f;    ///< lr decays linearly to lr_max * lr_floor_frac
 
     // Verbosity / eval.
@@ -104,7 +107,7 @@ struct InferCfg
     std::string   prompt           = "To be, or not to be, ";
     std::size_t   num_chars        = 500;
     float         temperature      = 0.8f;   ///< 0 = greedy argmax
-    unsigned      gen_seed         = 12345;  ///< sampling RNG seed
+    unsigned      gen_seed         = 1235437745;  ///< sampling RNG seed
 };
 
 inline const InferCfg kInfer;

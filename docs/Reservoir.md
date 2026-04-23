@@ -40,7 +40,7 @@ is implicit in the binary representation of the vertex addresses.
 | 9   | 512         | 16                 | 8,192         |
 | 10  | 1024        | 18                 | 18,432        |
 
-DIM is constrained to [5, 12], covering 32 to 4096 neurons — the
+DIM is constrained to [5, 16], covering 32 to 65,536 neurons — the
 practical range for reservoir computing.
 
 ## Connectivity: two families of connections

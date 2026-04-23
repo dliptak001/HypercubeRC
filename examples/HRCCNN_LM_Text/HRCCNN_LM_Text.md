@@ -17,6 +17,18 @@ produce coherent character-level predictions — bigrams, trigrams,
 word boundaries, and common word completions — without any explicit
 attention mechanism or gradient-based sequence training.
 
+**Status: paused.** Empirical sweeps (documented in
+`docs/ReservoirMemoryBottleneck.md`) show that all tested configurations
+converge to BPC ~3.05 regardless of reservoir size, readout capacity, or
+training budget. The memory depth intrinsic to the hypercube reservoir is
+too shallow for language modeling — the ~20-40 character echo state
+horizon caps performance at bigram-level prediction. This is a
+fundamental property of the fixed-weight reservoir dynamics, not a tuning
+failure. Work on this example is paused until the memory bottleneck is
+addressed. The next area of exploration is **reservoir cascades**, which
+extend effective memory by chaining reservoirs operating at different
+timescales.
+
 ## Vocabulary (96 tokens)
 
 The vocabulary is **fixed at full printable ASCII plus newline** — not
@@ -540,7 +552,7 @@ Temperature controls generation diversity:
 - Established that FLATTEN > GAP and more spatial resolution is the
   strongest lever.
 
-**Phase 3 — streaming training + DIM 13.** (current)
+**Phase 3 — streaming training + DIM 13.** (complete)
 - Streaming online training: one CNN gradient step per character,
   no states buffer.  Enables DIM 13+ with negligible RAM.
 - DIM 13, of=0.5: 8192-neuron reservoir, CNN sees 4096 vertices.

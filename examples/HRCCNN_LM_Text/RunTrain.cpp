@@ -112,14 +112,20 @@ int RunTrain()
               << " chars=" << corpus.text.size()
               << " vocab_size=" << corpus.vocab.size() << "\n";
 
-    const std::size_t total_chars =
-        args.warmup_chars + args.warmup_train_chars +
-        args.train_chars + args.val_chars + 1;
-    if (corpus.text.size() < total_chars) {
+    const std::size_t train_total =
+        args.warmup_chars + args.warmup_train_chars + args.train_chars + 1;
+    const bool will_wrap_eval = (train_total + args.val_chars) > corpus.text.size();
+    const std::size_t min_corpus = will_wrap_eval
+        ? std::max(train_total, args.val_chars + 1)
+        : (train_total + args.val_chars);
+    if (corpus.text.size() < min_corpus) {
         std::cerr << "error: corpus has " << corpus.text.size()
-                  << " chars, need " << total_chars << "\n";
+                  << " chars, need " << min_corpus
+                  << (will_wrap_eval ? " (eval wraps to start)" : "") << "\n";
         return 2;
     }
+    if (will_wrap_eval)
+        std::cerr << "[train] eval will wrap to corpus start\n";
 
     std::uint64_t gen_seed = args.gen_seed;
     if (!args.use_fixed_gen_seed) {
@@ -134,6 +140,7 @@ int RunTrain()
     rcfg.seed             = reservoir_seed;
     rcfg.num_inputs       = kInputBits;
     rcfg.spectral_radius  = args.spectral_radius;
+    rcfg.leak_rate        = args.leak_rate;
     rcfg.output_fraction  = args.output_fraction;
 
     const std::size_t N = (1ULL << kDIM);
@@ -268,7 +275,9 @@ int RunTrain()
             std::vector<float> saved_state(NN), saved_output(NN);
             esn.SaveReservoirState(saved_state.data(), saved_output.data());
 
-            const std::size_t eval_start_pos = train_start_pos + args.train_chars;
+            const std::size_t default_eval_start = train_start_pos + args.train_chars;
+            const bool wrap_eval = (default_eval_start + args.val_chars + 1) > corpus.text.size();
+            const std::size_t eval_start_pos = wrap_eval ? 0 : default_eval_start;
             std::size_t eval_pos = eval_start_pos;
 
             const std::size_t num_classes = kVocabSize;
@@ -334,7 +343,8 @@ int RunTrain()
 
             // Text samples (only on final pass to save time).
             if (pass == args.num_passes - 1) {
-                const std::size_t val_start = args.warmup_chars + args.warmup_train_chars + args.train_chars;
+                const std::size_t val_start = wrap_eval ? 0
+                    : (args.warmup_chars + args.warmup_train_chars + args.train_chars);
                 const std::size_t prompt_len = std::min(args.eval_prompt_len, args.val_chars);
                 for (std::size_t s = 0; s < args.eval_show_samples; ++s) {
                     const std::size_t span = args.val_chars - prompt_len;
