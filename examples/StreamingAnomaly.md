@@ -74,16 +74,17 @@ Normal signal ──> ESN ──> HCNN train     Live signal ──> ESN ──>
    compute RMSE.
 3. If the window RMSE exceeds the threshold, flag as anomaly.
 
-The reservoir state is cleared between windows via `ClearStates()`, but
-the reservoir's internal neuron states carry over — this is what allows
-the model to detect when dynamics have changed and to recover gradually
-when they return to normal.
+Between windows, `ClearStates()` clears the collected output buffer
+(so the readout can index the new window's timesteps from zero). The
+reservoir neurons' live activations are not reset — they carry over,
+which is what allows the model to detect when dynamics have changed
+and to recover gradually when they return to normal.
 
 ## What to expect
 
-### Leak rate = 0.3 (leaky integrator, default)
+### Leak rate = 0.3 (leaky integrator)
 
-DIM=8, 256 neurons, HCNN on all 256 vertices, leak_rate=0.3.
+DIM=8, 256 neurons, readout on all 256 vertices, leak_rate=0.3.
 Trained once in Phase 1; Phase 2 is frozen prediction.
 
 Baseline RMSE: ~0.0064, threshold ~0.032.

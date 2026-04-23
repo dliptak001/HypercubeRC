@@ -1,7 +1,7 @@
 /// CoreSmokeTest — exercises the full HypercubeRCCore pipeline.
 /// Returns 0 on success, 1 on any failure.
 
-#include "ESN.h"
+#include "../ESN.h"
 #include <cmath>
 #include <cstdio>
 #include <vector>
@@ -11,9 +11,12 @@ static int failures = 0;
 
 static void check(bool ok, const char* name)
 {
-    if (ok) {
+    if (ok)
+    {
         printf("  PASS  %s\n", name);
-    } else {
+    }
+    else
+    {
         printf("  FAIL  %s\n", name);
         ++failures;
     }
@@ -112,7 +115,8 @@ void test_hcnn_multi_output()
 
     constexpr size_t run_steps = 1799;
     std::vector<float> targets(run_steps * K);
-    for (size_t i = 0; i < run_steps; ++i) {
+    for (size_t i = 0; i < run_steps; ++i)
+    {
         targets[i * K + 0] = signal[201 + i];
         targets[i * K + 1] = signal[201 + i] * signal[201 + i];
     }
@@ -215,7 +219,8 @@ void test_multi_input()
     constexpr size_t run_steps = total_steps - warmup_steps;
 
     std::vector<float> inputs(total_steps * K);
-    for (size_t i = 0; i < total_steps; ++i) {
+    for (size_t i = 0; i < total_steps; ++i)
+    {
         float t = static_cast<float>(i) / static_cast<float>(total_steps);
         inputs[i * K + 0] = std::sin(t * 62.83f);
         inputs[i * K + 1] = std::sin(t * 31.42f);

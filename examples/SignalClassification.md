@@ -8,8 +8,8 @@ reservoir in alternating blocks. The HCNN readout classifies which
 waveform is active at each timestep, using only the reservoir's
 internal state.
 
-This is the only example that performs multi-class classification, with
-a confusion matrix and transition dynamics analysis.
+This example focuses on multi-class classification, with a confusion
+matrix and transition dynamics analysis.
 
 ## Conceptual background
 
@@ -70,7 +70,7 @@ Waveform blocks ──> Reservoir ──> HCNN: 4-class softmax ──> Class
 
 ### Default configuration
 
-DIM=5, 32 neurons, leak_rate=0.65, all vertices used by HCNN.
+DIM=5, 32 neurons, leak_rate=0.65, readout on all 32 vertices.
 The leak rate is intentionally detuned from the optimal 0.35 to produce
 visible classification errors — at 0.35 the readout achieves 100%.
 Close frequencies + noise + short blocks + high leak rate make this

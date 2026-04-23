@@ -38,8 +38,8 @@ A healthy reservoir should have high input correlation across all vertices.
 The hypercube topology's uniform connectivity is designed to distribute
 input information to every vertex.
 
-This diagnostic uses **raw reservoir states** (not translated features)
-because it analyzes intrinsic reservoir properties, not prediction quality.
+This diagnostic uses **raw reservoir states** because it analyzes
+intrinsic reservoir properties, not prediction quality.
 
 ## Why this diagnostic matters
 

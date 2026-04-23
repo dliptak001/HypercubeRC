@@ -3,13 +3,41 @@
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <random>
 #include <vector>
 
 #include "../ESN.h"
 #include "../readout/HCNNPresets.h"
-#include "SignalGenerators.h"
+
+struct NARMASeq { std::vector<float> inputs; std::vector<float> targets; };
+
+/// Generate NARMA-10 input/target sequence.
+/// y(t+1) = 0.3*y(t) + 0.05*y(t)*sum(y(t-i),i=0..9) + 1.5*u(t-9)*u(t) + 0.1
+/// Inputs u(t) uniform in [0, 0.5]. Targets clamped to [0, 1].
+inline NARMASeq GenerateNARMA10(uint64_t input_seed, size_t total_steps)
+{
+    std::mt19937_64 rng(input_seed);
+    std::uniform_real_distribution<double> dist(-1.0, 1.0);
+    std::vector<float> u(total_steps);
+    std::vector<float> y(total_steps, 0.0f);
+
+    for (size_t t = 0; t < total_steps; ++t)
+        u[t] = static_cast<float>(dist(rng)) * 0.25f + 0.25f;
+
+    for (size_t t = 10; t < total_steps - 1; ++t)
+    {
+        float y_sum = 0.0f;
+        for (size_t i = 0; i < 10; ++i) y_sum += y[t - i];
+        y[t + 1] = 0.3f * y[t] + 0.05f * y[t] * y_sum
+                  + 1.5f * u[t - 9] * u[t] + 0.1f;
+        if (y[t + 1] > 1.0f) y[t + 1] = 1.0f;
+        if (y[t + 1] < 0.0f) y[t + 1] = 0.0f;
+    }
+    return {u, y};
+}
 
 /// NARMA-10 nonlinear benchmark. Reports NRMSE and wall-clock timing.
 template <size_t DIM>

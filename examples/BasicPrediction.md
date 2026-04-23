@@ -49,7 +49,7 @@ Input signal ──> Reservoir ──> HCNNReadout ──> Prediction
 
 ## What to expect
 
-### Leak rate = 0.2 (leaky integrator, default)
+### Leak rate = 0.2 (leaky integrator)
 
 DIM=7, 128 neurons, leak_rate=0.2. Sine prediction is trivially easy:
 
@@ -100,9 +100,9 @@ SignalClassification examples.
   Raising `cnn_cfg.lr_max` above ~0.005 is risky — weights can
   diverge into denormals and the CPU falls off fast-math paths.
 
-- **HCNN layer count.** Leave `cnn_cfg.num_layers = 0` for the
-  DIM-auto default (`min(DIM-2, 2)` pairs). Override with a smaller
-  count to see how depth affects fit on a trivial signal.
+- **HCNN layer count.** The preset uses `num_layers = 1` (one Conv+Pool
+  pair). Set `cnn_cfg.num_layers = 0` for auto-sizing (`min(DIM-2, 2)`
+  pairs) or increase to see how depth affects fit on a trivial signal.
 
 - **Change the signal.** Replace `sin(0.1t)` with a more complex waveform
   (sum of two sines, or a chirp). HCNN's advantage grows as the target

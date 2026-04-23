@@ -169,6 +169,33 @@ None of the storage or addressing advantages produce a measurable speed
 difference in a software benchmark at DIM 5-12 on a modern CPU with deep cache
 hierarchies. They become relevant at scale or in constrained environments.
 
+## State Space Quality
+
+The hypercube topology produces a genuinely high-dimensional, input-driven
+state space with no wasted neurons. A State Rank diagnostic
+([diagnostics/StateRank.md](diagnostics/StateRank.md)) measures this via
+eigenvalue spectrum analysis and per-vertex input correlation:
+
+- **High effective rank.** The state covariance eigenvalue spectrum is broad,
+  not dominated by a few components. Effective rank (eigenvalues >1% of max)
+  grows with DIM — from ~7 at DIM=5 to ~23 at DIM=10. At DIM=10, the top 10
+  eigenvalues capture only ~87% of variance; the remaining ~13% is spread
+  across hundreds of additional dimensions.
+
+- **No symmetry collapse.** Despite the hypercube's high structural symmetry
+  (every vertex is identical under the automorphism group), random weights and
+  tanh nonlinearity break the symmetry completely. The reservoir produces
+  non-redundant state dimensions — no neurons are copies of each other.
+
+- **100% input utilization.** Every vertex is strongly correlated with input
+  history (R² > 0.5 for all vertices, mean R² ~0.95). There are no "dead"
+  neurons producing autonomous noise. The uniform connectivity distributes
+  input information to every vertex in the graph.
+
+These properties mean the reservoir uses its full capacity efficiently: adding
+neurons (increasing DIM) adds genuinely new dimensions to the state
+representation, not redundant copies of existing ones.
+
 ## Architecture Summary
 
 | Property | Detail                                                          |
@@ -321,8 +348,7 @@ HypercubeRC/
 
   diagnostics/
     BenchmarkSuite.h      Orchestrates NARMA-10 across DIM
-    NARMA10.h/md          Nonlinear memory benchmark
-    SignalGenerators.h    Benchmark signal generators and NRMSE utility
+    NARMA10.h/md          Nonlinear memory benchmark (includes NARMA-10 generator)
     StateRank.h/md        Reservoir dimensionality and input correlation
 
   docs/

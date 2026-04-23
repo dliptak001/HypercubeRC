@@ -5,6 +5,7 @@
 #include <vector>
 #include <random>
 #include <cstddef>
+#include <algorithm>
 #include <cmath>
 #include "../ESN.h"
 
@@ -18,8 +19,10 @@ class StateRank
 
 public:
     StateRank(const ReservoirConfig* config = nullptr,
-              float output_fraction = 1.0f)
-        : config_(config), output_fraction_(output_fraction)
+              float output_fraction = 1.0f,
+              uint64_t single_seed = 0)
+        : config_(config), output_fraction_(output_fraction),
+          single_seed_(single_seed)
     {
     }
 
@@ -28,7 +31,10 @@ public:
         constexpr size_t warmup = (N < 256) ? 200 : 500;
         constexpr size_t collect = 18 * N;
 
-        PrintHeader(warmup, collect, max_components);
+        ReservoirConfig display_cfg = config_ ? *config_ : ReservoirConfig{};
+        if (output_fraction_ != 1.0f)
+            display_cfg.output_fraction = output_fraction_;
+        PrintHeader(warmup, collect, max_components, display_cfg);
 
         std::vector<double> ev_sum(max_components, 0.0);
         size_t ev_count = 0;
@@ -130,17 +136,13 @@ public:
 private:
     const ReservoirConfig* config_;
     float output_fraction_;
+    uint64_t single_seed_;
 
-    static std::vector<uint64_t> Seeds()
+    std::vector<uint64_t> Seeds() const
     {
-        if (single_seed) return {single_seed};
+        if (single_seed_) return {single_seed_};
         return {42, 1042, 2042};
     }
-
-public:
-    static inline thread_local uint64_t single_seed = 0;
-
-private:
 
     struct InputCorr
     {
@@ -279,11 +281,18 @@ private:
         return eigenvalues;
     }
 
-    void PrintHeader(size_t warmup, size_t collect, size_t max_components) const
+    void PrintHeader(size_t warmup, size_t collect, size_t max_components,
+                     const ReservoirConfig& cfg) const
     {
-        std::cout << "=== State Rank Analysis (raw features, " << Seeds().size() << "-seed avg) ===\n";
-        std::cout << "Seeds: {42,1042,2042} | Alpha: 1.0 | Leak: 1.0"
-                  << " | SR: 0.90 | Input scaling: 0.02\n";
+        auto seeds = Seeds();
+        std::cout << "=== State Rank Analysis (raw features, " << seeds.size() << "-seed avg) ===\n";
+        std::cout << "Seeds: {";
+        for (size_t i = 0; i < seeds.size(); ++i)
+            std::cout << (i ? "," : "") << seeds[i];
+        std::cout << "} | Alpha: " << cfg.alpha
+                  << " | Leak: " << cfg.leak_rate
+                  << " | SR: " << cfg.spectral_radius
+                  << " | Input scaling: " << cfg.input_scaling << "\n";
         std::cout << "DIM=" << DIM << "  N=" << N
                   << "  Warmup: " << warmup << " | Collect: " << collect
                   << " | Max components: " << max_components << "\n\n";

@@ -59,5 +59,5 @@ in the header files are written for an educational audience:
 |--------|----------------|
 | `ESN.h` | `ESN<DIM>` — the pipeline wrapper (warmup, run, collect states) |
 | `Reservoir.h` | `Reservoir<DIM>` — the hypercube reservoir core |
-| `diagnostics/SignalGenerators.h` | `GenerateNARMA10()`, `ComputeNRMSE()` |
+| `diagnostics/NARMA10.h` | `GenerateNARMA10()`, `NARMA10<DIM>` benchmark |
 | `readout/HCNNReadout.h` | `HCNNReadout` — learned convolutional readout |
