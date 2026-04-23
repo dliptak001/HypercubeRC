@@ -153,10 +153,9 @@ configuration (~256 states per sample, 2 Conv+Pool pairs, ~20k samples,
 300 epochs) this runs in seconds to minutes depending on core count.
 CPU cores saturate at `batch_size >= 128`.
 
-**Stability note:** `lr_max` above ~0.003 can drive weights into
+**Stability note:** `lr_max` above ~0.005 can drive weights into
 denormal/NaN territory, where CPU falls off fast math paths and
-throughput collapses. Benchmark defaults (`diagnostics/NARMA10.h`)
-use `epochs=300, batch_size=128, lr_max=0.003`.
+throughput collapses.
 
 ## Feature Standardization
 

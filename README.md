@@ -22,14 +22,16 @@ vanishing gradients), reservoir computing splits the problem in two:
    produces a high-dimensional, time-dependent state. Its weights are never
    trained — they are set once at initialization and frozen.
 
-2. **A simple linear readout** learns to map the reservoir's state to the desired
-   output. This is a single-layer linear regression — fast, stable, and globally
-   optimal.
+2. **A trained readout** learns to map the reservoir's state to the desired
+   output. Traditionally this is a single-layer linear regression. HypercubeRC
+   replaces the linear fit with a learned convolutional readout
+   ([HypercubeCNN](https://github.com/dliptak001/HypercubeCNN)) that discovers
+   nonlinear features directly on the hypercube topology.
 
 The insight is that a sufficiently rich dynamical system, driven by input, will
 naturally create a high-dimensional embedding of the input history. The nonlinear
-recurrence provides the computational power; the linear readout provides the
-learning. This separation makes reservoir computing orders of magnitude faster to
+recurrence provides the computational power; the readout provides the learning.
+This separation makes reservoir computing orders of magnitude faster to
 train than backpropagation-based RNNs, while achieving competitive performance on
 tasks that require memory and nonlinear computation.
 
@@ -42,6 +44,23 @@ families — cumulative-bit Hamming shells for long-range mixing and single-bit
 nearest-neighbor flips for local coupling. All neighbor addresses are computed by
 XOR on vertex indices; no adjacency list is stored.
 
+The readout is [HypercubeCNN](https://github.com/dliptak001/HypercubeCNN) — a
+convolutional neural network whose kernels operate on Boolean hypercube topology
+rather than spatial grids. Convolution is defined by Hamming-distance
+neighborhoods with weight sharing under the hypercube's symmetry group;
+pooling pairs each vertex with its bitwise complement and reduces DIM by 1,
+producing a perfect sub-hypercube. No adjacency lists, no padding, no border
+effects — neighbor lookup is a single XOR instruction.
+
+The pairing is topology-native. The reservoir state *is* a signal on a hypercube
+graph — N activations sitting on hypercube vertices, shaped by XOR-addressed
+dynamics. HypercubeCNN's convolutions respect the same vertex addressing and
+adjacency structure, so the readout consumes the reservoir's output with zero
+topological distortion. There is no reshaping into a flat vector for a linear fit,
+no arbitrary packing into a 2D grid for a spatial CNN — the data stays on the
+hypercube it was born on, and the learned kernels exploit the same locality that
+generated the dynamics.
+
 The system targets DIM 5-16 (32 to 65536 neurons), the practical range for
 reservoir computing applications.
 
@@ -50,9 +69,7 @@ reservoir computing applications.
 The general-purpose spectral radius (0.90) and input scaling (0.02) are
 **independent of reservoir size**. The same two values produce the best
 general-purpose results at every DIM from 5 to 9 (32 to 512 neurons), verified
-across NARMA-10 benchmarks with per-DIM
-optimal seeds (selected by 500-seed survey) and three-pass grid sweeps (coarse,
-normal, fine).
+across NARMA-10 benchmarks with per-DIM optimal seeds.
 
 This is unusual in reservoir computing. Standard practice requires re-sweeping
 the spectral radius whenever the reservoir size changes, because the stability
@@ -60,13 +77,15 @@ threshold of the weight matrix shifts with N in random sparse networks.
 Practitioners routinely report per-size tuning, and published ESN results almost
 always include a per-N hyperparameter table. The hypercube breaks this pattern.
 
-**Why it works.** The hypercube is *vertex-transitive*: every vertex has exactly
-the same local neighborhood structure — same degree, same shell distances, same
-symmetry group. Increasing DIM adds more vertices, but each one sees the same
-number of neighbors with the same weight distribution. The per-vertex dynamics
-are structurally identical at every scale, so the stability threshold — the
-spectral radius where dynamics transition from convergent to chaotic — is a
-property of the local structure, not the global size.
+**Why it works (hypothesis).** The hypercube is *vertex-transitive*:
+every vertex has exactly the same local neighborhood structure — same degree, same
+shell distances, same symmetry group. Increasing DIM adds more vertices, but each
+one sees the same number of neighbors with the same weight distribution. The
+per-vertex dynamics are structurally identical at every scale, so the stability
+threshold — the spectral radius where dynamics transition from convergent to
+chaotic — may be a property of the local structure, not the global size. This is
+plausible but unproven; the empirical evidence is strong (verified DIM 5-9), but
+no formal analysis has been done.
 
 Random sparse networks lack this property. Their heterogeneous degree
 distributions mean some neurons are hubs, others peripheral. This heterogeneity
@@ -78,27 +97,18 @@ input_scaling=0.02, then increase DIM to add capacity without re-sweeping. No
 per-size tuning tables, no factory functions, no search. The most common
 hyperparameter burden in reservoir computing is eliminated.
 
-**Of academic interest.** Scale invariance of optimal hyperparameters is a direct
-consequence of vertex-transitivity — a graph-theoretic property absent from the
-random sparse topologies used in conventional reservoir computing. To our
-knowledge, this is the first observation that a vertex-transitive reservoir
-topology produces size-independent optimal spectral radius and input scaling. The
-finding suggests that reservoir topology studies should examine the relationship
-between graph symmetry and hyperparameter sensitivity more broadly. Vertex-
-transitive graphs (hypercubes, tori, Cayley graphs) may constitute a class of
-reservoir substrates with fundamentally different tuning characteristics than
-random graphs.
-
 See [docs/ScaleInvariance.md](docs/ScaleInvariance.md) for sweep data and
 analysis.
 
 ## Seed Quality is Topology-Invariant
 
-A 500-seed survey across NARMA-10 and Memory Capacity
-benchmarks (DIM 5-8, with library support through DIM 16) shows that the rank ordering of seeds by performance
+A 500-seed survey across NARMA-10, Mackey-Glass h=1, and Memory Capacity
+benchmarks (DIM 5-8) shows that the rank ordering of seeds by performance
 is stable across hyperparameter configurations. Seeds screened at one
 (SR, input_scaling) pair rank similarly at any other pair within the
-operating range.
+operating range. (Mackey-Glass has since been removed from the codebase;
+the seed survey data is preserved in
+[docs/ScaleInvariance.md](docs/ScaleInvariance.md).)
 
 **Input scaling has no effect on seed ranking.** Spearman rank correlation
 across IS values {0.010, 0.015, 0.020, 0.025, 0.030} at fixed SR=0.90
@@ -129,8 +139,8 @@ A controlled head-to-head experiment
 ([docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md)) showed that a random
 sparse ESN with identical parameters produces equivalent benchmark performance
 and equivalent speed at DIM 5-12. The hypercube does not compute better than a
-random graph — but it computes more elegantly, and its vertex-transitive symmetry
-produces the scale-invariant hyperparameters described above.
+random graph — but the deterministic structure buys architectural properties that
+random graphs cannot provide:
 
 **Zero storage overhead.** No adjacency list. The reservoir needs only two arrays
 (states and weights); a random graph adds a third (adjacency). At DIM=10 this is
@@ -151,17 +161,9 @@ addressing maps to gates directly — no routing table, no memory controller for
 adjacency lookup. The hypercube is one of the few reservoir topologies that can
 be implemented without a stored graph in dedicated hardware.
 
-**Scale-invariant tuning.** Unlike random sparse graphs, the hypercube's
-vertex-transitive topology produces size-independent optimal hyperparameters
-(see above). This is a property of the graph symmetry, not available to random
-topologies.
+**Scale-invariant tuning.** Size-independent optimal hyperparameters (see [above](#scale-invariant-hyperparameters)).
 
-**Topology-invariant seed quality.** The deterministic structure means that seed
-quality — how well a particular random weight draw performs — is a stable property
-of the topology, not an artifact of a specific hyperparameter setting. Seeds
-screened once at the default SR and input scaling rank the same way across the
-operating range (Spearman rho >= 0.82 within the SR corridor, rho >= 0.949 across
-input scaling). Screen once, reuse everywhere — no per-configuration seed search.
+**Topology-invariant seed quality.** Seeds screened once rank the same way across the operating range (see [above](#seed-quality-is-topology-invariant)).
 
 None of the storage or addressing advantages produce a measurable speed
 difference in a software benchmark at DIM 5-12 on a modern CPU with deep cache
@@ -214,32 +216,17 @@ full architectural details.
 
 ### Stage 2: Readout — HypercubeCNN
 
-The readout is the only trained component — a mapping from raw reservoir
-states to the target signal.  HypercubeRC uses
-[HypercubeCNN](https://github.com/dliptak001/HypercubeCNN) as its learned
-readout layer: a convolutional neural network whose kernels operate on
-Boolean hypercube topology rather than spatial grids.
-
-**Why this pairing works.** The reservoir state *is* a signal on a
-hypercube graph — N = 2^DIM activations sitting on hypercube vertices,
-shaped by XOR-addressed dynamics.  HypercubeCNN's Hamming-distance
-convolution kernels respect the same vertex addressing and adjacency
-structure, so the readout consumes the reservoir's output with zero
-topological distortion.  There is no reshaping into a flat vector for a
-linear fit, no arbitrary packing into a 2D grid for a spatial CNN — the
-data stays on the hypercube it was born on, and the learned kernels
-exploit the same locality that generated the dynamics.  HypercubeCNN is
-the only architecture whose inductive bias matches the reservoir's
-topology.
-
-- **HCNNReadout** — Discovers nonlinear feature interactions via learned
-  convolution kernels on the native hypercube topology. Supports regression
-  (single/multi-output), multi-class classification, and online training.
+The readout is the only trained component. HypercubeCNN's Hamming-distance
+convolution kernels match the reservoir's native topology (see
+[What is HypercubeRC?](#what-is-hypercuberc) above), so the readout discovers
+nonlinear features directly on the hypercube graph with no reshaping or
+topological distortion. Supports regression (single/multi-output), multi-class
+classification, and online streaming training.
 
 See [docs/HCNNReadout.md](docs/HCNNReadout.md) for algorithm details,
 architecture auto-sizing, and streaming mode.
 
-## Headline Results
+## Benchmark Results
 
 ### NARMA-10 (nonlinear memory, NRMSE, lower is better)
 
@@ -282,7 +269,7 @@ import numpy as np
 import hypercube_rc as hrc
 
 signal = np.sin(np.linspace(0, 20 * np.pi, 2000)).astype(np.float32)
-esn = hrc.ESN(dim=7, seed=42)
+esn = hrc.ESN(dim=7, seed=6437149480297576047)  # per-DIM surveyed seed
 esn.fit(signal, warmup=200)
 print(f"R2 = {esn.r2():.6f}")
 ```
@@ -307,6 +294,9 @@ The build produces six executables:
 | `BasicPrediction` | Minimal example: sine wave prediction |
 | `SignalClassification` | Multi-class waveform recognition with confusion matrix |
 | `StreamingAnomaly` | Streaming anomaly detection with recovery dynamics |
+| `HRCCNN_LM_Text` | Character-level language model on Tiny Shakespeare (DIM 13) |
+| `CoreSmokeTest` | Diagnostic smoke tests: prediction, classification, multi-output |
+
 Start with `BasicPrediction` to see the pipeline end-to-end. Each example has a
 companion `.md` file with a detailed walkthrough.
 
@@ -327,6 +317,7 @@ HypercubeRC/
     BasicPrediction.cpp/md      Minimal sine wave prediction
     SignalClassification.cpp/md Multi-class waveform recognition
     StreamingAnomaly.cpp/md     Streaming anomaly detection
+    HRCCNN_LM_Text/             Character-level text LM (DIM 13, streaming)
 
   diagnostics/
     BenchmarkSuite.h      Orchestrates NARMA-10 across DIM
@@ -353,6 +344,8 @@ HypercubeRC/
 | [docs/Tuning.md](docs/Tuning.md) | Practical tuning guide: parameter-by-parameter advice, common scenarios, workflow |
 | [docs/Python_SDK.md](docs/Python_SDK.md) | Python SDK: pip install, fit/predict API, streaming, persistence |
 | [docs/CPP_SDK.md](docs/CPP_SDK.md) | C++ static library: build, install, find_package usage, API reference |
+| [docs/TrainingModes.md](docs/TrainingModes.md) | Batch vs streaming training: when to use each, memory tradeoffs |
+| [docs/ReservoirMemoryBottleneck.md](docs/ReservoirMemoryBottleneck.md) | Reservoir memory depth ceiling analysis for language modeling |
 
 Diagnostic `.md` files in `diagnostics/` provide educational introductions to
 each benchmark with sample results and interpretation guidance.

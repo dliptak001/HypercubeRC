@@ -251,7 +251,7 @@ struct HCNNReadoutConfig {
 | `conv_channels` | `int` | `16` | Base channel count for the first Conv layer. Doubles per layer (16, 32 for a 2-layer stack). |
 | `epochs` | `int` | `200` | Training epochs. Structured signals saturate at ~25 epochs; chaotic signals (NARMA) need ~2000. |
 | `batch_size` | `int` | `32` | Mini-batch size. Use 128 on multi-core CPUs to saturate threading. |
-| `lr_max` | `float` | `0.005` | Peak learning rate for cosine annealing. **Keep <= 0.003 to avoid weight divergence into denormal/NaN territory.** |
+| `lr_max` | `float` | `0.005` | Peak learning rate for cosine annealing. **Keep <= 0.005 to avoid weight divergence into denormal/NaN territory.** |
 | `lr_min_frac` | `float` | `0.1` | Cosine schedule floor as fraction of `lr_max`. Effective `lr_min = lr_max * lr_min_frac`. |
 | `lr_decay_epochs` | `int` | `0` | Cosine decay horizon. 0 = use `epochs`. Set > epochs to trace only a prefix of the cosine curve (keeps lr high when shortening a run). |
 | `weight_decay` | `float` | `0.0` | L2 weight decay applied by the Adam optimizer. |

@@ -18,7 +18,7 @@ struct HCNNReadoutConfig {
     int conv_channels    = 16;      ///< Base channels (doubles per layer).
     int epochs           = 200;
     int batch_size       = 32;
-    float lr_max         = 0.005f;  ///< Cosine annealing peak. Keep <= 0.003 to avoid NaN.
+    float lr_max         = 0.005f;  ///< Cosine annealing peak. Keep <= 0.005 to avoid NaN.
     float lr_min_frac    = 0.1f;    ///< Floor = lr_max * lr_min_frac.
     int   lr_decay_epochs = 0;      ///< Cosine decay horizon. 0 = use `epochs`.
     float weight_decay   = 0.0f;

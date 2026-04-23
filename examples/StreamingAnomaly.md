@@ -165,7 +165,7 @@ washout time.
 
 - **HCNN epochs.** The default is 1000. On this smooth multi-harmonic
   process signal HCNN saturates early — try lowering to 100 or 25 to
-  verify. Keep `lr_max <= 0.003` to avoid denormal/NaN.
+  verify. Keep `lr_max <= 0.005` to avoid denormal/NaN.
 
 - **Lower the threshold.** Change `anomaly_threshold` from 5.0 to 2.0.
   You'll catch anomalies sooner but may see false positives during
