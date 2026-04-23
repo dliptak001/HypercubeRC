@@ -62,6 +62,7 @@ else()
         GIT_SHALLOW    TRUE
     )
     set(HCNN_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(HCNN_NATIVE_ARCH OFF CACHE BOOL "" FORCE)
     FetchContent_MakeAvailable(HypercubeCNN)
     set(HCNN_INCLUDE "${hypercubecnn_SOURCE_DIR}")
     set(HCNN_LIBS HypercubeCNNCore)
