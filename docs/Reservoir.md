@@ -15,7 +15,7 @@ those N dimensions to reconstruct the target. Traditional reservoir
 computing uses a linear readout (ridge regression); HypercubeRC uses a
 learned convolutional readout (HCNN) that operates directly on the
 hypercube state and discovers nonlinear features automatically — see
-[HCNNReadout.md](HCNNReadout.md).
+[Readout.md](Readout.md).
 
 The quality of the reservoir depends on two things:
 1. **Rich dynamics** — different inputs produce distinguishably different

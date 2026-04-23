@@ -30,7 +30,7 @@ defaults don't serve. Most users will only need to adjust `DIM`,
 2. Pick HCNN config
    - Start with HRCCNNBaseline<DIM>() from HCNNPresets.h
    - Override epochs for your task: ~25-100 for smooth signals, ~2000 for chaotic
-   - Classification: set task=HCNNTask::Classification, num_outputs=num_classes
+   - Classification: set task=ReadoutTask::Classification, num_outputs=num_classes
 
 3. Set output_fraction (DIM 9+)
    - DIM 9:   0.5   (256 selected vertices)
@@ -212,11 +212,11 @@ Seed selection is free performance -- same compute cost, better results.
 ## HCNN readout tuning
 
 The HCNN readout is the only trained component. See
-[docs/HCNNReadout.md](HCNNReadout.md) for architecture details.
+[docs/Readout.md](Readout.md) for architecture details.
 
 ### Starting config
 
-Use `HRCCNNBaseline<DIM>()` from `readout/HCNNPresets.h` as the starting
+Use `HRCCNNBaseline<DIM>()` from `HCNNPresets.h` as the starting
 point. It provides surveyed reservoir seed + baseline CNN config per DIM.
 
 ### Key HCNN parameters

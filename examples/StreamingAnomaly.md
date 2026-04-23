@@ -178,9 +178,9 @@ washout time.
 
 ## A note on online training
 
-`HCNNReadout` also supports online training for streaming applications.
+`Readout` also supports online training for streaming applications.
 For workloads that need to track drift, HCNN online training can adapt
-the model incrementally — see `docs/HCNNReadout.md` for details. This
+the model incrementally — see `docs/Readout.md` for details. This
 example uses frozen-readout mode to demonstrate pure anomaly detection.
 
 ## Build and run

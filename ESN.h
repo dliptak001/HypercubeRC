@@ -5,10 +5,10 @@
 #include <memory>
 #include <vector>
 #include "Reservoir.h"
-#include "HCNNReadout.h"
+#include "Readout.h"
 
 /// @brief Echo-state network implementing the full pipeline:
-///        Reservoir -> [Output Selection] -> HCNNReadout.
+///        Reservoir -> [Output Selection] -> Readout.
 ///
 /// @tparam DIM Hypercube dimension (5-16). Vertex count is 2^DIM.
 template <size_t DIM>
@@ -39,14 +39,14 @@ public:
     void Train(const float* targets, size_t train_size);
 
     void Train(const float* targets, size_t train_size,
-               const HCNNReadoutConfig& config);
+               const ReadoutConfig& config);
 
     void Train(const float* targets, size_t train_size,
-               const HCNNReadoutConfig& config,
+               const ReadoutConfig& config,
                CNNTrainHooks& hooks);
 
     void InitOnline(const float* warmup_inputs, size_t warmup_count,
-                    const HCNNReadoutConfig& config);
+                    const ReadoutConfig& config);
 
     void TrainLiveStep(float target_class, float lr, float weight_decay = 0.0f);
 
@@ -119,11 +119,11 @@ public:
 
     [[nodiscard]] ReadoutState GetReadoutState() const;
     void SetReadoutState(const ReadoutState& state);
-    void SetCNNConfig(const HCNNReadoutConfig& cfg);
+    void SetCNNConfig(const ReadoutConfig& cfg);
 
 private:
     std::unique_ptr<Reservoir<DIM>> reservoir_;
-    HCNNReadout readout_;
+    Readout readout_;
 
     size_t num_inputs_ = 1;
     float output_fraction_ = 1.0f;
@@ -136,7 +136,7 @@ private:
     [[nodiscard]] size_t EffectiveDIM() const;
     const float* SubsampleIntoScratch(const float* src) const;
     const float* HCNNState(size_t timestep) const;
-    [[nodiscard]] std::vector<float> HCNNStates(size_t start, size_t count) const;
+    [[nodiscard]] std::vector<float> ReadoutStates(size_t start, size_t count) const;
 
     mutable std::vector<float> scratch_subsampled_;
 };

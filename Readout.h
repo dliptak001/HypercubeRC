@@ -7,13 +7,13 @@
 
 namespace hcnn { class HCNN; }
 
-enum class HCNNTask { Regression, Classification };
+enum class ReadoutTask { Regression, Classification };
 
 /// HCNN readout architecture and training parameters.
 /// Must stay trivially copyable (POD) for checkpoint serialization.
-struct HCNNReadoutConfig {
+struct ReadoutConfig {
     int num_outputs      = 1;       ///< Classes (classification) or targets (regression).
-    HCNNTask task        = HCNNTask::Regression;
+    ReadoutTask task        = ReadoutTask::Regression;
     int num_layers       = 0;       ///< Conv+Pool pairs. 0 = auto: min(DIM-2, 2).
     int conv_channels    = 16;      ///< Base channels (doubles per layer).
     int epochs           = 200;
@@ -27,7 +27,7 @@ struct HCNNReadoutConfig {
     bool verbose_train_acc = false;  ///< Also print train accuracy/MSE each epoch.
 };
 
-/// Mid-training evaluation hooks. Separate from HCNNReadoutConfig to
+/// Mid-training evaluation hooks. Separate from ReadoutConfig to
 /// preserve POD layout. Fires after every `eval_every_epochs` epochs
 /// and after the final epoch. The readout is usable for Predict/R2/Accuracy
 /// inside the callback.
@@ -44,38 +44,38 @@ struct CNNTrainHooks {
 /// Linear -> de-center -> output.
 ///
 /// Architecture auto-sized from DIM: min(DIM-2, 2) Conv+Pool pairs,
-/// channels doubling per layer. Override via HCNNReadoutConfig::num_layers.
+/// channels doubling per layer. Override via ReadoutConfig::num_layers.
 ///
 /// PIMPL: hcnn::HCNN held via unique_ptr; #include "HCNN.h" in .cpp only.
-class HCNNReadout
+class Readout
 {
 public:
-    HCNNReadout();
-    ~HCNNReadout();
-    HCNNReadout(HCNNReadout&&) noexcept;
-    HCNNReadout& operator=(HCNNReadout&&) noexcept;
+    Readout();
+    ~Readout();
+    Readout(Readout&&) noexcept;
+    Readout& operator=(Readout&&) noexcept;
 
-    HCNNReadout(const HCNNReadout&) = delete;
-    HCNNReadout& operator=(const HCNNReadout&) = delete;
+    Readout(const Readout&) = delete;
+    Readout& operator=(const Readout&) = delete;
 
     // ----- Batch training -----
 
     /// Train on collected reservoir states (row-major, N floats per sample).
     void Train(const float* states, const float* targets,
                size_t num_samples, size_t dim,
-               const HCNNReadoutConfig& config,
+               const ReadoutConfig& config,
                CNNTrainHooks& hooks);
 
     void Train(const float* states, const float* targets,
                size_t num_samples, size_t dim,
-               const HCNNReadoutConfig& config = {});
+               const ReadoutConfig& config = {});
 
     // ----- Online (streaming) training -----
 
     /// Initialize for online training. Computes standardization from warmup
     /// states, builds architecture, sets Adam optimizer.
     void InitOnline(const float* warmup_states, size_t warmup_count,
-                    size_t dim, const HCNNReadoutConfig& config);
+                    size_t dim, const ReadoutConfig& config);
 
     /// Single-sample online step (classification).
     void TrainOnlineStep(const float* state, int target_class,
@@ -122,7 +122,7 @@ public:
     [[nodiscard]] size_t NumOutputs()  const { return num_outputs_; }
     [[nodiscard]] size_t NumFeatures() const { return num_features_; }
     [[nodiscard]] bool   IsTrained()   const { return trained_; }
-    [[nodiscard]] const HCNNReadoutConfig& GetConfig() const { return config_; }
+    [[nodiscard]] const ReadoutConfig& GetConfig() const { return config_; }
 
     // ----- Serialization -----
 
@@ -140,11 +140,11 @@ public:
                   std::vector<double> target_mean = {});
 
     /// Pre-set config before SetState (needed for model loading without training).
-    void SetConfig(const HCNNReadoutConfig& cfg);
+    void SetConfig(const ReadoutConfig& cfg);
 
 private:
     std::unique_ptr<hcnn::HCNN> net_;
-    HCNNReadoutConfig config_;
+    ReadoutConfig config_;
     bool trained_ = false;
     size_t dim_ = 0;
     size_t num_features_ = 0;

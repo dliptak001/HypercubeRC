@@ -310,7 +310,7 @@ sees the subsampled live state directly; no states buffer.
 
 ## Readout
 
-`HCNNReadout` in **multi-class classification** mode:
+`Readout` in **multi-class classification** mode:
 
 - **Output shape**: CNN backbone's feature vector projects to
   **96 logits** -> softmax -> probability distribution over vocab.
@@ -620,7 +620,7 @@ examples/HRCCNN_LM_Text/
   vocab matches the expected fixed set.
 
 Format: format version, DIM, training metadata (seed, positions, epochs,
-git SHA), ReservoirConfig and HCNNReadoutConfig as POD blobs, then the
+git SHA), ReservoirConfig and ReadoutConfig as POD blobs, then the
 readout state (weights blob, bias, feature mean/scale vectors).
 | Training positions | ~200k (5k expr x 40 chars) | 900k (streamed) |
 | Primary metric | exact-match accuracy | BPC |

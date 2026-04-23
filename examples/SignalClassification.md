@@ -25,7 +25,7 @@ into a high-dimensional representation where different signal classes become
 separable.
 
 **HCNN: native multi-class.** The CNN readout supports multi-class
-natively via `num_outputs=4` and `HCNNTask::Classification`, using
+natively via `num_outputs=4` and `ReadoutTask::Classification`, using
 softmax + cross-entropy loss. A single readout handles all four classes.
 
 ## The four waveforms

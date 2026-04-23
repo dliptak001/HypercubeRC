@@ -216,7 +216,7 @@ from readout cost.
 ## Pipeline
 
 ```
-Input ──> Reservoir (hypercube) ──> HCNNReadout (HypercubeCNN) ──> Output
+Input ──> Reservoir (hypercube) ──> Readout (HypercubeCNN) ──> Output
               fixed random                  trained
 ```
 
@@ -250,7 +250,7 @@ nonlinear features directly on the hypercube graph with no reshaping or
 topological distortion. Supports regression (single/multi-output), multi-class
 classification, and online streaming training.
 
-See [docs/HCNNReadout.md](docs/HCNNReadout.md) for algorithm details,
+See [docs/Readout.md](docs/Readout.md) for algorithm details,
 architecture auto-sizing, and streaming mode.
 
 ## Benchmark Results
@@ -333,12 +333,10 @@ companion `.md` file with a detailed walkthrough.
 HypercubeRC/
   Reservoir.h/cpp        Hypercube reservoir (N = 2^DIM vertices)
   ESN.h/cpp              Unified pipeline: warmup, run, train, predict
+  Readout.h/cpp      Learned convolutional readout (PIMPL)
+  HCNNPresets.h          Per-DIM baseline configs and surveyed seeds
   main.cpp               Benchmark suite entry point (DIM 5-8)
   docs/CPP_SDK.md        C++ consumer documentation for the static library
-
-  readout/
-    HCNNReadout.h/cpp     Learned convolutional readout (PIMPL)
-    HCNNPresets.h         Per-DIM baseline configs and surveyed seeds
 
   examples/
     BasicPrediction.cpp/md      Minimal sine wave prediction
@@ -353,7 +351,7 @@ HypercubeRC/
 
   docs/
     Reservoir.md          Reservoir architecture, connectivity, parameters
-    HCNNReadout.md        HCNN readout: architecture, training, streaming mode
+    Readout.md        HCNN readout: architecture, training, streaming mode
     ScaleInvariance.md    Scale-invariant hyperparameters: evidence and analysis
     DoesTopologyMatter.md Hypercube vs random sparse ESN experiment
     Tuning.md             Practical tuning guide: parameters, scenarios, workflow
@@ -364,7 +362,7 @@ HypercubeRC/
 | Document | Covers |
 |----------|--------|
 | [docs/Reservoir.md](docs/Reservoir.md) | Hypercube graph, connectivity, leaky integrator, spectral radius, scale-invariant defaults |
-| [docs/HCNNReadout.md](docs/HCNNReadout.md) | HCNN readout architecture, training algorithm, streaming mode, ESN interface |
+| [docs/Readout.md](docs/Readout.md) | HCNN readout architecture, training algorithm, streaming mode, ESN interface |
 | [docs/ScaleInvariance.md](docs/ScaleInvariance.md) | Why SR=0.90 and input_scaling=0.02 work at every DIM — sweep data and vertex-transitivity analysis |
 | [docs/DoesTopologyMatter.md](docs/DoesTopologyMatter.md) | Hypercube vs random ESN: equivalent performance, different architectural tradeoffs |
 | [docs/Tuning.md](docs/Tuning.md) | Practical tuning guide: parameter-by-parameter advice, common scenarios, workflow |

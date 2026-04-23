@@ -86,33 +86,33 @@ void ESN<DIM>::RestoreReservoirState(const float* state_in, const float* output_
 template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size)
 {
-    auto sub = HCNNStates(0, train_size);
+    auto sub = ReadoutStates(0, train_size);
     readout_.Train(sub.data(), targets, train_size, EffectiveDIM());
 }
 
 template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size,
-                     const HCNNReadoutConfig& config)
+                     const ReadoutConfig& config)
 {
-    auto sub = HCNNStates(0, train_size);
+    auto sub = ReadoutStates(0, train_size);
     readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), config);
 }
 
 template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size,
-                     const HCNNReadoutConfig& config,
+                     const ReadoutConfig& config,
                      CNNTrainHooks& hooks)
 {
-    auto sub = HCNNStates(0, train_size);
+    auto sub = ReadoutStates(0, train_size);
     readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), config, hooks);
 }
 
 template <size_t DIM>
 void ESN<DIM>::InitOnline(const float* warmup_inputs, size_t warmup_count,
-                          const HCNNReadoutConfig& config)
+                          const ReadoutConfig& config)
 {
     Run(warmup_inputs, warmup_count);
-    auto sub = HCNNStates(0, warmup_count);
+    auto sub = ReadoutStates(0, warmup_count);
     readout_.InitOnline(sub.data(), warmup_count, EffectiveDIM(), config);
     ClearStates();
 }
@@ -191,7 +191,7 @@ template <size_t DIM>
 double ESN<DIM>::R2(const float* targets, size_t start, size_t count) const
 {
     assert(start + count <= num_collected_);
-    auto sub = HCNNStates(start, count);
+    auto sub = ReadoutStates(start, count);
     return readout_.R2(sub.data(), targets + start * readout_.NumOutputs(), count);
 }
 
@@ -234,7 +234,7 @@ template <size_t DIM>
 double ESN<DIM>::Accuracy(const float* labels, size_t start, size_t count) const
 {
     assert(start + count <= num_collected_);
-    auto sub = HCNNStates(start, count);
+    auto sub = ReadoutStates(start, count);
     return readout_.Accuracy(sub.data(), labels + start, count);
 }
 
@@ -282,7 +282,7 @@ void ESN<DIM>::SetReadoutState(const ReadoutState& state)
 }
 
 template <size_t DIM>
-void ESN<DIM>::SetCNNConfig(const HCNNReadoutConfig& cfg)
+void ESN<DIM>::SetCNNConfig(const ReadoutConfig& cfg)
 {
     readout_.SetConfig(cfg);
 }
@@ -316,7 +316,7 @@ const float* ESN<DIM>::HCNNState(size_t timestep) const
 }
 
 template <size_t DIM>
-std::vector<float> ESN<DIM>::HCNNStates(size_t start, size_t count) const
+std::vector<float> ESN<DIM>::ReadoutStates(size_t start, size_t count) const
 {
     std::vector<float> buf(count * num_output_verts_);
     for (size_t s = 0; s < count; ++s)
@@ -333,7 +333,7 @@ std::vector<float> ESN<DIM>::HCNNStates(size_t start, size_t count) const
 template <size_t DIM>
 std::vector<float> ESN<DIM>::SelectedStates() const
 {
-    return HCNNStates(0, num_collected_);
+    return ReadoutStates(0, num_collected_);
 }
 
 // Explicit template instantiations (DIM 5-16)

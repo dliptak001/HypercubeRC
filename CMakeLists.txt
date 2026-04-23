@@ -5,19 +5,18 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)  # Prefer -std=c++23 over GNU extensions
 
-# ——— Static library: core pipeline (Reservoir, ESN, readouts) ———
-file(GLOB READOUT_SOURCES ${PROJECT_SOURCE_DIR}/readout/*.cpp)
+# ——— Static library: core pipeline (Reservoir, ESN, Readout) ———
 add_library(HypercubeRCCore STATIC
     ${PROJECT_SOURCE_DIR}/Reservoir.cpp
     ${PROJECT_SOURCE_DIR}/ESN.cpp
-    ${READOUT_SOURCES}
+    ${PROJECT_SOURCE_DIR}/Readout.cpp
 )
 
 # Public headers — consumers need these via target_link_libraries
 set(PUBLIC_HEADERS
     ${PROJECT_SOURCE_DIR}/ESN.h
     ${PROJECT_SOURCE_DIR}/Reservoir.h
-    ${PROJECT_SOURCE_DIR}/readout/HCNNReadout.h
+    ${PROJECT_SOURCE_DIR}/Readout.h
 )
 
 # ——— HypercubeCNN dependency (CNN readout) ———
@@ -31,12 +30,11 @@ set_target_properties(HypercubeCNNCore PROPERTIES
     INTERFACE_INCLUDE_DIRECTORIES "${HCNN_DIR}"
 )
 
-# Include directories: PROJECT_SOURCE_DIR and readout/ for in-tree builds,
+# Include directories: PROJECT_SOURCE_DIR for in-tree builds,
 # install prefix include/HypercubeRC for installed consumers
 target_include_directories(HypercubeRCCore
     PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}>
-        $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/readout>
         $<INSTALL_INTERFACE:include/HypercubeRC>
 )
 

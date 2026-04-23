@@ -29,11 +29,10 @@ endif()
 
 # ── Core sources compiled directly into the module (PIC required) ──
 set(CORE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/..")
-file(GLOB READOUT_SOURCES ${CORE_DIR}/readout/*.cpp)
 set(CORE_SOURCES
     ${CORE_DIR}/Reservoir.cpp
     ${CORE_DIR}/ESN.cpp
-    ${READOUT_SOURCES}
+    ${CORE_DIR}/Readout.cpp
 )
 
 # ── HypercubeCNN dependency ──
@@ -42,7 +41,7 @@ set(HCNN_BUILD_DIR "${HCNN_DIR}/cmake-build-release" CACHE PATH "Path to Hypercu
 
 # ── Build the Python extension module ──
 pybind11_add_module(_core bindings.cpp ${CORE_SOURCES})
-target_include_directories(_core PRIVATE ${CORE_DIR} ${CORE_DIR}/readout ${HCNN_DIR})
+target_include_directories(_core PRIVATE ${CORE_DIR} ${HCNN_DIR})
 target_link_libraries(_core PRIVATE ${HCNN_BUILD_DIR}/libHypercubeCNNCore.a)
 
 # ── Linking ──

@@ -1,4 +1,4 @@
-# HCNNReadout — HypercubeCNN as ESN Readout Layer
+# Readout — HypercubeCNN as ESN Readout Layer
 
 ## HypercubeCNN
 
@@ -48,7 +48,7 @@ hypercube reservoir.
 ## Role in the Pipeline
 
 ```
-Reservoir (N states) ────────────────────────────────> HCNNReadout
+Reservoir (N states) ────────────────────────────────> Readout
     fixed random                                          TRAINED
 ```
 
@@ -59,7 +59,7 @@ happens here.
 This is the core principle of reservoir computing: a complex, nonlinear
 dynamical system (the reservoir) projects inputs into a high-dimensional
 space, and the readout learns to extract the desired output from that
-projection. HCNNReadout replaces a linear fit with a learned
+projection. Readout replaces a linear fit with a learned
 convolutional network that operates directly on raw reservoir state,
 discovering its own nonlinear features.
 
@@ -72,7 +72,7 @@ HCNN (Conv->Pool stack -> Flatten -> Linear) -> de-center -> output.
 |------------------|----------|----------------------------------|
 | HypercubeCNN     | 3-32     | `HCNNNetwork.cpp:24`             |
 | HypercubeRC ESN  | 5-16     | `ESN.cpp` template instantiations |
-| HCNNReadout      | **5-16** | Intersection; matches ESN range  |
+| Readout      | **5-16** | Intersection; matches ESN range  |
 
 ## Architecture Auto-sizing
 
@@ -116,15 +116,15 @@ dense head, trained with Adam and cosine-annealed learning rate.
 | Regression       | num_samples x num_outputs (row-major)  | de-centered floats | R2, NRMSE |
 | Classification   | num_samples floats (class indices)     | logits (argmax)    | Accuracy |
 
-Configured via `HCNNReadoutConfig::task` (`HCNNTask::Regression` / `Classification`)
-and `HCNNReadoutConfig::num_outputs`.
+Configured via `ReadoutConfig::task` (`ReadoutTask::Regression` / `Classification`)
+and `ReadoutConfig::num_outputs`.
 
-## HCNNReadoutConfig
+## ReadoutConfig
 
 ```cpp
-struct HCNNReadoutConfig {
+struct ReadoutConfig {
     int num_outputs      = 1;        // classes or regression targets
-    HCNNTask task        = HCNNTask::Regression;
+    ReadoutTask task        = ReadoutTask::Regression;
     int num_layers       = 0;        // 0 = auto: min(DIM-2, 2)
     int conv_channels    = 16;       // base channels (doubles per layer)
     int epochs           = 200;
@@ -170,7 +170,7 @@ minimal depth and training cost isn't justified by accuracy gains.
 
 ## Online Training API
 
-HCNNReadout supports per-sample and mini-batch online gradient steps
+Readout supports per-sample and mini-batch online gradient steps
 for streaming applications where data arrives continuously.
 
 ### Setup
@@ -214,11 +214,11 @@ via the ESN `ReadoutState` struct.
 and `dim_` via `build_architecture()`, then injects the weight blob -- no
 retraining needed.
 
-## HCNNReadout Public Interface
+## Readout Public Interface
 
-`HCNNReadout` is the readout class used by `ESN<DIM>`. ESN holds it as a
-direct `HCNNReadout readout_` member and delegates training, prediction,
-and evaluation to it. The methods below are on HCNNReadout; see
+`Readout` is the readout class used by `ESN<DIM>`. ESN holds it as a
+direct `Readout readout_` member and delegates training, prediction,
+and evaluation to it. The methods below are on Readout; see
 `docs/CPP_SDK.md` for the ESN-level wrappers.
 
 | Method | Returns |
@@ -237,17 +237,17 @@ and evaluation to it. The methods below are on HCNNReadout; see
 
 ### ESN Integration Points
 
-- `ESN::Train(targets, train_size)` → `HCNNReadout::Train` with default config
+- `ESN::Train(targets, train_size)` → `Readout::Train` with default config
 - `ESN::Train(targets, train_size, config)` → custom config
 - `ESN::Train(targets, train_size, config, hooks)` → with mid-training callbacks
 - `ESN::PredictRaw(timestep)` → scalar (asserts `num_outputs == 1`)
 - `ESN::PredictRaw(timestep, float* output)` → multi-output
-- `ESN::NumOutputs()` → delegates to `HCNNReadout::NumOutputs()`
+- `ESN::NumOutputs()` → delegates to `Readout::NumOutputs()`
 - `ESN::R2/NRMSE/Accuracy` → handle multi-output target layout and state subsampling
 
 ## Implementation Notes
 
-- Lives in `readout/` with separate .h/.cpp files.
+- Lives at the project root with separate .h/.cpp files.
 - Holds a `std::unique_ptr<hcnn::HCNN>` via PIMPL so that
   `#include "HCNN.h"` stays in the .cpp only.
 - Not templated -- accepts arbitrary feature counts at runtime.

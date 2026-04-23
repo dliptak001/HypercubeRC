@@ -25,7 +25,7 @@ next value with near-zero error.
 ## The pipeline
 
 ```
-Input signal ──> Reservoir ──> HCNNReadout ──> Prediction
+Input signal ──> Reservoir ──> Readout ──> Prediction
   sin(0.1t)      128 neurons     (trained)      sin(0.1(t+1))
                   (fixed)
 ```

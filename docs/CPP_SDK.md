@@ -13,7 +13,7 @@ Static C++ library for reservoir computing on Boolean hypercube graphs.
   - [Template parameter: DIM](#template-parameter-dim)
   - [Enums](#enums)
   - [ReservoirConfig](#reservoirconfig)
-  - [HCNNReadoutConfig](#hcnnreadoutconfig)
+  - [ReadoutConfig](#hcnnreadoutconfig)
   - [CNNTrainHooks](#cnntrainhooks)
   - [ESN\<DIM\>](#esndim)
 - [Dependencies](#dependencies)
@@ -27,7 +27,7 @@ After installation, the SDK contains:
   include/HypercubeRC/
     ESN.h              -- The public API (the only header consumers include)
     Reservoir.h        -- Internal: included by ESN.h
-    HCNNReadout.h      -- Transitive: types used by the ESN API (HCNNReadoutConfig, HCNNTask, CNNTrainHooks)
+    Readout.h      -- Transitive: types used by the ESN API (ReadoutConfig, ReadoutTask, CNNTrainHooks)
   lib/
     libHypercubeRCCore.a
   lib/cmake/HypercubeRC/
@@ -36,7 +36,7 @@ After installation, the SDK contains:
     HypercubeRCConfigVersion.cmake
 ```
 
-Consumers include `<HypercubeRC/ESN.h>` (installed SDK) or `"ESN.h"` (FetchContent) and link against `HypercubeRC::HypercubeRCCore`. The other headers are present because ESN.h includes them; there is no need to include them directly, but their public types (`HCNNReadoutConfig`, `HCNNTask`, `CNNTrainHooks`) are part of the API surface.
+Consumers include `<HypercubeRC/ESN.h>` (installed SDK) or `"ESN.h"` (FetchContent) and link against `HypercubeRC::HypercubeRCCore`. The other headers are present because ESN.h includes them; there is no need to include them directly, but their public types (`ReadoutConfig`, `ReadoutTask`, `CNNTrainHooks`) are part of the API surface.
 
 The SDK depends on a second static library — **HypercubeCNN** — that provides the convolutional readout. HypercubeRCCore transitively links to it, so consumers don't need to reference it explicitly, but it must be buildable at configure time. See [Dependencies](#dependencies).
 
@@ -156,7 +156,7 @@ int main()
     size_t train_size = 1400;
     size_t test_size = collect - train_size;
 
-    HCNNReadoutConfig cnn_cfg;
+    ReadoutConfig cnn_cfg;
     cnn_cfg.epochs = 25;
     cnn_cfg.batch_size = 128;
     cnn_cfg.lr_max = 0.003f;
@@ -188,9 +188,9 @@ int main()
 
 ### Enums
 
-#### `HCNNTask`
+#### `ReadoutTask`
 
-Task head for the HCNN readout. Declared in `HCNNReadout.h`.
+Task head for the HCNN readout. Declared in `Readout.h`.
 
 | Value | Description |
 |-------|-------------|
@@ -218,7 +218,7 @@ struct ReservoirConfig
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `seed` | `uint64_t` | `0` | RNG seed for weight initialization. Every seed (including 0) produces a valid weight topology; different seeds yield measurably different performance. Per-DIM surveyed seeds are in `readout/HCNNPresets.h`. |
+| `seed` | `uint64_t` | `0` | RNG seed for weight initialization. Every seed (including 0) produces a valid weight topology; different seeds yield measurably different performance. Per-DIM surveyed seeds are in `HCNNPresets.h`. |
 | `alpha` | `float` | `1.0` | Gain applied inside the tanh activation: `tanh(alpha * sum)`. Values > 1.0 sharpen the nonlinearity; < 1.0 linearize it. |
 | `spectral_radius` | `float` | `0.9` | Target spectral norm for recurrent weight matrix. Controls the echo state property -- how quickly past inputs fade. Scale-invariant across all DIM values (vertex-transitive topology property). |
 | `leak_rate` | `float` | `1.0` | Leaky integrator coefficient. `state = (1 - leak_rate) * old_state + leak_rate * activation`. At 1.0 (default), each step fully replaces state. Values < 1.0 add temporal smoothing. |
@@ -228,14 +228,14 @@ struct ReservoirConfig
 
 ---
 
-### HCNNReadoutConfig
+### ReadoutConfig
 
 Configuration struct for the HCNN readout's architecture and training.
 
 ```cpp
-struct HCNNReadoutConfig {
+struct ReadoutConfig {
     int num_outputs      = 1;
-    HCNNTask task        = HCNNTask::Regression;
+    ReadoutTask task        = ReadoutTask::Regression;
     int num_layers       = 0;        // 0 = auto: min(DIM-2, 2)
     int conv_channels    = 16;       // doubles per layer
     int epochs           = 200;
@@ -253,7 +253,7 @@ struct HCNNReadoutConfig {
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `num_outputs` | `int` | `1` | Number of output neurons. For regression: number of targets. For classification: number of classes. |
-| `task` | `HCNNTask` | `Regression` | Task head. See [HCNNTask](#hcnntask). |
+| `task` | `ReadoutTask` | `Regression` | Task head. See [ReadoutTask](#hcnntask). |
 | `num_layers` | `int` | `0` (auto) | Number of Conv+Pool pairs. `0` auto-computes `min(DIM - 2, 2)`. Each Pool halves the hypercube dimension, capped by `DIM - 2` (HCNNConv requires DIM >= 3). |
 | `conv_channels` | `int` | `16` | Base channel count for the first Conv layer. Doubles per layer (16, 32 for a 2-layer stack). |
 | `epochs` | `int` | `200` | Training epochs. Structured signals saturate at ~25 epochs; chaotic signals (NARMA) need ~2000. |
@@ -266,14 +266,14 @@ struct HCNNReadoutConfig {
 | `verbose` | `bool` | `false` | Print per-epoch lr to stdout. |
 | `verbose_train_acc` | `bool` | `false` | Also compute and print training accuracy (classification) or MSE (regression) each epoch. Costs one extra forward pass per epoch. |
 
-**Architecture auto-sizing:** For all supported DIMs (5-16), auto-sizing produces 2 Conv+Pool layers with channels 16, 32 and a final hypercube dimension of DIM - 2. Override `num_layers` to change this. See `docs/HCNNReadout.md` for the full design notes.
+**Architecture auto-sizing:** For all supported DIMs (5-16), auto-sizing produces 2 Conv+Pool layers with channels 16, 32 and a final hypercube dimension of DIM - 2. Override `num_layers` to change this. See `docs/Readout.md` for the full design notes.
 
 ---
 
 ### CNNTrainHooks
 
 Runtime-only training hooks for mid-training evaluation. Kept separate from
-`HCNNReadoutConfig` because the config must stay POD for checkpoint serialization.
+`ReadoutConfig` because the config must stay POD for checkpoint serialization.
 
 ```cpp
 struct CNNTrainHooks {
@@ -294,7 +294,7 @@ struct CNNTrainHooks {
 
 ### ESN\<DIM\>
 
-The complete pipeline wrapper: Reservoir -> HCNNReadout.
+The complete pipeline wrapper: Reservoir -> Readout.
 
 ```cpp
 // Construction
@@ -434,7 +434,7 @@ Snapshot and restore the reservoir's live internal state. Each buffer must hold 
 void Train(const float* targets, size_t train_size);
 ```
 
-Trains the HCNN readout on the first `train_size` collected states using default-constructed `HCNNReadoutConfig`.
+Trains the HCNN readout on the first `train_size` collected states using default-constructed `ReadoutConfig`.
 
 **Parameters:**
 - `targets` -- Target values. Layout depends on task (see HCNN overload below).
@@ -442,11 +442,11 @@ Trains the HCNN readout on the first `train_size` collected states using default
 
 ---
 
-##### `Train` (with HCNNReadoutConfig)
+##### `Train` (with ReadoutConfig)
 
 ```cpp
 void Train(const float* targets, size_t train_size,
-           const HCNNReadoutConfig& config);
+           const ReadoutConfig& config);
 ```
 
 Trains the HCNN readout with explicit hyperparameters.
@@ -456,7 +456,7 @@ Trains the HCNN readout with explicit hyperparameters.
   - **Regression:** `train_size * config.num_outputs` floats, row-major.
   - **Classification:** `train_size` floats (float class indices).
 - `train_size` -- Number of training samples from collected state index 0.
-- `config` -- Architecture and training hyperparameters. See [HCNNReadoutConfig](#hcnnreadoutconfig).
+- `config` -- Architecture and training hyperparameters. See [ReadoutConfig](#hcnnreadoutconfig).
 
 ---
 
@@ -464,7 +464,7 @@ Trains the HCNN readout with explicit hyperparameters.
 
 ```cpp
 void Train(const float* targets, size_t train_size,
-           const HCNNReadoutConfig& config,
+           const ReadoutConfig& config,
            CNNTrainHooks& hooks);
 ```
 
@@ -480,7 +480,7 @@ For applications where data arrives continuously. The reservoir advances one ste
 
 ```cpp
 void InitOnline(const float* warmup_inputs, size_t warmup_count,
-                const HCNNReadoutConfig& config);
+                const ReadoutConfig& config);
 ```
 
 Initializes the HCNN readout for online training. Internally calls `Run()` (not `Warmup()`) on the warmup inputs, computes per-vertex standardization statistics from the resulting states, builds the CNN architecture, sets the Adam optimizer, then clears collected states. After this call the reservoir's live state reflects having processed `warmup_count` steps, but `NumCollected()` is 0. Call before any `TrainLive*` method.
@@ -667,7 +667,7 @@ Returns stride-selected vertices from all collected states: `NumCollected() * Nu
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `NumCollected()` | `size_t` | Timesteps recorded by `Run()`. |
-| `NumOutputs()` | `size_t` | From `HCNNReadoutConfig::num_outputs` after training. |
+| `NumOutputs()` | `size_t` | From `ReadoutConfig::num_outputs` after training. |
 | `OutputFraction()` | `float` | The `output_fraction` from config. |
 | `NumOutputVerts()` | `size_t` | Number of selected vertices M = ceil(N / stride). |
 | `NumInputs()` | `size_t` | Number of input channels from config. |
@@ -678,7 +678,7 @@ Returns stride-selected vertices from all collected states: `NumCollected() * Nu
 ##### `SetCNNConfig`
 
 ```cpp
-void SetCNNConfig(const HCNNReadoutConfig& cfg);
+void SetCNNConfig(const ReadoutConfig& cfg);
 ```
 
 Pre-set the HCNN architecture config on the readout. Required before `SetReadoutState` when restoring a saved model without training -- the readout needs the config to reconstruct the CNN architecture before injecting weights.
@@ -710,7 +710,7 @@ The ESN exposes its trained readout state for save/restore. The reservoir weight
 ```cpp
 // Save
 auto cfg = esn.GetConfig();
-auto cnn_cfg = ...; // the HCNNReadoutConfig used for training
+auto cnn_cfg = ...; // the ReadoutConfig used for training
 auto state = esn.GetReadoutState();
 // serialize cfg, cnn_cfg, state using your preferred format
 
@@ -727,11 +727,11 @@ restored.SetReadoutState(state);
 
 HypercubeRC depends on a single external project:
 
-**HypercubeCNN** -- sibling library providing the hypercube convolutional network used by `HCNNReadout`.
+**HypercubeCNN** -- sibling library providing the hypercube convolutional network used by `Readout`.
 
 - Expected location: `../HypercubeCNN` relative to the HypercubeRC source tree (adjust `HCNN_DIR` in `CMakeLists.txt` if yours is elsewhere).
 - Built as `libHypercubeCNNCore.a` inside its own `cmake-build-release` directory before HypercubeRC is configured.
 - Public headers are re-exported through `HypercubeRCCore`'s include interface, so consumers of HypercubeRC do not need to add HypercubeCNN to their own link line -- `target_link_libraries(my_app PRIVATE HypercubeRCCore)` pulls it in transitively.
-- The HCNN headers used by HypercubeRC consumers are the ones re-exported by `HCNNReadout.h` (forward-declared `hcnn::HCNN` via PIMPL); the full HCNN API is not part of the public HypercubeRC surface.
+- The HCNN headers used by HypercubeRC consumers are the ones re-exported by `Readout.h` (forward-declared `hcnn::HCNN` via PIMPL); the full HCNN API is not part of the public HypercubeRC surface.
 
 No other external dependencies beyond the C++ standard library.

@@ -114,11 +114,11 @@ void bind_esn(py::module_& m, const char* name)
             size_t n = static_cast<size_t>(buf.size);
             const float* ptr = static_cast<const float*>(buf.ptr);
 
-            HCNNReadoutConfig cfg;
+            ReadoutConfig cfg;
             cfg.num_outputs    = num_outputs;
             cfg.task           = (std::strcmp(task, "classification") == 0)
-                                     ? HCNNTask::Classification
-                                     : HCNNTask::Regression;
+                                     ? ReadoutTask::Classification
+                                     : ReadoutTask::Regression;
             cfg.num_layers     = num_layers;
             cfg.conv_channels  = conv_channels;
             cfg.epochs         = epochs_val;
@@ -130,7 +130,7 @@ void bind_esn(py::module_& m, const char* name)
             cfg.seed           = seed_val;
             cfg.verbose        = verbose;
 
-            size_t train_size = (cfg.task == HCNNTask::Classification)
+            size_t train_size = (cfg.task == ReadoutTask::Classification)
                                     ? n
                                     : n / static_cast<size_t>(cfg.num_outputs);
             if (train_size > self.NumCollected())
@@ -156,7 +156,7 @@ void bind_esn(py::module_& m, const char* name)
             "Train HCNN readout on collected states.\n\n"
             "task: 'regression' or 'classification'.\n"
             "num_layers: Conv+Pool pairs (0 = auto from DIM).\n"
-            "See HCNNReadoutConfig for parameter details.")
+            "See ReadoutConfig for parameter details.")
 
         // ── Online (streaming) HCNN training ──
         .def("init_online", [](E& self,
@@ -171,11 +171,11 @@ void bind_esn(py::module_& m, const char* name)
             if (total % K != 0)
                 throw std::invalid_argument("warmup_inputs size must be divisible by num_inputs");
 
-            HCNNReadoutConfig cfg;
+            ReadoutConfig cfg;
             cfg.num_outputs   = num_outputs;
             cfg.task          = (std::strcmp(task, "classification") == 0)
-                                    ? HCNNTask::Classification
-                                    : HCNNTask::Regression;
+                                    ? ReadoutTask::Classification
+                                    : ReadoutTask::Regression;
             cfg.num_layers    = num_layers;
             cfg.conv_channels = conv_channels;
             cfg.batch_size    = batch_size;
@@ -391,11 +391,11 @@ void bind_esn(py::module_& m, const char* name)
         .def("set_cnn_config", [](E& self,
                                   int num_outputs, const char* task,
                                   int num_layers, int conv_channels) {
-            HCNNReadoutConfig cfg;
+            ReadoutConfig cfg;
             cfg.num_outputs   = num_outputs;
             cfg.task          = (std::strcmp(task, "classification") == 0)
-                                    ? HCNNTask::Classification
-                                    : HCNNTask::Regression;
+                                    ? ReadoutTask::Classification
+                                    : ReadoutTask::Regression;
             cfg.num_layers    = num_layers;
             cfg.conv_channels = conv_channels;
             self.SetCNNConfig(cfg);

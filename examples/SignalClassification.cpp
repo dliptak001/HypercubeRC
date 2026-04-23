@@ -9,7 +9,7 @@
 #include <vector>
 #include <cmath>
 #include "ESN.h"
-#include "readout/HCNNPresets.h"
+#include "HCNNPresets.h"
 
 static constexpr float PI = 3.14159265358979323846f;
 static constexpr size_t NUM_CLASSES = 4;
@@ -215,9 +215,9 @@ int main(int argc, char* argv[])
     for (size_t t = 0; t < collect; ++t)
         float_labels[t] = static_cast<float>(labels[t]);
 
-    HCNNReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>().cnn;
+    ReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>().cnn;
     cnn_cfg.num_outputs = NUM_CLASSES;
-    cnn_cfg.task        = HCNNTask::Classification;
+    cnn_cfg.task        = ReadoutTask::Classification;
     cnn_cfg.epochs      = 25;
 
     std::cout << "Training: " << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size

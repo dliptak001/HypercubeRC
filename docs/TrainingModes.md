@@ -23,7 +23,7 @@ Warmup(64)  →  Run(train+val chars)  →  Train(epochs × batches)
 2. **Run**: drive reservoir through `train_chars + val_chars` positions.
    Stores the full N-dimensional state at every step into a contiguous
    `states_` buffer.
-3. **Subsample**: `HCNNStates()` extracts the `output_fraction` subset
+3. **Subsample**: `ReadoutStates()` extracts the `output_fraction` subset
    (e.g., 512 of 4096 vertices) into a temporary buffer for CNN training.
 4. **Train**: the CNN readout iterates over stored states in shuffled
    mini-batches for `epochs` passes.  Cosine LR decay across epochs.
@@ -136,7 +136,7 @@ Two phases with different RAM profiles:
 | Component               | Size                       | Example (DIM 13, of=0.5) |
 |-------------------------|----------------------------|--------------------------|
 | states_ buffer          | warmup_train × N × 4      | 1 GiB                    |
-| HCNNStates copy         | warmup_train × of × N × 4 | 512 MiB                  |
+| ReadoutStates copy         | warmup_train × of × N × 4 | 512 MiB                  |
 | **Transient peak**      |                            | **~1.5 GiB**             |
 
 Freed immediately after standardization is computed.

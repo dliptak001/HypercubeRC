@@ -4,7 +4,7 @@
 
 ### HypercubeCNN readout (replaces LinearReadout + RidgeRegression)
 
-- Add HCNNReadout: topology-native convolutional readout operating directly on hypercube reservoir state
+- Add Readout: topology-native convolutional readout operating directly on hypercube reservoir state
 - Auto-sized Conv+Pool stack from DIM with configurable layers (nl), channels (ch), and FLATTEN/GAP head
 - Support multi-output regression and multi-class classification (softmax + cross-entropy)
 - Add online training API: InitOnline(), TrainOnlineStep(), TrainOnlineBatch(), PredictLiveRaw()
@@ -35,7 +35,7 @@
 
 ### Removed components
 
-- Remove LinearReadout and RidgeRegression readout (replaced by HCNNReadout)
+- Remove LinearReadout and RidgeRegression readout (replaced by Readout)
 - Remove TranslationLayer and FeatureMode enum
 - Remove Mackey-Glass benchmark and presets
 - Remove MemoryCapacity, MemoryCapacityProfile, SeedSurvey, StandaloneESNSweep diagnostics
@@ -54,8 +54,8 @@
 
 ### Documentation
 
-- Rewrite CPP_SDK.md and Python_SDK.md for HCNNReadout API
-- Add docs/HCNNReadout.md: architecture, auto-sizing, training modes, serialization
+- Rewrite CPP_SDK.md and Python_SDK.md for Readout API
+- Add docs/Readout.md: architecture, auto-sizing, training modes, serialization
 - Rewrite NARMA10.md, DoesTopologyMatter.md, ScaleInvariance.md with HCNN results
 - Move HRCCNN_LM_Text.md to examples/HRCCNN_LM_Text/ alongside its code
 - Fix docs/Reservoir.md DIM range: [5, 12] to [5, 16]

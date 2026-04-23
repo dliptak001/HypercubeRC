@@ -3,8 +3,8 @@
 #include <cstddef>
 #include <cstdint>
 
-#include "../Reservoir.h"
-#include "HCNNReadout.h"
+#include "Reservoir.h"
+#include "Readout.h"
 
 /// @file HCNNPresets.h
 /// @brief Per-DIM preset bundles: surveyed reservoir seed + baseline HCNN config.
@@ -19,7 +19,7 @@ namespace hcnn_presets {
 struct HCNNPreset
 {
     ReservoirConfig   reservoir;
-    HCNNReadoutConfig cnn;
+    ReadoutConfig cnn;
 };
 
 /// @brief Baseline preset: surveyed reservoir seed + uniform CNN architecture.

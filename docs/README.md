@@ -12,13 +12,13 @@ order below.
 | Document | What you'll learn |
 |----------|-------------------|
 | [Reservoir.md](Reservoir.md) | How the hypercube reservoir works — topology, connectivity, timestep mechanics, spectral radius, scale-invariant defaults |
-| [HCNNReadout.md](HCNNReadout.md) | HCNN readout architecture, training algorithm, feature standardization, and streaming mode |
+| [Readout.md](Readout.md) | HCNN readout architecture, training algorithm, feature standardization, and streaming mode |
 
 These documents cover the full pipeline:
 
 ```
-Input ──> Reservoir (N states) ──────────────────────> HCNNReadout ──> Prediction
-           [Reservoir.md]                               [HCNNReadout.md]
+Input ──> Reservoir (N states) ──────────────────────> Readout ──> Prediction
+           [Reservoir.md]                               [Readout.md]
 ```
 
 ### 2. See it in action
@@ -60,4 +60,4 @@ in the header files are written for an educational audience:
 | `ESN.h` | `ESN<DIM>` — the pipeline wrapper (warmup, run, collect states) |
 | `Reservoir.h` | `Reservoir<DIM>` — the hypercube reservoir core |
 | `diagnostics/NARMA10.h` | `GenerateNARMA10()`, `NARMA10<DIM>` benchmark |
-| `readout/HCNNReadout.h` | `HCNNReadout` — learned convolutional readout |
+| `Readout.h` | `Readout` — learned convolutional readout |

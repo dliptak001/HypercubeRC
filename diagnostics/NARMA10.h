@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "../ESN.h"
-#include "../readout/HCNNPresets.h"
+#include "../HCNNPresets.h"
 
 struct NARMASeq { std::vector<float> inputs; std::vector<float> targets; };
 
@@ -53,12 +53,12 @@ public:
     };
 
     NARMA10(const ReservoirConfig* config = nullptr,
-            const HCNNReadoutConfig& hcnn_config = BenchmarkCNNConfig())
+            const ReadoutConfig& hcnn_config = BenchmarkCNNConfig())
         : config_(config), hcnn_config_(hcnn_config)
     {
     }
 
-    static HCNNReadoutConfig BenchmarkCNNConfig()
+    static ReadoutConfig BenchmarkCNNConfig()
     {
         return hcnn_presets::HRCCNNBaseline<DIM>().cnn;
     }
@@ -115,7 +115,7 @@ public:
 
 private:
     const ReservoirConfig* config_;
-    HCNNReadoutConfig hcnn_config_;
+    ReadoutConfig hcnn_config_;
 
     static std::vector<uint64_t> Seeds()
     {
