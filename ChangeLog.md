@@ -22,14 +22,14 @@
 - Eliminate hot-path allocations in streaming training loop
 - Add docs/TrainingModes.md: batch vs streaming training comparison
 
-### HRCCNN_LM_Text example (character-level language model)
+### LM_Text example (character-level language model)
 
 - Add character-level text LM on Tiny Shakespeare (96-token fixed ASCII vocab)
 - Streaming online training at DIM 13 (8192 neurons), no states buffer, <50 MiB steady-state RAM
 - Multi-pass training with linear LR decay, per-pass eval, autoregressive text sampling
 - Binary model serialization with embedded vocab for train/eval/infer workflow
 - Eval wraps to corpus start when train+val exceeds corpus length
-- Add leak_rate to ReservoirConfig and HRCCNN_LM_Text config plumbing
+- Add leak_rate to ReservoirConfig and LM_Text config plumbing
 - Project paused: all configs converge to BPC ~3.05 (reservoir memory bottleneck)
 - Add docs/ReservoirMemoryBottleneck.md documenting the ceiling analysis
 
@@ -40,7 +40,7 @@
 - Remove Mackey-Glass benchmark and presets
 - Remove MemoryCapacity, MemoryCapacityProfile, SeedSurvey, StandaloneESNSweep diagnostics
 - Remove CnnSeedSurvey diagnostic (seeds baked into Presets.h)
-- Remove HRCCNN_LLM_Math example (superseded by HRCCNN_LM_Text)
+- Remove HRCCNN_LLM_Math example (superseded by LM_Text)
 - Remove OpenMP dependency (thread pools via HypercubeCNN/ThreadPool.h only)
 
 ### Examples and diagnostics
@@ -57,6 +57,6 @@
 - Rewrite CPP_SDK.md and Python_SDK.md for Readout API
 - Add docs/Readout.md: architecture, auto-sizing, training modes, serialization
 - Rewrite NARMA10.md, DoesTopologyMatter.md, ScaleInvariance.md with HCNN results
-- Move HRCCNN_LM_Text.md to examples/HRCCNN_LM_Text/ alongside its code
+- Move LM_Text.md to examples/LM_Text/ alongside its code
 - Fix docs/Reservoir.md DIM range: [5, 12] to [5, 16]
 - Purge all stale Ridge/TranslationLayer/ReadoutType references from docs

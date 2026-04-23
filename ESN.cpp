@@ -165,14 +165,14 @@ template <size_t DIM>
 float ESN<DIM>::PredictRaw(size_t timestep) const
 {
     assert(timestep < num_collected_);
-    return readout_.PredictRaw(HCNNState(timestep));
+    return readout_.PredictRaw(ReadoutInput(timestep));
 }
 
 template <size_t DIM>
 void ESN<DIM>::PredictRaw(size_t timestep, float* output) const
 {
     assert(timestep < num_collected_);
-    readout_.PredictRaw(HCNNState(timestep), output);
+    readout_.PredictRaw(ReadoutInput(timestep), output);
 }
 
 template <size_t DIM>
@@ -206,7 +206,7 @@ double ESN<DIM>::NRMSE(const float* targets, size_t start, size_t count) const
 
     std::vector<float> preds(count * K);
     for (size_t s = 0; s < count; ++s)
-        readout_.PredictRaw(HCNNState(start + s), preds.data() + s * K);
+        readout_.PredictRaw(ReadoutInput(start + s), preds.data() + s * K);
 
     double nrmse_sum = 0.0;
     for (size_t k = 0; k < K; ++k) {
@@ -310,7 +310,7 @@ const float* ESN<DIM>::SubsampleIntoScratch(const float* src) const
 }
 
 template <size_t DIM>
-const float* ESN<DIM>::HCNNState(size_t timestep) const
+const float* ESN<DIM>::ReadoutInput(size_t timestep) const
 {
     return SubsampleIntoScratch(states_.data() + timestep * N);
 }

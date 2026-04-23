@@ -2,7 +2,7 @@
 
 ## The Finding
 
-Empirical sweeps on HRCCNN_LM_Text (Tiny Shakespeare, 96-token vocab)
+Empirical sweeps on LM_Text (Tiny Shakespeare, 96-token vocab)
 show that **all tested configurations converge to the same performance
 ceiling** regardless of reservoir size, readout capacity, or training
 budget:
@@ -27,7 +27,7 @@ governed by exponential decay at the spectral radius — is too shallow
 for language modeling applications. No combination of DIM, readout
 capacity, or training budget can compensate: the bottleneck is the
 reservoir's fixed-weight dynamics, not the downstream learner. Work on
-HRCCNN_LM_Text is paused until this is resolved. The next area of
+LM_Text is paused until this is resolved. The next area of
 exploration is **reservoir cascades** — chaining multiple reservoirs so
 that downstream stages operate on slower, higher-order temporal features,
 extending the effective memory horizon without pushing any single
@@ -136,7 +136,7 @@ could provide effective memory comparable to SR = 0.98 at leak_rate = 1.0
 without the chaotic instability — the past state is preserved by
 blending, not by amplifying recurrent dynamics.
 
-**This combination has not been tested on HRCCNN_LM_Text** and is the
+**This combination has not been tested on LM_Text** and is the
 most promising single-parameter experiment for breaking the BPC ceiling.
 
 ### Input Scaling — indirect memory effect
@@ -241,7 +241,7 @@ back in time to attend to inputs the reservoir has already forgotten.
 - The readout is not the bottleneck.  Doubling channels, doubling
   visible state, and adding training passes produce no improvement.
 
-### What this means for the HRCCNN_LM_Text example
+### What this means for the LM_Text example
 
 BPC ~3.05 with ~41% top-1 accuracy is the ceiling for a single-character
 streaming ESN on this task.  The model learns character-level statistics

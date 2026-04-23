@@ -1,6 +1,6 @@
 #pragma once
 
-// Hardcoded run-time configuration for HRCCNN_LM_Text.  Edit these values,
+// Hardcoded run-time configuration for LM_Text.  Edit these values,
 // rebuild, and launch the exe with no arguments.  kMode selects which
 // Run* gets invoked; each mode reads its own struct below.
 //
@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <string>
 
-namespace hrccnn_lm_text::config {
+namespace lm_text::config {
 
 inline constexpr std::size_t kDIM = 13;
 
@@ -112,4 +112,4 @@ struct InferCfg
 
 inline const InferCfg kInfer;
 
-}  // namespace hrccnn_lm_text::config
+}  // namespace lm_text::config

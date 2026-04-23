@@ -1,4 +1,4 @@
-# HRCCNN_LM_Text — Character-Level Text Language Model
+# LM_Text — Character-Level Text Language Model
 
 > **STATUS: PAUSED.** Empirical sweeps (documented in
 > `docs/ReservoirMemoryBottleneck.md`) show that all tested configurations
@@ -14,7 +14,7 @@
 
 ## Goal
 
-Train a DIM 13 HRCCNN to predict the next character of natural English
+Train a DIM 13 reservoir to predict the next character of natural English
 text, one character at a time. The model is shown a continuous stream of
 text (initial corpus: Tiny Shakespeare, ~1.1 MB) and must predict
 `char(t+1)` given the reservoir state after consuming `char(t)`.
@@ -476,7 +476,7 @@ Temperature controls generation diversity:
   | Simple RNN (Karpathy) | ~1.5 |
   | LSTM (Karpathy) | ~1.2 |
 
-  Realistic target for HRCCNN at DIM 13: **2.5–3.5 BPC** (trigram to
+  Realistic target for HypercubeRC at DIM 13: **2.5–3.5 BPC** (trigram to
   bigram level). Breaking below 2.5 would be a strong result. Breaking
   below 2.0 would be remarkable for a non-gradient-trained sequence
   model.
@@ -584,8 +584,8 @@ Temperature controls generation diversity:
 
 ## Deliverable Structure
 
-**Location:** `examples/HRCCNN_LM_Text/`. Single binary
-`HRCCNN_LM_Text.exe` with mode selected by `config::kMode` in
+**Location:** `examples/LM_Text/`. Single binary
+`LM_Text.exe` with mode selected by `config::kMode` in
 `Config.h`.
 
 **Modes:**
@@ -600,7 +600,7 @@ Temperature controls generation diversity:
 **Files:**
 
 ```
-examples/HRCCNN_LM_Text/
+examples/LM_Text/
   Config.h          Config structs (TrainCfg, EvalCfg, InferCfg)
   Corpus.h/.cpp     Corpus loading, fixed vocab, bipolar encoding
   Dataset.h/.cpp    ResetAndPrime, GenerateText (temperature sampling)

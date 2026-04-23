@@ -23,7 +23,7 @@ $env:PATH = "C:\Program Files\JetBrains\CLion 2024.3.2\bin\mingw\bin;" + $env:PA
 PS1
 ```
 
-Replace `HypercubeRC.exe` with any target: `BasicPrediction.exe`, `SignalClassification.exe`, `StreamingAnomaly.exe`, `HRCCNN_LM_Text.exe`, `CoreSmokeTest.exe`.
+Replace `HypercubeRC.exe` with any target: `BasicPrediction.exe`, `SignalClassification.exe`, `StreamingAnomaly.exe`, `LM_Text.exe`, `CoreSmokeTest.exe`.
 
 **Critical rules:**
 - NEVER reconfigure cmake-build-* directories (`cmake -B` with `-G` flags). CLion owns them.
@@ -56,7 +56,7 @@ HypercubeRC is a reservoir computing library where the reservoir topology is a B
 
 ### Examples (`examples/`)
 
-`BasicPrediction`, `SignalClassification`, `StreamingAnomaly` — each with a companion `.md` walkthrough. `HRCCNN_LM_Text` (character-level text LM on Tiny Shakespeare, DIM 12) — design doc in `docs/`.
+`BasicPrediction`, `SignalClassification`, `StreamingAnomaly` — each with a companion `.md` walkthrough. `LM_Text` (character-level text LM on Tiny Shakespeare, DIM 13) — design doc in `examples/LM_Text/`.
 
 ## Code Conventions
 

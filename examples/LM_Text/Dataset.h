@@ -6,7 +6,7 @@
 #include "Corpus.h"
 #include "ESN.h"
 
-namespace hrccnn_lm_text {
+namespace lm_text {
 
 /// Reset the reservoir and stream `prompt` through it without collecting.
 template <std::size_t DIM>
@@ -24,4 +24,4 @@ std::string GenerateText(ESN<DIM>& esn,
                          float temperature = 0.0f,
                          unsigned seed = 42);
 
-}  // namespace hrccnn_lm_text
+}  // namespace lm_text

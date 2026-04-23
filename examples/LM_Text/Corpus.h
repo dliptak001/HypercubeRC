@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 
-namespace hrccnn_lm_text {
+namespace lm_text {
 
 inline constexpr std::size_t kInputBits  = 8;    ///< bipolar ASCII input width
 inline constexpr std::size_t kVocabCap   = 128;  ///< ASCII lookup table size
@@ -53,4 +53,4 @@ void BipolarBits(char c, float out[kInputBits]);
 /// Bulk-encode a string into row-major bipolar bits: out has size s.size()*8.
 void BipolarEncode(const std::string& s, float* out);
 
-}  // namespace hrccnn_lm_text
+}  // namespace lm_text

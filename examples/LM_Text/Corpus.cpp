@@ -4,7 +4,7 @@
 #include <fstream>
 #include <sstream>
 
-namespace hrccnn_lm_text {
+namespace lm_text {
 
 namespace {
 
@@ -81,4 +81,4 @@ void BipolarEncode(const std::string& s, float* out)
     }
 }
 
-}  // namespace hrccnn_lm_text
+}  // namespace lm_text

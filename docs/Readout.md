@@ -200,7 +200,7 @@ All methods standardize inputs internally using the statistics from
 `ComputeTargetCentering` was called. Mini-batch variants are
 parallelized via `HCNN::TrainBatch`.
 
-See `examples/HRCCNN_LM_Text/` for a working streaming implementation
+See `examples/LM_Text/` for a working streaming implementation
 and `examples/StreamingAnomaly.cpp` for an anomaly-detection use case.
 
 ## Serialization

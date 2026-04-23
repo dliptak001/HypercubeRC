@@ -321,7 +321,7 @@ The build produces six executables:
 | `BasicPrediction` | Minimal example: sine wave prediction |
 | `SignalClassification` | Multi-class waveform recognition with confusion matrix |
 | `StreamingAnomaly` | Streaming anomaly detection with recovery dynamics |
-| `HRCCNN_LM_Text` | Character-level language model on Tiny Shakespeare (DIM 13) |
+| `LM_Text` | Character-level language model on Tiny Shakespeare (DIM 13) |
 | `CoreSmokeTest` | Diagnostic smoke tests: prediction, classification, multi-output |
 
 Start with `BasicPrediction` to see the pipeline end-to-end. Each example has a
@@ -342,7 +342,7 @@ HypercubeRC/
     BasicPrediction.cpp/md      Minimal sine wave prediction
     SignalClassification.cpp/md Multi-class waveform recognition
     StreamingAnomaly.cpp/md     Streaming anomaly detection
-    HRCCNN_LM_Text/             Character-level text LM (DIM 13, streaming)
+    LM_Text/                    Character-level text LM (DIM 13, streaming)
 
   diagnostics/
     BenchmarkSuite.h      Orchestrates NARMA-10 across DIM

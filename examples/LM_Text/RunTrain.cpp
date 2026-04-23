@@ -17,7 +17,7 @@
 #include "Serialization.h"
 #include "Presets.h"
 
-namespace hrccnn_lm_text {
+namespace lm_text {
 
 using config::kDIM;
 
@@ -393,4 +393,4 @@ int RunTrain()
     return 0;
 }
 
-}  // namespace hrccnn_lm_text
+}  // namespace lm_text

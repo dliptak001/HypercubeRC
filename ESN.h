@@ -135,7 +135,7 @@ private:
 
     [[nodiscard]] size_t EffectiveDIM() const;
     const float* SubsampleIntoScratch(const float* src) const;
-    const float* HCNNState(size_t timestep) const;
+    const float* ReadoutInput(size_t timestep) const;
     [[nodiscard]] std::vector<float> ReadoutStates(size_t start, size_t count) const;
 
     mutable std::vector<float> scratch_subsampled_;

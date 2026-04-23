@@ -12,7 +12,7 @@
 #include "ESN.h"
 #include "Serialization.h"
 
-namespace hrccnn_lm_text {
+namespace lm_text {
 
 using config::kDIM;
 
@@ -176,4 +176,4 @@ int RunEval()
     return 0;
 }
 
-}  // namespace hrccnn_lm_text
+}  // namespace lm_text

@@ -10,7 +10,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace hrccnn_lm_text {
+namespace lm_text {
 
 static_assert(std::is_trivially_copyable_v<ReservoirConfig>,
               "ReservoirConfig must stay trivially copyable for POD serialization");
@@ -181,8 +181,8 @@ typename ESN<DIM>::ReadoutState FromSerial(const SerialReadoutState& s)
     return r;
 }
 
-using namespace hrccnn_lm_text::config;
+using namespace lm_text::config;
 template SerialReadoutState ToSerial<kDIM>(const ESN<kDIM>::ReadoutState&);
 template ESN<kDIM>::ReadoutState FromSerial<kDIM>(const SerialReadoutState&);
 
-}  // namespace hrccnn_lm_text
+}  // namespace lm_text

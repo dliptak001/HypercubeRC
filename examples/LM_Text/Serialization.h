@@ -6,7 +6,7 @@
 
 #include "ESN.h"
 
-namespace hrccnn_lm_text {
+namespace lm_text {
 
 /// Training metadata captured at save time — informational; not required
 /// to reconstruct the model but useful for auditing a checkpoint.
@@ -62,4 +62,4 @@ SerialReadoutState ToSerial(const typename ESN<DIM>::ReadoutState& s);
 template <std::size_t DIM>
 typename ESN<DIM>::ReadoutState FromSerial(const SerialReadoutState& s);
 
-}  // namespace hrccnn_lm_text
+}  // namespace lm_text

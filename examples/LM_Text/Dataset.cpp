@@ -6,7 +6,7 @@
 #include <random>
 #include <vector>
 
-namespace hrccnn_lm_text {
+namespace lm_text {
 
 template <std::size_t DIM>
 void ResetAndPrime(ESN<DIM>& esn, const std::string& prompt)
@@ -70,10 +70,10 @@ std::string GenerateText(ESN<DIM>& esn,
     return out;
 }
 
-using namespace hrccnn_lm_text::config;
+using namespace lm_text::config;
 template void ResetAndPrime<kDIM>(ESN<kDIM>&, const std::string&);
 template std::string GenerateText<kDIM>(ESN<kDIM>&, const Corpus&,
                                         const std::string&, std::size_t,
                                         float, unsigned);
 
-}  // namespace hrccnn_lm_text
+}  // namespace lm_text
