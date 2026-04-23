@@ -36,13 +36,41 @@ set(CORE_SOURCES
 )
 
 # ── HypercubeCNN dependency ──
+# Local dev: use sibling directory with pre-built library.
+# CI / standalone: auto-fetch from GitHub and build from source.
 set(HCNN_DIR "${CORE_DIR}/../HypercubeCNN" CACHE PATH "Path to HypercubeCNN source tree")
 set(HCNN_BUILD_DIR "${HCNN_DIR}/cmake-build-release" CACHE PATH "Path to HypercubeCNN build directory")
 
+if(EXISTS "${HCNN_DIR}/HCNN.h")
+    find_library(HCNN_LIB
+        NAMES HypercubeCNNCore
+        PATHS "${HCNN_BUILD_DIR}" "${HCNN_BUILD_DIR}/Release" "${HCNN_BUILD_DIR}/Debug"
+        NO_DEFAULT_PATH
+    )
+    if(NOT HCNN_LIB)
+        message(FATAL_ERROR "HypercubeCNNCore not found in ${HCNN_BUILD_DIR}")
+    endif()
+    find_package(Threads REQUIRED)
+    set(HCNN_INCLUDE "${HCNN_DIR}")
+    set(HCNN_LIBS "${HCNN_LIB}" Threads::Threads)
+else()
+    include(FetchContent)
+    FetchContent_Declare(
+        HypercubeCNN
+        GIT_REPOSITORY https://github.com/dliptak001/HypercubeCNN.git
+        GIT_TAG        master
+        GIT_SHALLOW    TRUE
+    )
+    set(HCNN_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(HypercubeCNN)
+    set(HCNN_INCLUDE "${hypercubecnn_SOURCE_DIR}")
+    set(HCNN_LIBS HypercubeCNNCore)
+endif()
+
 # ── Build the Python extension module ──
 pybind11_add_module(_core bindings.cpp ${CORE_SOURCES})
-target_include_directories(_core PRIVATE ${CORE_DIR} ${HCNN_DIR})
-target_link_libraries(_core PRIVATE ${HCNN_BUILD_DIR}/libHypercubeCNNCore.a)
+target_include_directories(_core PRIVATE ${CORE_DIR} ${HCNN_INCLUDE})
+target_link_libraries(_core PRIVATE ${HCNN_LIBS})
 
 # ── Linking ──
 if(MINGW)
