@@ -1,5 +1,18 @@
 # HypercubeRC - Change Log
 
+## v0.2.1 (Apr 23, 2026)
+
+### Pre-merge cleanup
+
+- Flatten readout/ directory into project root alongside Reservoir and ESN
+- Rename HCNNReadout → Readout, HCNNReadoutConfig → ReadoutConfig, HCNNTask → ReadoutTask
+- Rename HCNNPresets → Presets, HCNNPreset → Preset, HRCCNNBaseline → Baseline, hcnn_presets → presets namespace
+- Rename HRCCNN_LM_Text → LM_Text: directory, namespace, CMake target, and docs
+- Rename private ESN::HCNNState() → ReadoutInput() (last stale HCNN reference in non-library code)
+- Add Python train_cnn() convenience wrapper and DLL bundling for wheels
+- Fix README claims, unify lr_max guidance, add HypercubeCNN readout coverage
+- Audit examples and diagnostics: fix doc accuracy, remove dead code, clean up stale references
+
 ## v0.2.0 (Apr 23, 2026)
 
 ### HypercubeCNN readout (replaces LinearReadout + RidgeRegression)
