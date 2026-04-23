@@ -5,7 +5,7 @@
 Python bindings for reservoir computing on Boolean hypercube graphs.
 
 The reservoir topology is a Boolean hypercube of dimension DIM, giving
-N = 2^DIM neurons (DIM 5-12, i.e. 32 to 4096 neurons). All connectivity
+N = 2^DIM neurons (DIM 5-16, i.e. 32 to 65,536 neurons). All connectivity
 is defined by XOR operations on vertex indices -- no adjacency list stored.
 Scale-invariant hyperparameters: the same SR and input_scaling work at every DIM.
 
@@ -35,7 +35,7 @@ print(f"NRMSE = {esn.nrmse():.6f}") # NRMSE = 0.000129
 ## Features
 
 - **Simple API** -- `fit()` handles warmup, run, and train in one call
-- **DIM 5-12** -- 32 to 4096 neurons, scale-invariant defaults
+- **DIM 5-16** -- 32 to 65,536 neurons, scale-invariant defaults
 - **HCNN readout** -- learned convolutional readout on raw reservoir state
 - **Multi-input** -- multiple input channels via stride-interleaved driving
 - **Streaming mode** -- online training for real-time applications
