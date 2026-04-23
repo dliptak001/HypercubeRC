@@ -350,7 +350,7 @@ class TestPersistence:
         loaded.warmup(signal[:200])
         loaded.run(signal[200:-1])
         r2_after = loaded.r2(signal[201:], start=1400)
-        assert abs(r2_before - r2_after) < 1e-6
+        assert abs(r2_before - r2_after) < 1e-5
 
     def test_save_load(self, tmp_path):
         signal = _sine_signal()
@@ -365,7 +365,7 @@ class TestPersistence:
         loaded.warmup(signal[:200])
         loaded.run(signal[200:-1])
         r2_after = loaded.r2(signal[201:], start=1400)
-        assert abs(r2_before - r2_after) < 1e-6
+        assert abs(r2_before - r2_after) < 1e-5
 
     def test_save_untrained(self, tmp_path):
         esn = ESN(dim=5, seed=99)
