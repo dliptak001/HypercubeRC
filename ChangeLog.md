@@ -8,7 +8,7 @@
 - Auto-sized Conv+Pool stack from DIM with configurable layers (nl), channels (ch), and FLATTEN/GAP head
 - Support multi-output regression and multi-class classification (softmax + cross-entropy)
 - Add online training API: InitOnline(), TrainOnlineStep(), TrainOnlineBatch(), PredictLiveRaw()
-- Add per-DIM frozen baseline configs in HCNNPresets.h (DIM 5-10, NARMA-10 tuned)
+- Add per-DIM frozen baseline configs in Presets.h (DIM 5-10, NARMA-10 tuned)
 - Add FLATTEN readout head preserving per-vertex identity end-to-end
 - Add output_fraction subsampling: CNN sees a sub-hypercube of the reservoir state
 - Add Reservoir::SaveReservoirState() / RestoreReservoirState() for eval checkpointing
@@ -39,7 +39,7 @@
 - Remove TranslationLayer and FeatureMode enum
 - Remove Mackey-Glass benchmark and presets
 - Remove MemoryCapacity, MemoryCapacityProfile, SeedSurvey, StandaloneESNSweep diagnostics
-- Remove CnnSeedSurvey diagnostic (seeds baked into HCNNPresets.h)
+- Remove CnnSeedSurvey diagnostic (seeds baked into Presets.h)
 - Remove HRCCNN_LLM_Math example (superseded by HRCCNN_LM_Text)
 - Remove OpenMP dependency (thread pools via HypercubeCNN/ThreadPool.h only)
 

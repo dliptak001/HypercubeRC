@@ -320,7 +320,7 @@ sees the subsampled live state directly; no states buffer.
   deterministic evaluation. Temperature > 0 produces more diverse
   and readable autoregressive samples.
 
-Architecture: `HRCCNNBaseline<13>()` backbone with **nl=1, ch=4,
+Architecture: `Baseline<13>()` backbone with **nl=1, ch=4,
 FLATTEN head**.
 
 - **nl = 1, ch = 4** (one conv+pool layer, 4 channels). After one

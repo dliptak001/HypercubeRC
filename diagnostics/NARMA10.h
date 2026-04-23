@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "../ESN.h"
-#include "../HCNNPresets.h"
+#include "../Presets.h"
 
 struct NARMASeq { std::vector<float> inputs; std::vector<float> targets; };
 
@@ -60,7 +60,7 @@ public:
 
     static ReadoutConfig BenchmarkCNNConfig()
     {
-        return hcnn_presets::HRCCNNBaseline<DIM>().cnn;
+        return presets::Baseline<DIM>().cnn;
     }
 
     Result Run()

@@ -47,7 +47,7 @@ Uses a single per-DIM seed selected by 500-seed survey (`SurveyedSeed<DIM>()`).
 
 ## Sample results
 
-Run with HCNN readout (`HRCCNNBaseline<DIM>()` config):
+Run with HCNN readout (`Baseline<DIM>()` config):
 
 | DIM | N    | HCNN NRMSE |
 |-----|------|------------|

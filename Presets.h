@@ -6,17 +6,17 @@
 #include "Reservoir.h"
 #include "Readout.h"
 
-/// @file HCNNPresets.h
-/// @brief Per-DIM preset bundles: surveyed reservoir seed + baseline HCNN config.
+/// @file Presets.h
+/// @brief Per-DIM preset bundles: surveyed reservoir seed + baseline readout config.
 ///
-/// `HRCCNNBaseline<DIM>()` returns both the surveyed reservoir seed and
+/// `Baseline<DIM>()` returns both the surveyed reservoir seed and
 /// the baseline CNN architecture for that DIM. Callers use `.reservoir`
 /// and `.cnn` to extract the pieces they need.
 
-namespace hcnn_presets {
+namespace presets {
 
-/// Reservoir config + HCNN readout config, bundled per-DIM.
-struct HCNNPreset
+/// Reservoir config + readout config, bundled per-DIM.
+struct Preset
 {
     ReservoirConfig   reservoir;
     ReadoutConfig cnn;
@@ -31,9 +31,9 @@ struct HCNNPreset
 /// `ep=2000` targets chaotic signals (NARMA). Override `epochs` for
 /// non-chaotic tasks.
 template <size_t DIM>
-HCNNPreset HRCCNNBaseline()
+Preset Baseline()
 {
-    HCNNPreset p;
+    Preset p;
     p.reservoir.seed = ::SurveyedSeed<DIM>();
 
     p.cnn.num_layers    = 1;
@@ -51,4 +51,4 @@ HCNNPreset HRCCNNBaseline()
     return p;
 }
 
-}  // namespace hcnn_presets
+}  // namespace presets

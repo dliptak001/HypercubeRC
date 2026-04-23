@@ -9,7 +9,7 @@
 #include <cmath>
 #include <random>
 #include "ESN.h"
-#include "HCNNPresets.h"
+#include "Presets.h"
 
 static void GenerateProcess(float* out, size_t n, size_t t_start,
                              float noise_level, float dc_drift, float freq_mult,
@@ -111,7 +111,7 @@ int main(int argc, char* argv[])
     size_t train_n = static_cast<size_t>(prime_steps * 0.7);
     size_t test_n = prime_steps - train_n;
 
-    ReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>().cnn;
+    ReadoutConfig cnn_cfg = presets::Baseline<DIM>().cnn;
     cnn_cfg.num_outputs = 1;
     cnn_cfg.task        = ReadoutTask::Regression;
     cnn_cfg.epochs      = 1000;

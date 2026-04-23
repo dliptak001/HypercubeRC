@@ -8,7 +8,7 @@
 #include <iostream>
 #include <vector>
 #include "ESN.h"
-#include "HCNNPresets.h"
+#include "Presets.h"
 
 int main(int argc, char* argv[])
 {
@@ -45,7 +45,7 @@ int main(int argc, char* argv[])
     cfg.output_fraction = 1.0f;
     ESN<DIM> esn(cfg);
 
-    ReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<DIM>().cnn;
+    ReadoutConfig cnn_cfg = presets::Baseline<DIM>().cnn;
     cnn_cfg.epochs      = 1100;
     cnn_cfg.lr_min_frac = 0.1f;
     cnn_cfg.seed        = 42007;

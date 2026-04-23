@@ -15,7 +15,7 @@
 #include "Dataset.h"
 #include "ESN.h"
 #include "Serialization.h"
-#include "HCNNPresets.h"
+#include "Presets.h"
 
 namespace hrccnn_lm_text {
 
@@ -169,7 +169,7 @@ int RunTrain()
     for (std::size_t i = 0; i < args.warmup_train_chars; ++i)
         BipolarBits(corpus.text[corpus_pos + i], warmup_bits.data() + i * kInputBits);
 
-    ReadoutConfig cnn_cfg = hcnn_presets::HRCCNNBaseline<kDIM>().cnn;
+    ReadoutConfig cnn_cfg = presets::Baseline<kDIM>().cnn;
     cnn_cfg.task          = ReadoutTask::Classification;
     cnn_cfg.num_outputs   = static_cast<int>(kVocabSize);
     cnn_cfg.num_layers    = args.cnn_num_layers;

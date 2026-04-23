@@ -28,7 +28,7 @@ defaults don't serve. Most users will only need to adjust `DIM`,
    - High-capacity research:  DIM 9-16  (512-65536 neurons)
 
 2. Pick HCNN config
-   - Start with HRCCNNBaseline<DIM>() from HCNNPresets.h
+   - Start with Baseline<DIM>() from Presets.h
    - Override epochs for your task: ~25-100 for smooth signals, ~2000 for chaotic
    - Classification: set task=ReadoutTask::Classification, num_outputs=num_classes
 
@@ -216,7 +216,7 @@ The HCNN readout is the only trained component. See
 
 ### Starting config
 
-Use `HRCCNNBaseline<DIM>()` from `HCNNPresets.h` as the starting
+Use `Baseline<DIM>()` from `Presets.h` as the starting
 point. It provides surveyed reservoir seed + baseline CNN config per DIM.
 
 ### Key HCNN parameters
@@ -229,7 +229,7 @@ point. It provides surveyed reservoir seed + baseline CNN config per DIM.
 | `conv_channels` | 8 | 8 is the baseline; 16-24 for task-specific tuning |
 | `num_layers` | 1 | Auto-rule: min(DIM-2, 2); override for task-specific tuning |
 | `weight_decay` | 0.0 | Start at 0; only add if overfitting |
-| `seed` | per-DIM | CNN weight-init seed; per-DIM winners in HCNNPresets.h |
+| `seed` | per-DIM | CNN weight-init seed; per-DIM winners in Presets.h |
 
 ### Epoch selection
 
@@ -335,7 +335,7 @@ complete implementation.
    ESN<8> esn(cfg);
 
 2. Get a baseline:
-   auto cnn_cfg = hcnn_presets::HRCCNNBaseline<8>().cnn;
+   auto cnn_cfg = presets::Baseline<8>().cnn;
    esn.Warmup(data, 500);
    esn.Run(data + 500, total);
    esn.Train(targets, train_size, cnn_cfg);

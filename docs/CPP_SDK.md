@@ -218,7 +218,7 @@ struct ReservoirConfig
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `seed` | `uint64_t` | `0` | RNG seed for weight initialization. Every seed (including 0) produces a valid weight topology; different seeds yield measurably different performance. Per-DIM surveyed seeds are in `HCNNPresets.h`. |
+| `seed` | `uint64_t` | `0` | RNG seed for weight initialization. Every seed (including 0) produces a valid weight topology; different seeds yield measurably different performance. Per-DIM surveyed seeds are in `Presets.h`. |
 | `alpha` | `float` | `1.0` | Gain applied inside the tanh activation: `tanh(alpha * sum)`. Values > 1.0 sharpen the nonlinearity; < 1.0 linearize it. |
 | `spectral_radius` | `float` | `0.9` | Target spectral norm for recurrent weight matrix. Controls the echo state property -- how quickly past inputs fade. Scale-invariant across all DIM values (vertex-transitive topology property). |
 | `leak_rate` | `float` | `1.0` | Leaky integrator coefficient. `state = (1 - leak_rate) * old_state + leak_rate * activation`. At 1.0 (default), each step fully replaces state. Values < 1.0 add temporal smoothing. |

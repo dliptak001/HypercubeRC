@@ -258,7 +258,7 @@ architecture auto-sizing, and streaming mode.
 ### NARMA-10 (nonlinear memory, NRMSE, lower is better)
 
 All results: per-DIM surveyed seed, HCNN baseline config
-(`HRCCNNBaseline<DIM>()`), scale-invariant defaults (SR=0.90, input_scaling=0.02).
+(`Baseline<DIM>()`), scale-invariant defaults (SR=0.90, input_scaling=0.02).
 
 | DIM | N    | HCNN NRMSE |
 |-----|------|------------|
@@ -334,7 +334,7 @@ HypercubeRC/
   Reservoir.h/cpp        Hypercube reservoir (N = 2^DIM vertices)
   ESN.h/cpp              Unified pipeline: warmup, run, train, predict
   Readout.h/cpp      Learned convolutional readout (PIMPL)
-  HCNNPresets.h          Per-DIM baseline configs and surveyed seeds
+  Presets.h          Per-DIM baseline configs and surveyed seeds
   main.cpp               Benchmark suite entry point (DIM 5-8)
   docs/CPP_SDK.md        C++ consumer documentation for the static library
 
