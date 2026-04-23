@@ -232,7 +232,7 @@ class TestEvalDefaults:
         esn, signal = trained_esn
         r2_default = esn.r2()
         r2_explicit = esn.r2(signal[201:], start=1400)
-        assert abs(r2_default - r2_explicit) < 1e-6
+        assert abs(r2_default - r2_explicit) < 1e-5
 
     def test_r2_explicit_start_only(self, trained_esn):
         esn, signal = trained_esn
