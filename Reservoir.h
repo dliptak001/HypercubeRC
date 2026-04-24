@@ -17,6 +17,7 @@ struct ReservoirConfig
     float spectral_radius = 0.9f; // scale-invariant optimum (see ScaleInvariance.md)
     float leak_rate = 1.0f; // 1.0 = full replacement, <1.0 = leaky integrator
     float input_scaling = 0.02f; // scale-invariant optimum (see ScaleInvariance.md)
+    float coupling_scaling = 0.02f; // inter-layer coupling weight scale (cascade)
     size_t num_inputs = 1;
     float output_fraction = 1.0f; // fraction of N vertices used as readout features (0.0, 1.0]
 };
@@ -160,6 +161,7 @@ private:
     alignas(64) float vtx_state_[N]{};
     alignas(64) float vtx_output_[N]{};
     std::vector<float> vtx_input_weight_; // flat [N] — one W_in weight per vertex
+    std::vector<float> vtx_coupling_weight_; // flat [N] — one W_coupling weight per vertex
     std::vector<float> vtx_weight_; // flat [N * NUM_CONNECTIONS]
 
     size_t num_inputs_ = 1;
@@ -167,6 +169,7 @@ private:
     float spectral_radius_ = 0.9f;
     float leak_rate_ = 1.0f;
     float input_scaling_ = 0.02f;
+    float coupling_scaling_ = 0.02f;
 
     void Initialize();
     void UpdateState(size_t v);

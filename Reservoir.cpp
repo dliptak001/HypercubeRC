@@ -13,7 +13,8 @@ Reservoir<DIM>::Reservoir(const ReservoirConfig& cfg)
       alpha_(cfg.alpha),
       spectral_radius_(cfg.spectral_radius),
       leak_rate_(cfg.leak_rate),
-      input_scaling_(cfg.input_scaling)
+      input_scaling_(cfg.input_scaling),
+      coupling_scaling_(cfg.coupling_scaling)
 {
     if (alpha_ <= 0.0f)
         throw std::invalid_argument("alpha must be positive");
@@ -59,6 +60,10 @@ void Reservoir<DIM>::Initialize()
     vtx_input_weight_.resize(N);
     for (size_t v = 0; v < N; ++v)
         vtx_input_weight_[v] = static_cast<float>(dist(rng)) * input_scaling_;
+
+    vtx_coupling_weight_.resize(N);
+    for (size_t v = 0; v < N; ++v)
+        vtx_coupling_weight_[v] = static_cast<float>(dist(rng)) * coupling_scaling_;
 }
 
 template <size_t DIM>
@@ -156,7 +161,7 @@ void Reservoir<DIM>::InjectState(const float* src, size_t rotation)
 {
     const size_t off = rotation % N;
     for (size_t v = 0; v < N; ++v)
-        vtx_output_[v] += src[(v + off) % N] * input_scaling_;
+        vtx_output_[v] += src[(v + off) % N] * vtx_coupling_weight_[v];
 }
 
 template <size_t DIM>

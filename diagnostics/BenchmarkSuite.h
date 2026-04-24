@@ -60,7 +60,7 @@ private:
         ReadoutArchConfig arch;
         arch.num_layers    = kNumLayers;
         arch.conv_channels = kConvChannels;
-        arch.seed          = presets::Baseline<DIM>().arch.seed;
+        arch.seed          = presets::Baseline<DIM>().arch.seed + 34343;
 
         ReadoutTrainConfig train;
         train.epochs     = kEpochs;
