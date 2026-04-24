@@ -3,6 +3,7 @@
 #include "Presets.h"
 
 #include <chrono>
+#include <cstdio>
 #include <iostream>
 #include <random>
 
@@ -52,6 +53,19 @@ int Trainer<DIM>::Run()
 
     std::cerr << "[train] corpus=" << corpus_.Size() << " chars"
               << "  vocab=" << vocab_.Tokens().size() << " tokens\n";
+
+    const auto& rc = model_.ReservoirCfg();
+    const char* cm_name[] = {"Raw", "Binarize", "Normalize", "Center"};
+    std::cerr << "[train] DIM=" << config::kDIM
+              << "  N=" << (1ULL << config::kDIM)
+              << "  depth=" << cfg_.cascade_depth
+              << "  neurons=" << (1ULL << config::kDIM) * cfg_.cascade_depth
+              << "  SR=" << rc.spectral_radius
+              << "  IS=" << rc.input_scaling
+              << "  CS=" << rc.coupling_scaling
+              << "  coupling=" << cm_name[static_cast<int>(rc.coupling_mode)]
+              << "  leak=" << rc.leak_rate
+              << "  OF=" << rc.output_fraction << "\n";
 
     WarmupReservoir();
     CollectStandardization();
@@ -135,11 +149,17 @@ void Trainer<DIM>::StreamTrain()
     for (int pass = 0; pass < cfg_.num_passes; ++pass) {
         corpus_pos_ = train_start_pos_;
 
+        if (cfg_.verbose) {
+            char lr_buf[16];
+            std::snprintf(lr_buf, sizeof(lr_buf), "%.7f", current_lr_);
+            std::cerr << "[train lr=" << lr_buf
+                      << " pass " << (pass + 1) << "/" << cfg_.num_passes
+                      << "] ";
+        }
+
         for (std::size_t i = 0; i < cfg_.train_chars; ++i) {
-            // Advance reservoir one character.
             model_.Step(corpus_.At(corpus_pos_));
 
-            // Accumulate state + target for the mini-batch.
             model_.CopyLiveState(
                 accum_states_.data() + accum_count_ * state_dim);
             accum_targets_[accum_count_] =
@@ -148,26 +168,18 @@ void Trainer<DIM>::StreamTrain()
             ++corpus_pos_;
             ++global_step;
 
-            // Flush when the batch is full.
             if (accum_count_ == K)
                 FlushBatch();
 
-            if (cfg_.verbose && (global_step % 100000 == 0)) {
-                auto now = std::chrono::steady_clock::now();
-                double elapsed =
-                    std::chrono::duration<double>(now - t_start).count();
-                std::cerr << "[train] pass " << (pass + 1) << "/" << cfg_.num_passes
-                          << " step " << (i + 1) << "/" << cfg_.train_chars
-                          << " lr=" << current_lr_
-                          << " elapsed=" << elapsed << "s\n";
-            }
+            if (cfg_.verbose && (global_step % 100000 == 0))
+                std::cerr << '.';
         }
 
-        // Flush any remaining samples at end of pass.
         if (accum_count_ > 0)
             FlushBatch();
 
-        // Mid-training evaluation.
+        if (cfg_.verbose)
+            std::cerr << '\n';
         const std::size_t default_eval_start = train_start_pos_ + cfg_.train_chars;
         const bool wrap = (default_eval_start + cfg_.val_chars + 1) > corpus_.Size();
         const std::size_t eval_start = wrap ? 0 : default_eval_start;
@@ -253,7 +265,7 @@ void Trainer<DIM>::Evaluate(const std::string& tag,
                 gen_seed_ + s);
 
             std::cerr << "[sample " << (s + 1) << "/" << cfg_.eval_show_samples
-                      << "] \"" << text << "\"\n";
+                      << "] \"" << prompt << ">>>" << text << "\"\n";
         }
     }
 
