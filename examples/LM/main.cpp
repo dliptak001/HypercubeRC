@@ -48,11 +48,14 @@ static int RunTrain()
         : (gen_seed ^ 0x9E3779B97F4A7C15ULL);
 
     ReservoirConfig rcfg;
-    rcfg.seed            = reservoir_seed;
-    rcfg.num_inputs      = Vocabulary::kInputBits;
-    rcfg.spectral_radius = args.spectral_radius;
-    rcfg.leak_rate       = args.leak_rate;
-    rcfg.output_fraction = args.output_fraction;
+    rcfg.seed             = reservoir_seed;
+    rcfg.num_inputs       = Vocabulary::kInputBits;
+    rcfg.spectral_radius  = args.spectral_radius;
+    rcfg.leak_rate        = args.leak_rate;
+    rcfg.input_scaling    = args.input_scaling;
+    rcfg.coupling_scaling = args.coupling_scaling;
+    rcfg.coupling_mode    = static_cast<CouplingMode>(args.coupling_mode);
+    rcfg.output_fraction  = args.output_fraction;
 
     ReadoutArchConfig arch = presets::Baseline<kDIM>().arch;
     arch.task          = ReadoutTask::Classification;

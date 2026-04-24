@@ -17,7 +17,7 @@ namespace lm {
 namespace {
 
 inline constexpr char     kMagic[8]       = {'H','C','N','N','L','M','T','X'};
-inline constexpr uint32_t kFormatVersion  = 3;
+inline constexpr uint32_t kFormatVersion  = 4;
 inline constexpr uint64_t kMaxVecBytes    = 1ULL << 30;
 
 template <typename T>
@@ -71,6 +71,99 @@ bool ReadStr(std::istream& is, std::string& s)
     s.resize(n);
     if (n > 0 && !is.read(s.data(), n)) return false;
     return static_cast<bool>(is);
+}
+
+// --- Field-by-field struct serialization (portable across compilers) ---
+
+void WriteReservoirConfig(std::ostream& os, const ReservoirConfig& c)
+{
+    WritePOD(os, c.seed);
+    WritePOD(os, c.alpha);
+    WritePOD(os, c.spectral_radius);
+    WritePOD(os, c.leak_rate);
+    WritePOD(os, c.input_scaling);
+    WritePOD(os, c.coupling_scaling);
+    WritePOD(os, static_cast<int32_t>(c.coupling_mode));
+    WritePOD(os, static_cast<uint64_t>(c.num_inputs));
+    WritePOD(os, c.output_fraction);
+}
+
+bool ReadReservoirConfig(std::istream& is, ReservoirConfig& c)
+{
+    int32_t coupling_mode; uint64_t num_inputs;
+    if (!ReadPOD(is, c.seed))             return false;
+    if (!ReadPOD(is, c.alpha))            return false;
+    if (!ReadPOD(is, c.spectral_radius))  return false;
+    if (!ReadPOD(is, c.leak_rate))        return false;
+    if (!ReadPOD(is, c.input_scaling))    return false;
+    if (!ReadPOD(is, c.coupling_scaling)) return false;
+    if (!ReadPOD(is, coupling_mode))      return false;
+    if (!ReadPOD(is, num_inputs))         return false;
+    if (!ReadPOD(is, c.output_fraction))  return false;
+    c.coupling_mode = static_cast<CouplingMode>(coupling_mode);
+    c.num_inputs    = static_cast<size_t>(num_inputs);
+    return true;
+}
+
+void WriteReadoutArchConfig(std::ostream& os, const ReadoutArchConfig& c)
+{
+    WritePOD(os, static_cast<int32_t>(c.num_outputs));
+    WritePOD(os, static_cast<int32_t>(c.task));
+    WritePOD(os, static_cast<int32_t>(c.num_layers));
+    WritePOD(os, static_cast<int32_t>(c.conv_channels));
+    WritePOD(os, static_cast<int32_t>(c.input_channels));
+    WritePOD(os, static_cast<uint32_t>(c.seed));
+}
+
+bool ReadReadoutArchConfig(std::istream& is, ReadoutArchConfig& c)
+{
+    int32_t num_outputs, task, num_layers, conv_channels, input_channels;
+    uint32_t seed;
+    if (!ReadPOD(is, num_outputs))    return false;
+    if (!ReadPOD(is, task))           return false;
+    if (!ReadPOD(is, num_layers))     return false;
+    if (!ReadPOD(is, conv_channels))  return false;
+    if (!ReadPOD(is, input_channels)) return false;
+    if (!ReadPOD(is, seed))           return false;
+    c.num_outputs    = num_outputs;
+    c.task           = static_cast<ReadoutTask>(task);
+    c.num_layers     = num_layers;
+    c.conv_channels  = conv_channels;
+    c.input_channels = input_channels;
+    c.seed           = seed;
+    return true;
+}
+
+void WriteReadoutTrainConfig(std::ostream& os, const ReadoutTrainConfig& c)
+{
+    WritePOD(os, static_cast<int32_t>(c.epochs));
+    WritePOD(os, static_cast<int32_t>(c.batch_size));
+    WritePOD(os, c.lr_max);
+    WritePOD(os, c.lr_min_frac);
+    WritePOD(os, static_cast<int32_t>(c.lr_decay_epochs));
+    WritePOD(os, c.weight_decay);
+    WritePOD(os, static_cast<uint8_t>(c.verbose));
+    WritePOD(os, static_cast<uint8_t>(c.verbose_train_acc));
+}
+
+bool ReadReadoutTrainConfig(std::istream& is, ReadoutTrainConfig& c)
+{
+    int32_t epochs, batch_size, lr_decay_epochs;
+    uint8_t verbose, verbose_train_acc;
+    if (!ReadPOD(is, epochs))            return false;
+    if (!ReadPOD(is, batch_size))        return false;
+    if (!ReadPOD(is, c.lr_max))          return false;
+    if (!ReadPOD(is, c.lr_min_frac))     return false;
+    if (!ReadPOD(is, lr_decay_epochs))   return false;
+    if (!ReadPOD(is, c.weight_decay))    return false;
+    if (!ReadPOD(is, verbose))           return false;
+    if (!ReadPOD(is, verbose_train_acc)) return false;
+    c.epochs           = epochs;
+    c.batch_size       = batch_size;
+    c.lr_decay_epochs  = lr_decay_epochs;
+    c.verbose          = verbose;
+    c.verbose_train_acc = verbose_train_acc;
+    return true;
 }
 
 }  // namespace
@@ -199,14 +292,11 @@ void Model<DIM>::Save(const std::string& path,
     std::memcpy(sha, meta.git_sha.data(), n);
     os.write(sha, 40);
 
-    ReservoirConfig rcfg = esn_.GetConfig();
-    WritePOD(os, rcfg);
+    WritePOD(os, static_cast<uint32_t>(depth_));
 
-    ReadoutArchConfig acfg = cnn_arch_;
-    WritePOD(os, acfg);
-
-    ReadoutTrainConfig tcfg;
-    WritePOD(os, tcfg);
+    WriteReservoirConfig(os, esn_.GetConfig());
+    WriteReadoutArchConfig(os, cnn_arch_);
+    WriteReadoutTrainConfig(os, ReadoutTrainConfig{});
 
     auto readout_state = esn_.GetReadoutState();
     WriteVec(os, readout_state.weights);
@@ -260,20 +350,24 @@ Model<DIM> Model<DIM>::Load(const std::string& path, const Vocabulary& vocab)
     ReadPOD(is, seed); ReadPOD(is, positions); ReadPOD(is, passes);
     char sha[40]; is.read(sha, 40);
 
+    uint32_t file_depth = 0;
+    if (!ReadPOD(is, file_depth))
+        throw std::runtime_error("short read (depth)");
+
     ReservoirConfig rcfg;
-    if (!ReadPOD(is, rcfg))
+    if (!ReadReservoirConfig(is, rcfg))
         throw std::runtime_error("short read (reservoir_cfg)");
 
     ReadoutArchConfig acfg;
-    if (!ReadPOD(is, acfg))
+    if (!ReadReadoutArchConfig(is, acfg))
         throw std::runtime_error("short read (cnn_arch)");
 
     ReadoutTrainConfig tcfg;
-    if (!ReadPOD(is, tcfg))
+    if (!ReadReadoutTrainConfig(is, tcfg))
         throw std::runtime_error("short read (cnn_train)");
 
     // Build the model with loaded config.
-    Model<DIM> model(rcfg, acfg, 1);
+    Model<DIM> model(rcfg, acfg, static_cast<std::size_t>(file_depth));
     model.esn_.SetCNNConfig(acfg);
 
     // Read readout state.

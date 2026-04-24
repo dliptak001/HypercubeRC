@@ -18,7 +18,7 @@ template <std::size_t DIM>
 std::string Generator<DIM>::Generate(const std::string& prompt,
                                      std::size_t num_chars,
                                      float temperature,
-                                     unsigned seed)
+                                     std::uint64_t seed)
 {
     // Prime: reset the reservoir and stream the prompt through it.
     model_.Reset();
@@ -27,7 +27,7 @@ std::string Generator<DIM>::Generate(const std::string& prompt,
     const std::size_t num_outputs = model_.NumOutputs();
     std::vector<float> logits(num_outputs);
     std::vector<float> probs(num_outputs);
-    std::mt19937 rng(seed);
+    std::mt19937_64 rng(seed);
 
     std::string output;
     output.reserve(num_chars);

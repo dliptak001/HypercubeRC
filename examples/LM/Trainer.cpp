@@ -250,7 +250,7 @@ void Trainer<DIM>::Evaluate(const std::string& tag,
             std::string text = gen.Generate(
                 prompt, cfg_.eval_gen_chars,
                 cfg_.eval_temperature,
-                static_cast<unsigned>(gen_seed_ + s));
+                gen_seed_ + s);
 
             std::cerr << "[sample " << (s + 1) << "/" << cfg_.eval_show_samples
                       << "] \"" << text << "\"\n";

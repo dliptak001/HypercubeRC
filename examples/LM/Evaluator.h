@@ -82,6 +82,7 @@ private:
     double                   log_loss_  = 0.0;
     std::vector<std::size_t> class_correct_;
     std::vector<std::size_t> class_total_;
+    std::vector<std::size_t> scratch_indices_;
 };
 
 }  // namespace lm

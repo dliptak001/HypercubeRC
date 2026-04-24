@@ -10,8 +10,10 @@ namespace lm {
 Evaluator::Evaluator(std::size_t num_classes)
     : num_classes_(num_classes),
       class_correct_(num_classes, 0),
-      class_total_(num_classes, 0)
+      class_total_(num_classes, 0),
+      scratch_indices_(num_classes)
 {
+    std::iota(scratch_indices_.begin(), scratch_indices_.end(), std::size_t{0});
 }
 
 void Evaluator::Record(const float* logits, int true_label)
@@ -29,18 +31,17 @@ void Evaluator::Record(const float* logits, int true_label)
     log_loss_ -= log_prob;
 
     // --- Top-k accuracy via partial sort ---
-    std::vector<std::size_t> indices(num_classes_);
-    std::iota(indices.begin(), indices.end(), std::size_t{0});
+    std::iota(scratch_indices_.begin(), scratch_indices_.end(), std::size_t{0});
     std::size_t k_max = std::min<std::size_t>(5, num_classes_);
-    std::partial_sort(indices.begin(),
-                      indices.begin() + static_cast<long>(k_max),
-                      indices.end(),
+    std::partial_sort(scratch_indices_.begin(),
+                      scratch_indices_.begin() + static_cast<long>(k_max),
+                      scratch_indices_.end(),
                       [&](std::size_t a, std::size_t b) {
                           return logits[a] > logits[b];
                       });
 
     for (std::size_t k = 0; k < k_max; ++k) {
-        if (static_cast<int>(indices[k]) == true_label) {
+        if (static_cast<int>(scratch_indices_[k]) == true_label) {
             if (k < 1) ++correct1_;
             if (k < 3) ++correct3_;
             if (k < 5) ++correct5_;
@@ -52,7 +53,7 @@ void Evaluator::Record(const float* logits, int true_label)
     auto label = static_cast<std::size_t>(true_label);
     if (label < num_classes_) {
         class_total_[label]++;
-        if (static_cast<int>(indices[0]) == true_label)
+        if (static_cast<int>(scratch_indices_[0]) == true_label)
             class_correct_[label]++;
     }
 

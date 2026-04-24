@@ -9,6 +9,7 @@
 /// and feeds the chosen character back into the reservoir as input.
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 
 #include "Model.h"
@@ -37,7 +38,7 @@ public:
     [[nodiscard]] std::string Generate(const std::string& prompt,
                                        std::size_t num_chars,
                                        float temperature = 0.8f,
-                                       unsigned seed = 42);
+                                       std::uint64_t seed = 42);
 
 private:
     Model<DIM>&       model_;
