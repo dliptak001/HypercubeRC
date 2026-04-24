@@ -25,13 +25,13 @@ struct ReadoutTrainConfig {
     float lr_max         = 0.005f;  ///< Cosine annealing peak. Keep <= 0.005 to avoid NaN.
     float lr_min_frac    = 0.1f;    ///< Floor = lr_max * lr_min_frac.
     int   lr_decay_epochs = 0;      ///< Cosine decay horizon. 0 = use `epochs`.
-    float weight_decay   = 0.0f;    /// Claude - what is this used for???
+    float weight_decay   = 0.0f;    ///< L2 regularization in Adam optimizer.
     bool verbose         = false;   ///< Print per-epoch lr to stdout.
     bool verbose_train_acc = false;  ///< Also print train accuracy/MSE each epoch.
 };
 
-/// Mid-training evaluation hooks. Separate from ReadoutConfig to
-/// preserve POD layout. Fires after every `eval_every_epochs` epochs
+/// Mid-training evaluation hooks. Separate from ReadoutArchConfig /
+/// ReadoutTrainConfig to preserve POD layout. Fires after every `eval_every_epochs` epochs
 /// and after the final epoch. The readout is usable for Predict/R2/Accuracy
 /// inside the callback.
 struct CNNTrainHooks {
@@ -47,7 +47,7 @@ struct CNNTrainHooks {
 /// Linear -> de-center -> output.
 ///
 /// Architecture auto-sized from DIM: min(DIM-2, 2) Conv+Pool pairs,
-/// channels doubling per layer. Override via ReadoutConfig::num_layers.
+/// channels doubling per layer. Override via ReadoutArchConfig::num_layers.
 ///
 /// PIMPL: hcnn::HCNN held via unique_ptr; #include "HCNN.h" in .cpp only.
 class Readout
