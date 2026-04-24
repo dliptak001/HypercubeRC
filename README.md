@@ -258,17 +258,23 @@ architecture auto-sizing, and streaming mode.
 
 ### NARMA-10 (nonlinear memory, NRMSE, lower is better)
 
-All results: per-DIM surveyed seed, HCNN baseline config
-(`Baseline<DIM>()`), scale-invariant defaults (SR=0.90, input_scaling=0.02).
+All results: per-DIM surveyed seed, HCNN readout, scale-invariant
+defaults (SR=0.90, input_scaling=0.02).
 
-| DIM | N    | HCNN NRMSE |
-|-----|------|------------|
-| 7   | 128  | 0.218      |
-| 8   | 256  | 0.153      |
-| 9   | 512  | 0.134      |
-| 10  | 1024 | 0.122      |
+| DIM | N    | depth 1 | depth 2 (cascade) | diff    |
+|-----|------|---------|--------------------|---------|
+| 7   | 128  | 0.227   | 0.199              | -12.3%  |
+| 8   | 256  | 0.153   | 0.152              |  -1.0%  |
+| 9   | 512  | 0.138   | 0.119              | -13.8%  |
+| 10  | 1024 | 0.121   | 0.112              |  -7.4%  |
 
 Standard ESN baseline: 0.2-0.4 (Jaeger 2001, Rodan & Tino 2011).
+
+The cascade stacks two identical-seed reservoirs in series with
+rotation-based symmetry breaking and per-vertex coupling weights,
+extending memory depth beyond a single reservoir. These results use
+seeds surveyed for depth 1; a dedicated cascade seed survey would likely
+improve depth 2 results further.
 
 ## Related Work
 

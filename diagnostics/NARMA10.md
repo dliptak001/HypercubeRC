@@ -47,14 +47,34 @@ Uses a single per-DIM seed selected by 500-seed survey (`SurveyedSeed<DIM>()`).
 
 ## Sample results
 
-Run with HCNN readout (`Baseline<DIM>()` config):
+### Single reservoir (depth 1)
+
+Run with HCNN readout, scale-invariant defaults (SR=0.90, input_scaling=0.02):
 
 | DIM | N    | HCNN NRMSE |
 |-----|------|------------|
-| 7   | 128  | 0.218      |
+| 7   | 128  | 0.227      |
 | 8   | 256  | 0.153      |
-| 9   | 512  | 0.134      |
-| 10  | 1024 | 0.122      |
+| 9   | 512  | 0.138      |
+| 10  | 1024 | 0.121      |
+
+### Cascade (depth 2)
+
+Two identical-seed reservoirs in series. Inter-layer coupling uses
+rotation-based symmetry breaking and per-vertex coupling weights.
+
+| DIM | N    | Cascade NRMSE | vs depth 1 |
+|-----|------|---------------|------------|
+| 7   | 128  | 0.199         | -12.3%     |
+| 8   | 256  | 0.152         |  -1.0%     |
+| 9   | 512  | 0.119         | -13.8%     |
+| 10  | 1024 | 0.112         |  -7.4%     |
+
+The cascade extends memory depth beyond what a single reservoir provides,
+improving NARMA-10 across all DIM values. The improvement is largest at
+DIM 7 and 9 where the additional memory depth has the most headroom to
+exploit. These results use seeds surveyed for depth 1; a dedicated
+cascade seed survey would likely improve depth 2 results further.
 
 ## What to look for
 
