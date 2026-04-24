@@ -55,7 +55,7 @@ struct TrainCfg
     std::size_t   eval_show_samples = 3;        // autoregressive text samples shown after final pass
     std::size_t   eval_prompt_len   = 64;       // chars of real text used to prime each sample
     std::size_t   eval_gen_chars    = 200;      // chars generated per sample
-    float         eval_temperature  = 0.8f;     // sampling temperature (0 = greedy, higher = more random)
+    float         eval_temperature  = 0.7f;     // sampling temperature (0 = greedy, higher = more random)
     std::size_t   eval_worst_classes = 5;       // number of worst-accuracy classes to report
 
     std::string   git_sha           = "";       // optional git SHA embedded in saved model for provenance
@@ -70,7 +70,7 @@ struct EvalCfg
 {
     std::string   model_path       = "C:\\temp\\lm_v1.bin";            // trained model to evaluate
     std::string   corpus_path      = "C:\\temp\\tinyshakespeare.txt";  // corpus to score against
-    std::size_t   warmup_chars     = 64;       // chars streamed to warm up reservoir before scoring
+    std::size_t   warmup_chars     = 4096;       // chars streamed to warm up reservoir before scoring
     std::size_t   skip_chars       = 900000;   // chars to skip (e.g. training region) before eval
     std::size_t   eval_chars       = 100000;   // chars scored for metrics
     std::size_t   eval_worst_classes = 5;      // number of worst-accuracy classes to report
@@ -86,7 +86,7 @@ struct InferCfg
     std::string   model_path       = "C:\\temp\\lm_v1.bin";       // trained model to generate from
     std::string   prompt           = "To be, or not to be, ";  // text prefix fed to the reservoir
     std::size_t   num_chars        = 500;      // characters to generate after the prompt
-    float         temperature      = 0.8f;     // sampling temperature (0 = greedy, higher = more random)
+    float         temperature      = 0.7f;     // sampling temperature (0 = greedy, higher = more random)
     std::uint64_t gen_seed         = 1235437745; // RNG seed for sampling reproducibility
 };
 
