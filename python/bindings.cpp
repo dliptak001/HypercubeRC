@@ -117,31 +117,33 @@ void bind_esn(py::module_& m, const char* name)
             size_t n = static_cast<size_t>(buf.size);
             const float* ptr = static_cast<const float*>(buf.ptr);
 
-            ReadoutConfig cfg;
-            cfg.num_outputs    = num_outputs;
-            cfg.task           = (std::strcmp(task, "classification") == 0)
-                                     ? ReadoutTask::Classification
-                                     : ReadoutTask::Regression;
-            cfg.num_layers     = num_layers;
-            cfg.conv_channels  = conv_channels;
-            cfg.epochs         = epochs_val;
-            cfg.batch_size     = batch_size;
-            cfg.lr_max         = lr_max;
-            cfg.lr_min_frac    = lr_min_frac;
-            cfg.lr_decay_epochs = lr_decay_epochs;
-            cfg.weight_decay   = weight_decay;
-            cfg.seed           = seed_val;
-            cfg.verbose        = verbose;
+            ReadoutArchConfig arch;
+            arch.num_outputs    = num_outputs;
+            arch.task           = (std::strcmp(task, "classification") == 0)
+                                      ? ReadoutTask::Classification
+                                      : ReadoutTask::Regression;
+            arch.num_layers     = num_layers;
+            arch.conv_channels  = conv_channels;
+            arch.seed           = seed_val;
 
-            size_t train_size = (cfg.task == ReadoutTask::Classification)
+            ReadoutTrainConfig train;
+            train.epochs         = epochs_val;
+            train.batch_size     = batch_size;
+            train.lr_max         = lr_max;
+            train.lr_min_frac    = lr_min_frac;
+            train.lr_decay_epochs = lr_decay_epochs;
+            train.weight_decay   = weight_decay;
+            train.verbose        = verbose;
+
+            size_t train_size = (arch.task == ReadoutTask::Classification)
                                     ? n
-                                    : n / static_cast<size_t>(cfg.num_outputs);
+                                    : n / static_cast<size_t>(arch.num_outputs);
             if (train_size > self.NumCollected())
                 throw std::invalid_argument(
                     "train_size exceeds num_collected ("
                     + std::to_string(self.NumCollected()) + ")");
 
-            self.Train(ptr, train_size, cfg);
+            self.Train(ptr, train_size, arch, train);
         },
             py::arg("targets"),
             py::arg("num_outputs")    = 1,
@@ -174,18 +176,16 @@ void bind_esn(py::module_& m, const char* name)
             if (total % K != 0)
                 throw std::invalid_argument("warmup_inputs size must be divisible by num_inputs");
 
-            ReadoutConfig cfg;
-            cfg.num_outputs   = num_outputs;
-            cfg.task          = (std::strcmp(task, "classification") == 0)
-                                    ? ReadoutTask::Classification
-                                    : ReadoutTask::Regression;
-            cfg.num_layers    = num_layers;
-            cfg.conv_channels = conv_channels;
-            cfg.batch_size    = batch_size;
-            cfg.lr_max        = lr_max;
-            cfg.seed          = seed_val;
+            ReadoutArchConfig arch;
+            arch.num_outputs   = num_outputs;
+            arch.task          = (std::strcmp(task, "classification") == 0)
+                                     ? ReadoutTask::Classification
+                                     : ReadoutTask::Regression;
+            arch.num_layers    = num_layers;
+            arch.conv_channels = conv_channels;
+            arch.seed          = seed_val;
 
-            self.InitOnline(static_cast<const float*>(buf.ptr), total / K, cfg);
+            self.InitOnline(static_cast<const float*>(buf.ptr), total / K, arch);
         },
             py::arg("warmup_inputs"),
             py::arg("num_outputs")   = 1,
@@ -395,14 +395,14 @@ void bind_esn(py::module_& m, const char* name)
         .def("set_cnn_config", [](E& self,
                                   int num_outputs, const char* task,
                                   int num_layers, int conv_channels) {
-            ReadoutConfig cfg;
-            cfg.num_outputs   = num_outputs;
-            cfg.task          = (std::strcmp(task, "classification") == 0)
-                                    ? ReadoutTask::Classification
-                                    : ReadoutTask::Regression;
-            cfg.num_layers    = num_layers;
-            cfg.conv_channels = conv_channels;
-            self.SetCNNConfig(cfg);
+            ReadoutArchConfig arch;
+            arch.num_outputs   = num_outputs;
+            arch.task          = (std::strcmp(task, "classification") == 0)
+                                     ? ReadoutTask::Classification
+                                     : ReadoutTask::Regression;
+            arch.num_layers    = num_layers;
+            arch.conv_channels = conv_channels;
+            self.SetCNNConfig(arch);
         },
             py::arg("num_outputs")   = 1,
             py::arg("task")          = "regression",

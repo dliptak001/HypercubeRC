@@ -50,7 +50,7 @@ int RunInfer()
 
     // --- ESN construction + weight restore. ---
     ESN<kDIM> esn(1, mf.reservoir_cfg);
-    esn.SetCNNConfig(mf.cnn_cfg);
+    esn.SetCNNConfig(mf.cnn_arch);
     esn.SetReadoutState(FromSerial<kDIM>(mf.readout));
 
     std::cerr << "[infer] model=" << args.model_path

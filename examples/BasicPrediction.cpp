@@ -45,22 +45,24 @@ int main(int argc, char* argv[])
     cfg.output_fraction = 1.0f;
     ESN<DIM> esn(1, cfg);
 
-    ReadoutConfig cnn_cfg = presets::Baseline<DIM>().cnn;
-    cnn_cfg.epochs      = 1100;
-    cnn_cfg.lr_min_frac = 0.1f;
-    cnn_cfg.seed        = 42007;
+    auto preset = presets::Baseline<DIM>();
+    ReadoutArchConfig cnn_arch = preset.arch;
+    ReadoutTrainConfig cnn_train = preset.train;
+    cnn_train.epochs      = 1100;
+    cnn_train.lr_min_frac = 0.1f;
+    cnn_arch.seed         = 42007;
 
     std::cout << "  Config: N=" << N << "  raw state (all vertices)\n";
-    std::cout << "  Training: " << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size
-              << ", lr=" << cnn_cfg.lr_max
-              << " (cosine, floor=" << (cnn_cfg.lr_max * cnn_cfg.lr_min_frac) << ")\n";
+    std::cout << "  Training: " << cnn_train.epochs << " epochs, batch=" << cnn_train.batch_size
+              << ", lr=" << cnn_train.lr_max
+              << " (cosine, floor=" << (cnn_train.lr_max * cnn_train.lr_min_frac) << ")\n";
 
     esn.Warmup(signal.data(), warmup);
     esn.Run(signal.data() + warmup, collect);
 
     std::cout << "  Training..." << std::flush;
     auto t0 = std::chrono::steady_clock::now();
-    esn.Train(targets.data(), train_size, cnn_cfg);
+    esn.Train(targets.data(), train_size, cnn_arch, cnn_train);
     auto t1 = std::chrono::steady_clock::now();
     double secs = std::chrono::duration<double>(t1 - t0).count();
     std::cout << " done (" << std::fixed << std::setprecision(1) << secs << "s)\n";

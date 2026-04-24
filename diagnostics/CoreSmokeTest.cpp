@@ -66,10 +66,11 @@ void test_hcnn_prediction()
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
 
-    ReadoutConfig cnn_cfg;
-    cnn_cfg.epochs = 50;
-    cnn_cfg.batch_size = 32;
-    esn.Train(signal.data() + 201, 1400, cnn_cfg);
+    ReadoutArchConfig cnn_arch;
+    ReadoutTrainConfig cnn_train;
+    cnn_train.epochs = 50;
+    cnn_train.batch_size = 32;
+    esn.Train(signal.data() + 201, 1400, cnn_arch, cnn_train);
 
     double r2 = esn.R2(signal.data() + 201, 0, esn.NumCollected());
     double nrmse = esn.NRMSE(signal.data() + 201, 0, esn.NumCollected());
@@ -93,12 +94,13 @@ void test_hcnn_classification()
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
 
-    ReadoutConfig cnn_cfg;
-    cnn_cfg.num_outputs = 2;
-    cnn_cfg.task = ReadoutTask::Classification;
-    cnn_cfg.epochs = 50;
-    cnn_cfg.batch_size = 32;
-    esn.Train(labels.data(), 1400, cnn_cfg);
+    ReadoutArchConfig cnn_arch;
+    ReadoutTrainConfig cnn_train;
+    cnn_arch.num_outputs = 2;
+    cnn_arch.task = ReadoutTask::Classification;
+    cnn_train.epochs = 50;
+    cnn_train.batch_size = 32;
+    esn.Train(labels.data(), 1400, cnn_arch, cnn_train);
 
     double acc = esn.Accuracy(labels.data(), 0, esn.NumCollected());
     printf("         accuracy=%.4f\n", acc);
@@ -127,11 +129,12 @@ void test_hcnn_multi_output()
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, run_steps);
 
-    ReadoutConfig cnn_cfg;
-    cnn_cfg.num_outputs = static_cast<int>(K);
-    cnn_cfg.epochs = 50;
-    cnn_cfg.batch_size = 32;
-    esn.Train(targets.data(), 1400, cnn_cfg);
+    ReadoutArchConfig cnn_arch;
+    ReadoutTrainConfig cnn_train;
+    cnn_arch.num_outputs = static_cast<int>(K);
+    cnn_train.epochs = 50;
+    cnn_train.batch_size = 32;
+    esn.Train(targets.data(), 1400, cnn_arch, cnn_train);
 
     check(esn.NumOutputs() == K,
           (label + " - NumOutputs() == 2").c_str());
@@ -160,10 +163,11 @@ void test_persistence()
     esn1.Warmup(signal.data(), 200);
     esn1.Run(signal.data() + 200, 1799);
 
-    ReadoutConfig cnn_cfg;
-    cnn_cfg.epochs = 50;
-    cnn_cfg.batch_size = 32;
-    esn1.Train(signal.data() + 201, 1400, cnn_cfg);
+    ReadoutArchConfig cnn_arch;
+    ReadoutTrainConfig cnn_train;
+    cnn_train.epochs = 50;
+    cnn_train.batch_size = 32;
+    esn1.Train(signal.data() + 201, 1400, cnn_arch, cnn_train);
     float pred_original = esn1.PredictRaw(0);
 
     auto state = esn1.GetReadoutState();
@@ -171,7 +175,7 @@ void test_persistence()
     ESN<DIM> esn2(1, cfg);
     esn2.Warmup(signal.data(), 200);
     esn2.Run(signal.data() + 200, 1799);
-    esn2.SetCNNConfig(cnn_cfg);
+    esn2.SetCNNConfig(cnn_arch);
     esn2.SetReadoutState(state);
     float pred_restored = esn2.PredictRaw(0);
 
@@ -194,10 +198,11 @@ void test_clear_states()
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
 
-    ReadoutConfig cnn_cfg;
-    cnn_cfg.epochs = 50;
-    cnn_cfg.batch_size = 32;
-    esn.Train(signal.data() + 201, 1400, cnn_cfg);
+    ReadoutArchConfig cnn_arch;
+    ReadoutTrainConfig cnn_train;
+    cnn_train.epochs = 50;
+    cnn_train.batch_size = 32;
+    esn.Train(signal.data() + 201, 1400, cnn_arch, cnn_train);
 
     esn.ClearStates();
     check(esn.NumCollected() == 0, (label + " - count reset").c_str());
@@ -241,10 +246,11 @@ void test_multi_input()
     esn.Warmup(inputs.data(), warmup_steps);
     esn.Run(inputs.data() + warmup_steps * K, run_steps);
 
-    ReadoutConfig cnn_cfg;
-    cnn_cfg.epochs = 50;
-    cnn_cfg.batch_size = 32;
-    esn.Train(targets.data(), run_steps - 1, cnn_cfg);
+    ReadoutArchConfig cnn_arch;
+    ReadoutTrainConfig cnn_train;
+    cnn_train.epochs = 50;
+    cnn_train.batch_size = 32;
+    esn.Train(targets.data(), run_steps - 1, cnn_arch, cnn_train);
 
     double r2 = esn.R2(targets.data(), 0, run_steps - 1);
     printf("         R2=%.6f\n", r2);

@@ -215,17 +215,19 @@ int main(int argc, char* argv[])
     for (size_t t = 0; t < collect; ++t)
         float_labels[t] = static_cast<float>(labels[t]);
 
-    ReadoutConfig cnn_cfg = presets::Baseline<DIM>().cnn;
-    cnn_cfg.num_outputs = NUM_CLASSES;
-    cnn_cfg.task        = ReadoutTask::Classification;
-    cnn_cfg.epochs      = 25;
+    auto preset = presets::Baseline<DIM>();
+    ReadoutArchConfig cnn_arch = preset.arch;
+    ReadoutTrainConfig cnn_train = preset.train;
+    cnn_arch.num_outputs = NUM_CLASSES;
+    cnn_arch.task        = ReadoutTask::Classification;
+    cnn_train.epochs     = 25;
 
-    std::cout << "Training: " << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size
-              << ", lr_max=" << std::setprecision(4) << cnn_cfg.lr_max
-              << " (cosine floor " << cnn_cfg.lr_max * cnn_cfg.lr_min_frac << ")\n";
+    std::cout << "Training: " << cnn_train.epochs << " epochs, batch=" << cnn_train.batch_size
+              << ", lr_max=" << std::setprecision(4) << cnn_train.lr_max
+              << " (cosine floor " << cnn_train.lr_max * cnn_train.lr_min_frac << ")\n";
     std::cout << "Training..." << std::flush;
     auto t0 = std::chrono::steady_clock::now();
-    esn.Train(float_labels.data(), train_size, cnn_cfg);
+    esn.Train(float_labels.data(), train_size, cnn_arch, cnn_train);
     auto t1 = std::chrono::steady_clock::now();
     double secs = std::chrono::duration<double>(t1 - t0).count();
     std::cout << " done (" << std::fixed << std::setprecision(1) << secs << "s)\n\n";

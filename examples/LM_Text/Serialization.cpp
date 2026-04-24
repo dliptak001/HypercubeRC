@@ -14,8 +14,10 @@ namespace lm_text {
 
 static_assert(std::is_trivially_copyable_v<ReservoirConfig>,
               "ReservoirConfig must stay trivially copyable for POD serialization");
-static_assert(std::is_trivially_copyable_v<ReadoutConfig>,
-              "ReadoutConfig must stay trivially copyable for POD serialization");
+static_assert(std::is_trivially_copyable_v<ReadoutArchConfig>,
+              "ReadoutArchConfig must stay trivially copyable for POD serialization");
+static_assert(std::is_trivially_copyable_v<ReadoutTrainConfig>,
+              "ReadoutTrainConfig must stay trivially copyable for POD serialization");
 
 namespace {
 
@@ -97,7 +99,8 @@ bool SaveModelFile(const std::string& path, const ModelFile& mf)
     os.write(sha, 40);
 
     WritePOD(os, mf.reservoir_cfg);
-    WritePOD(os, mf.cnn_cfg);
+    WritePOD(os, mf.cnn_arch);
+    WritePOD(os, mf.cnn_train);
 
     WriteVec(os, mf.readout.weights);
     WritePOD(os, mf.readout.bias);
@@ -139,7 +142,8 @@ bool LoadModelFile(const std::string& path, ModelFile& mf, std::string* err)
     mf.meta.git_sha.assign(sha, std::find(sha, sha + 40, '\0'));
 
     if (!ReadPOD(is, mf.reservoir_cfg)) return fail("short read (reservoir_cfg)");
-    if (!ReadPOD(is, mf.cnn_cfg))       return fail("short read (cnn_cfg)");
+    if (!ReadPOD(is, mf.cnn_arch))      return fail("short read (cnn_arch)");
+    if (!ReadPOD(is, mf.cnn_train))     return fail("short read (cnn_train)");
 
     if (!ReadVec(is, mf.readout.weights))       return fail("short read or oversized (weights)");
     if (!ReadPOD(is, mf.readout.bias))          return fail("short read (bias)");

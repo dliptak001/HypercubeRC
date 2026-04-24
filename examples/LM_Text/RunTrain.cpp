@@ -169,13 +169,13 @@ int RunTrain()
     for (std::size_t i = 0; i < args.warmup_train_chars; ++i)
         BipolarBits(corpus.text[corpus_pos + i], warmup_bits.data() + i * kInputBits);
 
-    ReadoutConfig cnn_cfg = presets::Baseline<kDIM>().cnn;
-    cnn_cfg.task          = ReadoutTask::Classification;
-    cnn_cfg.num_outputs   = static_cast<int>(kVocabSize);
-    cnn_cfg.num_layers    = args.cnn_num_layers;
-    cnn_cfg.conv_channels = args.cnn_conv_channels;
+    ReadoutArchConfig cnn_arch = presets::Baseline<kDIM>().arch;
+    cnn_arch.task          = ReadoutTask::Classification;
+    cnn_arch.num_outputs   = static_cast<int>(kVocabSize);
+    cnn_arch.num_layers    = args.cnn_num_layers;
+    cnn_arch.conv_channels = args.cnn_conv_channels;
 
-    esn.InitOnline(warmup_bits.data(), args.warmup_train_chars, cnn_cfg);
+    esn.InitOnline(warmup_bits.data(), args.warmup_train_chars, cnn_arch);
     warmup_bits.clear();
     warmup_bits.shrink_to_fit();
 
@@ -183,11 +183,11 @@ int RunTrain()
     // warmup_train region.  Just advance corpus_pos to match.
     corpus_pos += args.warmup_train_chars;
 
-    std::cerr << "[train] CNN cfg: nl=" << cnn_cfg.num_layers
-              << " ch=" << cnn_cfg.conv_channels
+    std::cerr << "[train] CNN cfg: nl=" << cnn_arch.num_layers
+              << " ch=" << cnn_arch.conv_channels
               << " head=FLATTEN"
               << " lr_max=" << args.lr_max
-              << " num_outputs=" << cnn_cfg.num_outputs << "\n";
+              << " num_outputs=" << cnn_arch.num_outputs << "\n";
 
     // --- Phase 3: Stream through train_chars with mini-batch CNN updates. ---
     //
@@ -382,7 +382,7 @@ int RunTrain()
     mf.meta.training_passes  = static_cast<std::uint32_t>(args.num_passes);
     mf.meta.git_sha          = args.git_sha;
     mf.reservoir_cfg         = esn.GetConfig();
-    mf.cnn_cfg               = cnn_cfg;
+    mf.cnn_arch              = cnn_arch;
     mf.readout               = ToSerial<kDIM>(esn.GetReadoutState());
 
     if (!SaveModelFile(args.output_path, mf)) {

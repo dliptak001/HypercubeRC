@@ -18,8 +18,9 @@ namespace presets {
 /// Reservoir config + readout config, bundled per-DIM.
 struct Preset
 {
-    ReservoirConfig   reservoir;
-    ReadoutConfig cnn;
+    ReservoirConfig    reservoir;
+    ReadoutArchConfig  arch;
+    ReadoutTrainConfig train;
 };
 
 /// @brief Baseline preset: surveyed reservoir seed + uniform CNN architecture.
@@ -36,18 +37,18 @@ Preset Baseline()
     Preset p;
     p.reservoir.seed = ::SurveyedSeed<DIM>();
 
-    p.cnn.num_layers    = 1;
-    p.cnn.conv_channels = 8;
-    p.cnn.epochs        = 2000;
-    p.cnn.batch_size    = 1 << (DIM - 1);
-    p.cnn.lr_max        = 0.0015f;
+    p.arch.num_layers    = 1;
+    p.arch.conv_channels = 8;
+    p.train.epochs       = 2000;
+    p.train.batch_size   = 1 << (DIM - 1);
+    p.train.lr_max       = 0.0015f;
 
-    if constexpr      (DIM == 5)  p.cnn.seed = 21;
-    else if constexpr (DIM == 6)  p.cnn.seed = 34;
-    else if constexpr (DIM == 7)  p.cnn.seed = 6;
-    else if constexpr (DIM == 8)  p.cnn.seed = 2;
-    else if constexpr (DIM == 9)  p.cnn.seed = 20;
-    else if constexpr (DIM == 10) p.cnn.seed = 2;
+    if constexpr      (DIM == 5)  p.arch.seed = 21;
+    else if constexpr (DIM == 6)  p.arch.seed = 34;
+    else if constexpr (DIM == 7)  p.arch.seed = 6;
+    else if constexpr (DIM == 8)  p.arch.seed = 2;
+    else if constexpr (DIM == 9)  p.arch.seed = 20;
+    else if constexpr (DIM == 10) p.arch.seed = 2;
     return p;
 }
 

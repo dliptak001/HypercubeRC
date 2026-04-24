@@ -111,17 +111,19 @@ int main(int argc, char* argv[])
     size_t train_n = static_cast<size_t>(prime_steps * 0.7);
     size_t test_n = prime_steps - train_n;
 
-    ReadoutConfig cnn_cfg = presets::Baseline<DIM>().cnn;
-    cnn_cfg.num_outputs = 1;
-    cnn_cfg.task        = ReadoutTask::Regression;
-    cnn_cfg.epochs      = 1000;
-    cnn_cfg.seed        = 420607;
+    auto preset = presets::Baseline<DIM>();
+    ReadoutArchConfig cnn_arch = preset.arch;
+    ReadoutTrainConfig cnn_train = preset.train;
+    cnn_arch.num_outputs = 1;
+    cnn_arch.task        = ReadoutTask::Regression;
+    cnn_train.epochs     = 1000;
+    cnn_arch.seed        = 420607;
 
     std::cout << "Training on " << train_n << " samples ("
-              << cnn_cfg.epochs << " epochs, batch=" << cnn_cfg.batch_size
-              << ", lr_max=" << std::setprecision(4) << cnn_cfg.lr_max << ")..." << std::flush;
+              << cnn_train.epochs << " epochs, batch=" << cnn_train.batch_size
+              << ", lr_max=" << std::setprecision(4) << cnn_train.lr_max << ")..." << std::flush;
     auto t0 = std::chrono::steady_clock::now();
-    esn.Train(prime_targets.data(), train_n, cnn_cfg);
+    esn.Train(prime_targets.data(), train_n, cnn_arch, cnn_train);
     auto t1 = std::chrono::steady_clock::now();
     double train_secs = std::chrono::duration<double>(t1 - t0).count();
     std::cout << " done (" << std::fixed << std::setprecision(2) << train_secs << "s)\n\n";

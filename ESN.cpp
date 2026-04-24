@@ -94,33 +94,35 @@ template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size)
 {
     auto sub = ReadoutStates(0, train_size);
-    readout_.Train(sub.data(), targets, train_size, EffectiveDIM());
+    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), ReadoutArchConfig{});
 }
 
 template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size,
-                     const ReadoutConfig& config)
+                     const ReadoutArchConfig& arch,
+                     const ReadoutTrainConfig& train)
 {
     auto sub = ReadoutStates(0, train_size);
-    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), config);
+    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), arch, train);
 }
 
 template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size,
-                     const ReadoutConfig& config,
+                     const ReadoutArchConfig& arch,
+                     const ReadoutTrainConfig& train,
                      CNNTrainHooks& hooks)
 {
     auto sub = ReadoutStates(0, train_size);
-    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), config, hooks);
+    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), arch, train, hooks);
 }
 
 template <size_t DIM>
 void ESN<DIM>::InitOnline(const float* warmup_inputs, size_t warmup_count,
-                          const ReadoutConfig& config)
+                          const ReadoutArchConfig& arch)
 {
     Run(warmup_inputs, warmup_count);
     auto sub = ReadoutStates(0, warmup_count);
-    readout_.InitOnline(sub.data(), warmup_count, EffectiveDIM(), config);
+    readout_.InitOnline(sub.data(), warmup_count, EffectiveDIM(), arch);
     ClearStates();
 }
 
@@ -289,7 +291,7 @@ void ESN<DIM>::SetReadoutState(const ReadoutState& state)
 }
 
 template <size_t DIM>
-void ESN<DIM>::SetCNNConfig(const ReadoutConfig& cfg)
+void ESN<DIM>::SetCNNConfig(const ReadoutArchConfig& cfg)
 {
     readout_.SetConfig(cfg);
 }

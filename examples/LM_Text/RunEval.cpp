@@ -64,7 +64,7 @@ int RunEval()
 
     // --- Construct ESN + restore weights. ---
     ESN<kDIM> esn(1, mf.reservoir_cfg);
-    esn.SetCNNConfig(mf.cnn_cfg);
+    esn.SetCNNConfig(mf.cnn_arch);
     esn.SetReadoutState(FromSerial<kDIM>(mf.readout));
 
     // --- Phase 1: Stream warmup + skip region (no scoring). ---

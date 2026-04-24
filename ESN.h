@@ -39,14 +39,16 @@ public:
     void Train(const float* targets, size_t train_size);
 
     void Train(const float* targets, size_t train_size,
-               const ReadoutConfig& config);
+               const ReadoutArchConfig& arch,
+               const ReadoutTrainConfig& train = {});
 
     void Train(const float* targets, size_t train_size,
-               const ReadoutConfig& config,
+               const ReadoutArchConfig& arch,
+               const ReadoutTrainConfig& train,
                CNNTrainHooks& hooks);
 
     void InitOnline(const float* warmup_inputs, size_t warmup_count,
-                    const ReadoutConfig& config);
+                    const ReadoutArchConfig& arch);
 
     void TrainLiveStep(float target_class, float lr, float weight_decay = 0.0f);
 
@@ -120,7 +122,7 @@ public:
 
     [[nodiscard]] ReadoutState GetReadoutState() const;
     void SetReadoutState(const ReadoutState& state);
-    void SetCNNConfig(const ReadoutConfig& cfg);
+    void SetCNNConfig(const ReadoutArchConfig& cfg);
 
 private:
     void Init(const ReservoirConfig& cfg);

@@ -53,14 +53,20 @@ public:
     };
 
     NARMA10(const ReservoirConfig* config = nullptr,
-            const ReadoutConfig& hcnn_config = BenchmarkCNNConfig())
-        : config_(config), hcnn_config_(hcnn_config)
+            const ReadoutArchConfig& arch = BenchmarkArchConfig(),
+            const ReadoutTrainConfig& train = BenchmarkTrainConfig())
+        : config_(config), arch_(arch), train_(train)
     {
     }
 
-    static ReadoutConfig BenchmarkCNNConfig()
+    static ReadoutArchConfig BenchmarkArchConfig()
     {
-        return presets::Baseline<DIM>().cnn;
+        return presets::Baseline<DIM>().arch;
+    }
+
+    static ReadoutTrainConfig BenchmarkTrainConfig()
+    {
+        return presets::Baseline<DIM>().train;
     }
 
     Result Run()
@@ -95,7 +101,7 @@ public:
             esn.Run(ri.data() + warmup, collect);
 
             auto t0 = std::chrono::steady_clock::now();
-            esn.Train(targets.data(), tr, hcnn_config_);
+            esn.Train(targets.data(), tr, arch_, train_);
             auto t1 = std::chrono::steady_clock::now();
 
             s_nrmse += esn.NRMSE(targets.data(), tr, te);
@@ -115,7 +121,8 @@ public:
 
 private:
     const ReservoirConfig* config_;
-    ReadoutConfig hcnn_config_;
+    ReadoutArchConfig arch_;
+    ReadoutTrainConfig train_;
 
     static std::vector<uint64_t> Seeds()
     {

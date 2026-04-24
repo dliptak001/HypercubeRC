@@ -100,23 +100,25 @@ void Readout::build_architecture()
 
 void Readout::Train(const float* states, const float* targets,
                        size_t num_samples, size_t dim,
-                       const ReadoutConfig& config)
+                       const ReadoutArchConfig& arch,
+                       const ReadoutTrainConfig& train)
 {
     CNNTrainHooks no_hooks;
-    Train(states, targets, num_samples, dim, config, no_hooks);
+    Train(states, targets, num_samples, dim, arch, train, no_hooks);
 }
 
 void Readout::Train(const float* states, const float* targets,
                        size_t num_samples, size_t dim,
-                       const ReadoutConfig& config,
+                       const ReadoutArchConfig& arch,
+                       const ReadoutTrainConfig& train,
                        CNNTrainHooks& hooks)
 {
-    config_ = config;
+    config_ = arch;
     dim_ = dim;
     const size_t n = 1ULL << dim;
     num_features_ = n;
-    num_outputs_ = static_cast<size_t>(config.num_outputs);
-    const bool is_classification = (config.task == ReadoutTask::Classification);
+    num_outputs_ = static_cast<size_t>(arch.num_outputs);
+    const bool is_classification = (arch.task == ReadoutTask::Classification);
 
     // --- Input standardization ---
     compute_standardization(states, num_samples, n);
@@ -138,24 +140,24 @@ void Readout::Train(const float* states, const float* targets,
     auto fire_hook = [&](int epoch_done_1based, float lr) {
         if (!hooks.epoch_callback || hooks.eval_every_epochs <= 0) return;
         const bool at_interval = (epoch_done_1based % hooks.eval_every_epochs) == 0;
-        const bool at_final    = epoch_done_1based == config.epochs;
+        const bool at_final    = epoch_done_1based == train.epochs;
         if (at_interval || at_final) {
             flatten_weights();
-            hooks.epoch_callback(epoch_done_1based, config.epochs, lr);
+            hooks.epoch_callback(epoch_done_1based, train.epochs, lr);
         }
     };
 
     // --- Cosine LR schedule (loop-invariant pieces) ---
-    const float lr_min = config.lr_max * config.lr_min_frac;
+    const float lr_min = train.lr_max * train.lr_min_frac;
     const auto pi = static_cast<float>(std::numbers::pi);
-    const int horizon = (config.lr_decay_epochs > 0)
-                            ? config.lr_decay_epochs
-                            : config.epochs;
+    const int horizon = (train.lr_decay_epochs > 0)
+                            ? train.lr_decay_epochs
+                            : train.epochs;
 
     auto cosine_lr = [&](int epoch) -> float {
         float progress = static_cast<float>(epoch) / static_cast<float>(horizon);
         if (progress > 1.0f) progress = 1.0f;
-        return lr_min + 0.5f * (config.lr_max - lr_min) *
+        return lr_min + 0.5f * (train.lr_max - lr_min) *
                (1.0f + std::cos(pi * progress));
     };
 
@@ -186,7 +188,7 @@ void Readout::Train(const float* states, const float* targets,
     // --- Verbose reporting buffers ---
     std::vector<float> verbose_logits;
     std::vector<float> verbose_preds;
-    if (config.verbose && config.verbose_train_acc) {
+    if (train.verbose && train.verbose_train_acc) {
         if (is_classification)
             verbose_logits.resize(num_samples * num_outputs_);
         else
@@ -194,28 +196,28 @@ void Readout::Train(const float* states, const float* targets,
     }
 
     // --- Epoch loop (shared for both tasks) ---
-    for (int e = 0; e < config.epochs; ++e) {
+    for (int e = 0; e < train.epochs; ++e) {
         float lr = cosine_lr(e);
 
         if (is_classification) {
             net_->TrainEpoch(
                 std_states.data(), static_cast<int>(n),
                 int_targets.data(),
-                static_cast<int>(num_samples), config.batch_size,
-                lr, /*momentum=*/0.0f, config.weight_decay,
+                static_cast<int>(num_samples), train.batch_size,
+                lr, /*momentum=*/0.0f, train.weight_decay,
                 /*class_weights=*/nullptr,
                 /*shuffle_seed=*/static_cast<unsigned>(e + 1));
         } else {
             net_->TrainEpochRegression(
                 std_states.data(), static_cast<int>(n),
                 centered_targets.data(),
-                static_cast<int>(num_samples), config.batch_size,
-                lr, /*momentum=*/0.0f, config.weight_decay,
+                static_cast<int>(num_samples), train.batch_size,
+                lr, /*momentum=*/0.0f, train.weight_decay,
                 /*shuffle_seed=*/static_cast<unsigned>(e + 1));
         }
 
-        if (config.verbose) {
-            if (config.verbose_train_acc) {
+        if (train.verbose) {
+            if (train.verbose_train_acc) {
                 if (is_classification) {
                     net_->ForwardBatch(std_states.data(), static_cast<int>(n),
                                        static_cast<int>(num_samples),
@@ -231,7 +233,7 @@ void Readout::Train(const float* states, const float* targets,
                     }
                     double acc = 100.0 * correct / num_samples;
                     std::printf("  epoch %3d/%d  lr=%.5f  train_acc=%.2f%%\n",
-                                e + 1, config.epochs, lr, acc);
+                                e + 1, train.epochs, lr, acc);
                 } else {
                     net_->ForwardBatch(std_states.data(), static_cast<int>(n),
                                        static_cast<int>(num_samples),
@@ -243,11 +245,11 @@ void Readout::Train(const float* states, const float* targets,
                     }
                     mse /= static_cast<double>(num_samples * num_outputs_);
                     std::printf("  epoch %3d/%d  lr=%.5f  train_mse=%.6f\n",
-                                e + 1, config.epochs, lr, mse);
+                                e + 1, train.epochs, lr, mse);
                 }
             } else {
                 std::printf("  epoch %3d/%d  lr=%.5f\n",
-                            e + 1, config.epochs, lr);
+                            e + 1, train.epochs, lr);
             }
             std::fflush(stdout);
         }
@@ -265,13 +267,13 @@ void Readout::Train(const float* states, const float* targets,
 // ---------------------------------------------------------------------------
 
 void Readout::InitOnline(const float* warmup_states, size_t warmup_count,
-                            size_t dim, const ReadoutConfig& config)
+                            size_t dim, const ReadoutArchConfig& arch)
 {
-    config_ = config;
+    config_ = arch;
     dim_ = dim;
     const size_t n = 1ULL << dim;
     num_features_ = n;
-    num_outputs_ = static_cast<size_t>(config.num_outputs);
+    num_outputs_ = static_cast<size_t>(arch.num_outputs);
 
     compute_standardization(warmup_states, warmup_count, n);
     build_architecture();
@@ -544,7 +546,7 @@ void Readout::SetState(std::vector<double> weights, double bias,
     }
 }
 
-void Readout::SetConfig(const ReadoutConfig& cfg)
+void Readout::SetConfig(const ReadoutArchConfig& cfg)
 {
     config_ = cfg;
     num_outputs_ = static_cast<size_t>(cfg.num_outputs);
