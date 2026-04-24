@@ -10,6 +10,7 @@ template <size_t DIM>
 ESN<DIM>::ESN(size_t depth, const ReservoirConfig& cfg)
     : reservoir_(ReservoirCascade<DIM>::Create(depth, cfg))
 {
+    depth_ = depth;
     Init(cfg);
 }
 
@@ -20,10 +21,12 @@ void ESN<DIM>::Init(const ReservoirConfig& cfg)
     num_inputs_      = cfg.num_inputs;
     output_fraction_ = cfg.output_fraction;
 
+    const size_t spatial_N = N;
     assert(output_fraction_ > 0.0f && output_fraction_ <= 1.0f);
-    size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(output_size_ * output_fraction_)));
-    output_stride_ = std::max<size_t>(1, output_size_ / M);
-    num_output_verts_ = (output_size_ + output_stride_ - 1) / output_stride_;
+    size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(spatial_N * output_fraction_)));
+    output_stride_ = std::max<size_t>(1, spatial_N / M);
+    size_t spatial_verts = (spatial_N + output_stride_ - 1) / output_stride_;
+    num_output_verts_ = depth_ * spatial_verts;
     scratch_subsampled_.resize(num_output_verts_);
 
     if ((output_stride_ & (output_stride_ - 1)) != 0)
@@ -94,7 +97,9 @@ template <size_t DIM>
 void ESN<DIM>::Train(const float* targets, size_t train_size)
 {
     auto sub = ReadoutStates(0, train_size);
-    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), ReadoutArchConfig{});
+    ReadoutArchConfig resolved;
+    resolved.input_channels = static_cast<int>(depth_);
+    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), resolved);
 }
 
 template <size_t DIM>
@@ -103,7 +108,9 @@ void ESN<DIM>::Train(const float* targets, size_t train_size,
                      const ReadoutTrainConfig& train)
 {
     auto sub = ReadoutStates(0, train_size);
-    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), arch, train);
+    ReadoutArchConfig resolved = arch;
+    resolved.input_channels = static_cast<int>(depth_);
+    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), resolved, train);
 }
 
 template <size_t DIM>
@@ -113,7 +120,9 @@ void ESN<DIM>::Train(const float* targets, size_t train_size,
                      CNNTrainHooks& hooks)
 {
     auto sub = ReadoutStates(0, train_size);
-    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), arch, train, hooks);
+    ReadoutArchConfig resolved = arch;
+    resolved.input_channels = static_cast<int>(depth_);
+    readout_.Train(sub.data(), targets, train_size, EffectiveDIM(), resolved, train, hooks);
 }
 
 template <size_t DIM>
@@ -122,7 +131,9 @@ void ESN<DIM>::InitOnline(const float* warmup_inputs, size_t warmup_count,
 {
     Run(warmup_inputs, warmup_count);
     auto sub = ReadoutStates(0, warmup_count);
-    readout_.InitOnline(sub.data(), warmup_count, EffectiveDIM(), arch);
+    ReadoutArchConfig resolved = arch;
+    resolved.input_channels = static_cast<int>(depth_);
+    readout_.InitOnline(sub.data(), warmup_count, EffectiveDIM(), resolved);
     ClearStates();
 }
 
@@ -293,7 +304,9 @@ void ESN<DIM>::SetReadoutState(const ReadoutState& state)
 template <size_t DIM>
 void ESN<DIM>::SetCNNConfig(const ReadoutArchConfig& cfg)
 {
-    readout_.SetConfig(cfg);
+    ReadoutArchConfig resolved = cfg;
+    resolved.input_channels = static_cast<int>(depth_);
+    readout_.SetConfig(resolved);
 }
 
 // ---------------------------------------------------------------
@@ -303,8 +316,9 @@ void ESN<DIM>::SetCNNConfig(const ReadoutArchConfig& cfg)
 template <size_t DIM>
 size_t ESN<DIM>::EffectiveDIM() const
 {
+    size_t spatial_verts = num_output_verts_ / depth_;
     size_t d = 0;
-    for (size_t n = num_output_verts_; n > 1; n >>= 1)
+    for (size_t n = spatial_verts; n > 1; n >>= 1)
         ++d;
     return d;
 }

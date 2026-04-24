@@ -47,7 +47,7 @@ struct ModelFile
 };
 
 inline constexpr char          kMagic[8]       = {'H','C','N','N','L','M','T','X'};
-inline constexpr std::uint32_t kFormatVersion  = 2;
+inline constexpr std::uint32_t kFormatVersion  = 3;
 
 /// Write a ModelFile to disk.  Returns true on success.
 bool SaveModelFile(const std::string& path, const ModelFile& mf);

@@ -77,7 +77,7 @@ void Readout::build_architecture()
                          ? hcnn::TaskType::Classification
                          : hcnn::TaskType::Regression;
     net_ = std::make_unique<hcnn::HCNN>(
-        d, config_.num_outputs, /*input_channels=*/1,
+        d, config_.num_outputs, config_.input_channels,
         task_type);
 
     int ch = config_.conv_channels;
@@ -89,8 +89,9 @@ void Readout::build_architecture()
 
     net_->RandomizeWeights(0.0f, config_.seed);
 
-    scratch_state_.resize(n);
-    scratch_embedded_.resize(n);
+    const size_t total = static_cast<size_t>(config_.input_channels) * n;
+    scratch_state_.resize(total);
+    scratch_embedded_.resize(total);
     scratch_pred_.resize(num_outputs_);
 }
 
@@ -115,7 +116,8 @@ void Readout::Train(const float* states, const float* targets,
 {
     config_ = arch;
     dim_ = dim;
-    const size_t n = 1ULL << dim;
+    const size_t spatial_n = 1ULL << dim;
+    const size_t n = static_cast<size_t>(arch.input_channels) * spatial_n;
     num_features_ = n;
     num_outputs_ = static_cast<size_t>(arch.num_outputs);
     const bool is_classification = (arch.task == ReadoutTask::Classification);
@@ -271,7 +273,8 @@ void Readout::InitOnline(const float* warmup_states, size_t warmup_count,
 {
     config_ = arch;
     dim_ = dim;
-    const size_t n = 1ULL << dim;
+    const size_t spatial_n = 1ULL << dim;
+    const size_t n = static_cast<size_t>(arch.input_channels) * spatial_n;
     num_features_ = n;
     num_outputs_ = static_cast<size_t>(arch.num_outputs);
 

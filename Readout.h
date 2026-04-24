@@ -11,11 +11,12 @@ enum class ReadoutTask { Regression, Classification };
 
 /// HCNN readout architecture. Must stay trivially copyable (POD) for checkpoint serialization.
 struct ReadoutArchConfig {
-    int num_outputs   = 1;       ///< Classes (classification) or targets (regression).
-    ReadoutTask task  = ReadoutTask::Regression;
-    int num_layers    = 0;       ///< Conv+Pool pairs. 0 = auto: min(DIM-2, 2).
-    int conv_channels = 16;      ///< Base channels (doubles per layer).
-    unsigned seed     = 42;      ///< CNN weight initialization seed.
+    int num_outputs    = 1;       ///< Classes (classification) or targets (regression).
+    ReadoutTask task   = ReadoutTask::Regression;
+    int num_layers     = 0;       ///< Conv+Pool pairs. 0 = auto: min(DIM-2, 2).
+    int conv_channels  = 16;      ///< Base channels (doubles per layer).
+    int input_channels = 1;       ///< Input channels (cascade depth). Set by ESN from depth.
+    unsigned seed      = 42;      ///< CNN weight initialization seed.
 };
 
 /// HCNN readout training parameters. Must stay trivially copyable (POD) for checkpoint serialization.

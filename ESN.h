@@ -130,6 +130,7 @@ private:
     std::unique_ptr<IReservoir<DIM>> reservoir_;
     Readout readout_;
 
+    size_t depth_ = 1;
     size_t output_size_ = N;
     size_t num_inputs_ = 1;
     float output_fraction_ = 1.0f;
