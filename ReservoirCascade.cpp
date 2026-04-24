@@ -46,6 +46,20 @@ const float* ReservoirCascade<DIM>::Outputs() const
 }
 
 template <size_t DIM>
+void ReservoirCascade<DIM>::SaveState(float* state_out, float* output_out) const
+{
+    for (size_t i = 0; i < reservoirs_.size(); ++i)
+        reservoirs_[i]->SaveState(state_out + i * N, output_out + i * N);
+}
+
+template <size_t DIM>
+void ReservoirCascade<DIM>::RestoreState(const float* state_in, const float* output_in)
+{
+    for (size_t i = 0; i < reservoirs_.size(); ++i)
+        reservoirs_[i]->RestoreState(state_in + i * N, output_in + i * N);
+}
+
+template <size_t DIM>
 void ReservoirCascade<DIM>::Reset()
 {
     for (auto& r : reservoirs_)

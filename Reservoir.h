@@ -5,6 +5,7 @@
 #include <cstring>
 #include <memory>
 #include <vector>
+#include "IReservoir.h"
 
 /// Reservoir configuration. Defaults are scale-invariant — SR=0.90 and
 /// input_scaling=0.02 are optimal across all DIMs (see ScaleInvariance.md).
@@ -84,7 +85,7 @@ constexpr uint64_t SurveyedSeed()
 /// InjectInput() and Step() calls. Read the N-dimensional state from
 /// Outputs() after each Step().
 template <size_t DIM>
-class Reservoir
+class Reservoir : public IReservoir<DIM>
 {
     static_assert(DIM >= 5 && DIM <= 16, "DIM must be in 5 <= DIM <= 16");
 
@@ -110,12 +111,12 @@ public:
     Reservoir(const Reservoir&) = delete;
     Reservoir& operator=(const Reservoir&) = delete;
 
-    void Step();
+    void Step() override;
 
     /// @brief Inject a scalar input into one channel before Step().
     /// @param channel  Channel index in [0, num_inputs). Channel k owns vertices k, k+K, k+2K, ...
     /// @param input    Scalar value. Clamped to [-1, 1].
-    void InjectInput(size_t channel, float input);
+    void InjectInput(size_t channel, float input) override;
 
     /// @brief Zero the reservoir state. Equivalent to "return to quiescence".
     ///
@@ -128,28 +129,29 @@ public:
     /// fixed, history-free state (e.g., per-expression reset in char-level
     /// sequence tasks). For stream tasks that rely on continuous dynamics
     /// across many inputs, do not call this.
-    void Reset();
+    void Reset() override;
 
     /// @brief Snapshot the current reservoir state (vtx_state_ + vtx_output_).
-    void SaveState(float* state_out, float* output_out) const
+    void SaveState(float* state_out, float* output_out) const override
     {
         std::memcpy(state_out, vtx_state_, N * sizeof(float));
         std::memcpy(output_out, vtx_output_, N * sizeof(float));
     }
 
     /// @brief Restore a previously saved reservoir state.
-    void RestoreState(const float* state_in, const float* output_in)
+    void RestoreState(const float* state_in, const float* output_in) override
     {
         std::memcpy(vtx_state_, state_in, N * sizeof(float));
         std::memcpy(vtx_output_, output_in, N * sizeof(float));
     }
 
-    [[nodiscard]] const float* Outputs() const { return vtx_output_; }
-    [[nodiscard]] float GetAlpha() const { return alpha_; }
-    [[nodiscard]] uint64_t GetSeed() const { return rng_seed_; }
-    [[nodiscard]] float GetSpectralRadius() const { return spectral_radius_; }
-    [[nodiscard]] float GetLeakRate() const { return leak_rate_; }
-    [[nodiscard]] float GetInputScaling() const { return input_scaling_; }
+    [[nodiscard]] const float* Outputs() const override { return vtx_output_; }
+    [[nodiscard]] size_t OutputSize() const override { return N; }
+    [[nodiscard]] float GetAlpha() const override { return alpha_; }
+    [[nodiscard]] uint64_t GetSeed() const override { return rng_seed_; }
+    [[nodiscard]] float GetSpectralRadius() const override { return spectral_radius_; }
+    [[nodiscard]] float GetLeakRate() const override { return leak_rate_; }
+    [[nodiscard]] float GetInputScaling() const override { return input_scaling_; }
 
 private:
     explicit Reservoir(const ReservoirConfig& cfg);
