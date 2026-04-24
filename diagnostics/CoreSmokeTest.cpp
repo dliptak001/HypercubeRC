@@ -32,14 +32,14 @@ static std::vector<float> make_sine(size_t n, float freq = 1.0f)
 
 void test_all_dims_construct()
 {
-    ESN<5>  e5 (ReservoirConfig{.seed = 1});
-    ESN<6>  e6 (ReservoirConfig{.seed = 1});
-    ESN<7>  e7 (ReservoirConfig{.seed = 1});
-    ESN<8>  e8 (ReservoirConfig{.seed = 1});
-    ESN<9>  e9 (ReservoirConfig{.seed = 1});
-    ESN<10> e10(ReservoirConfig{.seed = 1});
-    ESN<11> e11(ReservoirConfig{.seed = 1});
-    ESN<12> e12(ReservoirConfig{.seed = 1});
+    ESN<5>  e5 (1, ReservoirConfig{.seed = 1});
+    ESN<6>  e6 (1, ReservoirConfig{.seed = 1});
+    ESN<7>  e7 (1, ReservoirConfig{.seed = 1});
+    ESN<8>  e8 (1, ReservoirConfig{.seed = 1});
+    ESN<9>  e9 (1, ReservoirConfig{.seed = 1});
+    ESN<10> e10(1, ReservoirConfig{.seed = 1});
+    ESN<11> e11(1, ReservoirConfig{.seed = 1});
+    ESN<12> e12(1, ReservoirConfig{.seed = 1});
 
     bool ok = e5.NumOutputVerts() > 0 && e6.NumOutputVerts() > 0 &&
               e7.NumOutputVerts() > 0 && e8.NumOutputVerts() > 0 &&
@@ -58,7 +58,7 @@ void test_hcnn_prediction()
 
     ReservoirConfig cfg{.seed = 42};
     cfg.output_fraction = 1.0f;
-    ESN<DIM> esn(cfg);
+    ESN<DIM> esn(1, cfg);
 
     check(esn.NumOutputs() == 1,
           (label + " - default 1 output").c_str());
@@ -89,7 +89,7 @@ void test_hcnn_classification()
 
     ReservoirConfig cfg{.seed = 7};
     cfg.output_fraction = 1.0f;
-    ESN<DIM> esn(cfg);
+    ESN<DIM> esn(1, cfg);
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
 
@@ -123,7 +123,7 @@ void test_hcnn_multi_output()
 
     ReservoirConfig cfg{.seed = 42};
     cfg.output_fraction = 1.0f;
-    ESN<DIM> esn(cfg);
+    ESN<DIM> esn(1, cfg);
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, run_steps);
 
@@ -156,7 +156,7 @@ void test_persistence()
 
     ReservoirConfig cfg{.seed = 42};
     cfg.output_fraction = 1.0f;
-    ESN<DIM> esn1(cfg);
+    ESN<DIM> esn1(1, cfg);
     esn1.Warmup(signal.data(), 200);
     esn1.Run(signal.data() + 200, 1799);
 
@@ -168,7 +168,7 @@ void test_persistence()
 
     auto state = esn1.GetReadoutState();
 
-    ESN<DIM> esn2(cfg);
+    ESN<DIM> esn2(1, cfg);
     esn2.Warmup(signal.data(), 200);
     esn2.Run(signal.data() + 200, 1799);
     esn2.SetCNNConfig(cnn_cfg);
@@ -190,7 +190,7 @@ void test_clear_states()
 
     ReservoirConfig cfg{.seed = 42};
     cfg.output_fraction = 1.0f;
-    ESN<DIM> esn(cfg);
+    ESN<DIM> esn(1, cfg);
     esn.Warmup(signal.data(), 200);
     esn.Run(signal.data() + 200, 1799);
 
@@ -237,7 +237,7 @@ void test_multi_input()
 
     ReservoirConfig cfg{.seed = 42, .num_inputs = K};
     cfg.output_fraction = 1.0f;
-    ESN<DIM> esn(cfg);
+    ESN<DIM> esn(1, cfg);
     esn.Warmup(inputs.data(), warmup_steps);
     esn.Run(inputs.data() + warmup_steps * K, run_steps);
 

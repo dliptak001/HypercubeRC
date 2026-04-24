@@ -90,7 +90,7 @@ public:
             cfg.seed = seed;
             cfg.output_fraction = 1.0f;
 
-            ESN<DIM> esn(cfg);
+            ESN<DIM> esn(1, cfg);
             esn.Warmup(ri.data(), warmup);
             esn.Run(ri.data() + warmup, collect);
 

@@ -203,7 +203,7 @@ int main(int argc, char* argv[])
     cfg.seed = seed;
     cfg.leak_rate = 0.65f;
     cfg.output_fraction = 1.0f;
-    ESN<DIM> esn(cfg);
+    ESN<DIM> esn(1, cfg);
 
     std::cout << "Config: DIM=" << DIM << "  N=" << N
               << "  raw state (all vertices)  Task=Classification  Classes=" << NUM_CLASSES << "\n";

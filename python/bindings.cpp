@@ -14,9 +14,9 @@ void bind_esn(py::module_& m, const char* name)
 
     py::class_<E>(m, name)
         // ── Construction ──
-        .def(py::init([](uint64_t seed, float spectral_radius, float input_scaling,
-                         float leak_rate, float alpha, size_t num_inputs,
-                         float output_fraction) {
+        .def(py::init([](size_t depth, uint64_t seed, float spectral_radius,
+                         float input_scaling, float leak_rate, float alpha,
+                         size_t num_inputs, float output_fraction) {
             ReservoirConfig cfg;
             cfg.seed             = seed;
             cfg.spectral_radius  = spectral_radius;
@@ -25,8 +25,9 @@ void bind_esn(py::module_& m, const char* name)
             cfg.alpha            = alpha;
             cfg.num_inputs       = num_inputs;
             cfg.output_fraction  = output_fraction;
-            return std::make_unique<E>(cfg);
+            return std::make_unique<E>(depth, cfg);
         }),
+            py::arg("depth"),
             py::arg("seed")             = 0ULL,
             py::arg("spectral_radius")  = 0.9f,
             py::arg("input_scaling")    = 0.02f,
@@ -62,27 +63,29 @@ void bind_esn(py::module_& m, const char* name)
         .def("reset_reservoir_only", &E::ResetReservoirOnly,
              "Zero only the reservoir state; collected states preserved.")
 
-        .def("save_reservoir_state", [=](const E& self) {
-            py::array_t<float> state(NN);
-            py::array_t<float> output(NN);
+        .def("save_reservoir_state", [](const E& self) {
+            size_t sz = self.OutputSize();
+            py::array_t<float> state(sz);
+            py::array_t<float> output(sz);
             self.SaveReservoirState(state.mutable_data(), output.mutable_data());
             return py::make_tuple(state, output);
         }, "Snapshot the current reservoir state.\n"
-           "Returns (state, output) tuple of (N,) float arrays.")
+           "Returns (state, output) tuple of (output_size,) float arrays.")
 
-        .def("restore_reservoir_state", [=](E& self,
+        .def("restore_reservoir_state", [](E& self,
                 py::array_t<float, py::array::c_style | py::array::forcecast> state,
                 py::array_t<float, py::array::c_style | py::array::forcecast> output) {
-            if (state.size() != static_cast<py::ssize_t>(NN) ||
-                output.size() != static_cast<py::ssize_t>(NN))
+            size_t sz = self.OutputSize();
+            if (state.size() != static_cast<py::ssize_t>(sz) ||
+                output.size() != static_cast<py::ssize_t>(sz))
                 throw std::invalid_argument(
-                    "state and output must each have N=" + std::to_string(NN) + " elements");
+                    "state and output must each have " + std::to_string(sz) + " elements");
             self.RestoreReservoirState(
                 static_cast<const float*>(state.request().ptr),
                 static_cast<const float*>(output.request().ptr));
         }, py::arg("state"), py::arg("output"),
            "Restore a previously saved reservoir state.\n"
-           "state and output must be (N,) float arrays from save_reservoir_state.")
+           "state and output must be (output_size,) float arrays from save_reservoir_state.")
 
         // ── Batch training ──
         .def("train", [](E& self,
@@ -349,6 +352,7 @@ void bind_esn(py::module_& m, const char* name)
         .def_property_readonly("num_output_verts", &E::NumOutputVerts)
         .def_property_readonly("dim", [](const E&) { return DIM; })
         .def_property_readonly("N", [=](const E&) { return NN; })
+        .def_property_readonly("output_size", &E::OutputSize)
         .def_property_readonly("num_inputs", &E::NumInputs)
         .def_property_readonly("seed", [](const E& self) { return self.GetConfig().seed; })
         .def_property_readonly("spectral_radius", [](const E& self) { return self.GetConfig().spectral_radius; })

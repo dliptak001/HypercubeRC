@@ -87,7 +87,7 @@ int main(int argc, char* argv[])
     cfg.seed = seed;
     cfg.leak_rate = 0.3f;
     cfg.output_fraction = 1.0f;
-    ESN<DIM> esn(cfg);
+    ESN<DIM> esn(1, cfg);
 
     std::cout << "Config: DIM=" << DIM << "  N=" << N
               << "  Leak=" << cfg.leak_rate

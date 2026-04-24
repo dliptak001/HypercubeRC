@@ -7,16 +7,23 @@
 #include <stdexcept>
 
 template <size_t DIM>
-ESN<DIM>::ESN(const ReservoirConfig& cfg)
-    : reservoir_(Reservoir<DIM>::Create(cfg))
+ESN<DIM>::ESN(size_t depth, const ReservoirConfig& cfg)
+    : reservoir_(ReservoirCascade<DIM>::Create(depth, cfg))
 {
+    Init(cfg);
+}
+
+template <size_t DIM>
+void ESN<DIM>::Init(const ReservoirConfig& cfg)
+{
+    output_size_     = reservoir_->OutputSize();
     num_inputs_      = cfg.num_inputs;
     output_fraction_ = cfg.output_fraction;
 
     assert(output_fraction_ > 0.0f && output_fraction_ <= 1.0f);
-    size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(N * output_fraction_)));
-    output_stride_ = std::max<size_t>(1, N / M);
-    num_output_verts_ = (N + output_stride_ - 1) / output_stride_;
+    size_t M = std::max<size_t>(1, static_cast<size_t>(std::round(output_size_ * output_fraction_)));
+    output_stride_ = std::max<size_t>(1, output_size_ / M);
+    num_output_verts_ = (output_size_ + output_stride_ - 1) / output_stride_;
     scratch_subsampled_.resize(num_output_verts_);
 
     if ((output_stride_ & (output_stride_ - 1)) != 0)
@@ -44,7 +51,7 @@ template <size_t DIM>
 void ESN<DIM>::Run(const float* inputs, size_t num_steps)
 {
     const size_t K = num_inputs_;
-    states_.resize((num_collected_ + num_steps) * N);
+    states_.resize((num_collected_ + num_steps) * output_size_);
     for (size_t s = 0; s < num_steps; ++s)
     {
         for (size_t ch = 0; ch < K; ++ch)
@@ -52,7 +59,7 @@ void ESN<DIM>::Run(const float* inputs, size_t num_steps)
         reservoir_->Step();
 
         const float* out = reservoir_->Outputs();
-        memcpy(states_.data() + (num_collected_ + s) * N, out, N * sizeof(float));
+        memcpy(states_.data() + (num_collected_ + s) * output_size_, out, output_size_ * sizeof(float));
     }
     num_collected_ += num_steps;
 }
@@ -129,7 +136,7 @@ void ESN<DIM>::CopyLiveState(float* out) const
 {
     const float* src = reservoir_->Outputs();
     size_t j = 0;
-    for (size_t v = 0; v < N; v += output_stride_)
+    for (size_t v = 0; v < output_size_; v += output_stride_)
         out[j++] = src[v];
 }
 
@@ -304,7 +311,7 @@ template <size_t DIM>
 const float* ESN<DIM>::SubsampleIntoScratch(const float* src) const
 {
     size_t j = 0;
-    for (size_t v = 0; v < N; v += output_stride_)
+    for (size_t v = 0; v < output_size_; v += output_stride_)
         scratch_subsampled_[j++] = src[v];
     return scratch_subsampled_.data();
 }
@@ -312,7 +319,7 @@ const float* ESN<DIM>::SubsampleIntoScratch(const float* src) const
 template <size_t DIM>
 const float* ESN<DIM>::ReadoutInput(size_t timestep) const
 {
-    return SubsampleIntoScratch(states_.data() + timestep * N);
+    return SubsampleIntoScratch(states_.data() + timestep * output_size_);
 }
 
 template <size_t DIM>
@@ -321,10 +328,10 @@ std::vector<float> ESN<DIM>::ReadoutStates(size_t start, size_t count) const
     std::vector<float> buf(count * num_output_verts_);
     for (size_t s = 0; s < count; ++s)
     {
-        const float* src = states_.data() + (start + s) * N;
+        const float* src = states_.data() + (start + s) * output_size_;
         float* dst = buf.data() + s * num_output_verts_;
         size_t j = 0;
-        for (size_t v = 0; v < N; v += output_stride_)
+        for (size_t v = 0; v < output_size_; v += output_stride_)
             dst[j++] = src[v];
     }
     return buf;

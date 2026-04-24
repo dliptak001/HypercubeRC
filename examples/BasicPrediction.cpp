@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
     cfg.seed = seed;
     cfg.leak_rate = 0.2f;
     cfg.output_fraction = 1.0f;
-    ESN<DIM> esn(cfg);
+    ESN<DIM> esn(1, cfg);
 
     ReadoutConfig cnn_cfg = presets::Baseline<DIM>().cnn;
     cnn_cfg.epochs      = 1100;

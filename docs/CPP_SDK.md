@@ -26,8 +26,10 @@ After installation, the SDK contains:
 <prefix>/
   include/HypercubeRC/
     ESN.h              -- The public API (the only header consumers include)
-    Reservoir.h        -- Internal: included by ESN.h
-    Readout.h      -- Transitive: types used by the ESN API (ReadoutConfig, ReadoutTask, CNNTrainHooks)
+    IReservoir.h       -- Abstract base: polymorphic reservoir interface
+    Reservoir.h        -- Single hypercube reservoir (implements IReservoir)
+    ReservoirCascade.h -- Multi-layer cascade (implements IReservoir)
+    Readout.h          -- Transitive: types used by the ESN API (ReadoutConfig, ReadoutTask, CNNTrainHooks)
   lib/
     libHypercubeRCCore.a
   lib/cmake/HypercubeRC/
@@ -140,10 +142,10 @@ int main()
     for (size_t t = 0; t < signal.size(); ++t)
         signal[t] = std::sin(0.1f * static_cast<float>(t));
 
-    // Create ESN with default config
+    // Create ESN: depth 1 = single reservoir, depth > 1 = cascade
     ReservoirConfig cfg;
     cfg.seed = 42;
-    ESN<DIM> esn(cfg);
+    ESN<DIM> esn(1, cfg);
 
     // Drive and train
     esn.Warmup(signal.data(), warmup);
@@ -298,7 +300,7 @@ The complete pipeline wrapper: Reservoir -> Readout.
 
 ```cpp
 // Construction
-ESN<DIM>(cfg);
+ESN<DIM>(depth, cfg);    // depth=1 for single reservoir, depth>1 for cascade
 
 // Reservoir driving
 esn.Warmup(inputs, num_steps);
@@ -338,6 +340,7 @@ esn.SelectedStates();
 esn.NumCollected();
 esn.NumOutputs();
 esn.NumOutputVerts();
+esn.OutputSize();
 esn.OutputFraction();
 esn.NumInputs();
 esn.GetConfig();
@@ -351,12 +354,13 @@ esn.SetCNNConfig(cfg);
 #### Construction
 
 ```cpp
-explicit ESN(const ReservoirConfig& cfg);
+ESN(size_t depth, const ReservoirConfig& cfg);
 ```
 
-Creates the reservoir from `cfg`. Reservoir weights are generated and spectral-radius-rescaled at construction time. The HCNN readout is initialized lazily when `Train()` or `InitOnline()` is called.
+Creates a reservoir cascade of `depth` layers from `cfg`. All layers share the same seed and configuration; inter-layer symmetry is broken by circular rotation of the output state. At `depth=1`, this is equivalent to a single reservoir. The HCNN readout is initialized lazily when `Train()` or `InitOnline()` is called.
 
 **Parameters:**
+- `depth` -- Number of reservoir layers (1 = single reservoir, >1 = cascade). Each layer adds N neurons; `OutputSize()` returns `depth * N`.
 - `cfg` -- Reservoir configuration. See [ReservoirConfig](#reservoirconfig).
 
 ---

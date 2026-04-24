@@ -49,7 +49,7 @@ int RunInfer()
     }
 
     // --- ESN construction + weight restore. ---
-    ESN<kDIM> esn(mf.reservoir_cfg);
+    ESN<kDIM> esn(1, mf.reservoir_cfg);
     esn.SetCNNConfig(mf.cnn_cfg);
     esn.SetReadoutState(FromSerial<kDIM>(mf.readout));
 

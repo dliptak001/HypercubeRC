@@ -64,7 +64,7 @@ import hypercube_rc as hrc
 
 signal = np.sin(np.linspace(0, 20 * np.pi, 2000)).astype(np.float32)
 
-esn = hrc.ESN(dim=7, seed=42)
+esn = hrc.ESN(dim=7, depth=1, seed=42)
 esn.fit(signal, warmup=200)       # warmup, run, train in one call
 
 print(f"R² = {esn.r2():.6f}")     # test R² (~1.0000)
@@ -79,7 +79,7 @@ import hypercube_rc as hrc
 
 signal = np.sin(np.linspace(0, 20 * np.pi, 2000)).astype(np.float32)
 
-esn = hrc.ESN(dim=7, seed=42)
+esn = hrc.ESN(dim=7, depth=1, seed=42)
 esn.warmup(signal[:200])
 esn.run(signal[200:-1])
 
@@ -120,8 +120,9 @@ are available for advanced use (see [Streaming / Online Training](#streaming--on
 import hypercube_rc as hrc
 
 # Construction
-esn = hrc.ESN(dim=7)                                                    # defaults
-esn = hrc.ESN(dim=7, seed=42, leak_rate=0.3)                            # custom config
+esn = hrc.ESN(dim=7, depth=1)                                           # single reservoir
+esn = hrc.ESN(dim=7, depth=3, seed=42)                                  # 3-layer cascade
+esn = hrc.ESN(dim=7, depth=1, seed=42, leak_rate=0.3)                   # custom config
 
 # High-level pipeline (recommended)
 esn.fit(signal, warmup=200)                     # warmup + run + train
@@ -152,17 +153,18 @@ esn.selected_states()               # stride-selected states as ndarray
 #### Construction
 
 ```python
-ESN(dim, *, seed=0, spectral_radius=0.9, input_scaling=0.02,
+ESN(dim, depth, *, seed=0, spectral_radius=0.9, input_scaling=0.02,
     leak_rate=1.0, alpha=1.0, num_inputs=1, output_fraction=1.0)
 ```
 
-Creates the reservoir and computes output selection parameters from `output_fraction`. The reservoir weights are generated and spectral-radius-rescaled at construction time.
+Creates a reservoir cascade of `depth` layers. All layers share the same seed; inter-layer symmetry is broken by circular rotation of the output state. At `depth=1`, this is equivalent to a single reservoir. Weights are generated and spectral-radius-rescaled at construction time.
 
 **Parameters:**
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `dim` | `int` | — | Hypercube dimension (5-16). N = 2^dim neurons. |
+| `dim` | `int` | — | Hypercube dimension (5-16). N = 2^dim neurons per layer. |
+| `depth` | `int` | — | Number of cascade layers. 1 = single reservoir, >1 = cascade with depth*N total output features. |
 | `seed` | `int` | `0` | RNG seed for weight initialization. Every seed (including 0) produces a valid weight topology; different seeds yield measurably different performance. Use per-DIM seed surveys to find optimal seeds for your task. |
 | `spectral_radius` | `float` | `0.9` | Target spectral radius. Scale-invariant across all dim values (vertex-transitive topology property). No per-size re-tuning needed. |
 | `input_scaling` | `float` | `0.02` | Input weight magnitude, U(-input_scaling, +input_scaling). Scale-invariant across all dim values. |

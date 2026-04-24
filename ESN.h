@@ -4,7 +4,7 @@
 #include <cstring>
 #include <memory>
 #include <vector>
-#include "Reservoir.h"
+#include "ReservoirCascade.h"
 #include "Readout.h"
 
 /// @brief Echo-state network implementing the full pipeline:
@@ -17,7 +17,7 @@ class ESN
     static constexpr size_t N = 1ULL << DIM;
 
 public:
-    explicit ESN(const ReservoirConfig& cfg);
+    ESN(size_t depth, const ReservoirConfig& cfg);
 
     // ---------------------------------------------------------------
     //  Reservoir driving
@@ -102,6 +102,7 @@ public:
     [[nodiscard]] size_t NumCollected() const { return num_collected_; }
     [[nodiscard]] float OutputFraction() const { return output_fraction_; }
     [[nodiscard]] size_t NumOutputVerts() const { return num_output_verts_; }
+    [[nodiscard]] size_t OutputSize() const { return output_size_; }
     [[nodiscard]] size_t NumInputs() const { return num_inputs_; }
 
     // --- Config & persistence ---
@@ -122,9 +123,12 @@ public:
     void SetCNNConfig(const ReadoutConfig& cfg);
 
 private:
-    std::unique_ptr<Reservoir<DIM>> reservoir_;
+    void Init(const ReservoirConfig& cfg);
+
+    std::unique_ptr<IReservoir<DIM>> reservoir_;
     Readout readout_;
 
+    size_t output_size_ = N;
     size_t num_inputs_ = 1;
     float output_fraction_ = 1.0f;
     size_t output_stride_ = 1;
