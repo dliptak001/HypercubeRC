@@ -65,9 +65,11 @@ if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
     add_executable(StreamingAnomaly examples/StreamingAnomaly.cpp)
     file(GLOB LM_TEXT_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/examples/LM_Text/*.cpp)
     add_executable(LM_Text ${LM_TEXT_SOURCES})
+    file(GLOB LM_SOURCES CONFIGURE_DEPENDS ${PROJECT_SOURCE_DIR}/examples/LM/*.cpp)
+    add_executable(LM ${LM_SOURCES})
     add_executable(CoreSmokeTest diagnostics/CoreSmokeTest.cpp)
 
-    set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly LM_Text)
+    set(EXAMPLE_TARGETS BasicPrediction SignalClassification StreamingAnomaly LM_Text LM)
     set(TEST_TARGETS CoreSmokeTest)
     set(EXE_TARGETS HypercubeRC ${EXAMPLE_TARGETS} ${TEST_TARGETS})
 

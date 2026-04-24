@@ -17,9 +17,11 @@ ESN<DIM>::ESN(size_t depth, const ReservoirConfig& cfg)
 template <size_t DIM>
 void ESN<DIM>::Init(const ReservoirConfig& cfg)
 {
-    output_size_     = reservoir_->OutputSize();
-    num_inputs_      = cfg.num_inputs;
-    output_fraction_ = cfg.output_fraction;
+    output_size_      = reservoir_->OutputSize();
+    num_inputs_       = cfg.num_inputs;
+    output_fraction_  = cfg.output_fraction;
+    coupling_scaling_ = cfg.coupling_scaling;
+    coupling_mode_    = cfg.coupling_mode;
 
     const size_t spatial_N = N;
     assert(output_fraction_ > 0.0f && output_fraction_ <= 1.0f);
@@ -273,8 +275,10 @@ ReservoirConfig ESN<DIM>::GetConfig() const
     cfg.spectral_radius = reservoir_->GetSpectralRadius();
     cfg.leak_rate       = reservoir_->GetLeakRate();
     cfg.input_scaling   = reservoir_->GetInputScaling();
-    cfg.num_inputs      = num_inputs_;
-    cfg.output_fraction = output_fraction_;
+    cfg.num_inputs       = num_inputs_;
+    cfg.output_fraction  = output_fraction_;
+    cfg.coupling_scaling = coupling_scaling_;
+    cfg.coupling_mode    = coupling_mode_;
     return cfg;
 }
 

@@ -134,6 +134,8 @@ private:
     size_t output_size_ = N;
     size_t num_inputs_ = 1;
     float output_fraction_ = 1.0f;
+    float coupling_scaling_ = 0.02f;
+    CouplingMode coupling_mode_ = CouplingMode::Raw;
     size_t output_stride_ = 1;
     size_t num_output_verts_ = N;
 

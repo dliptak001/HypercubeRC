@@ -527,9 +527,11 @@ void Readout::SetState(std::vector<double> weights, double bias,
     input_scale_ = std::move(feature_scale);
     num_features_ = input_mean_.size();
 
-    // Infer dim from num_features (N = 2^dim).
+    // Infer spatial dim from num_features, accounting for input_channels
+    // (cascade depth). num_features = input_channels * 2^dim.
     if (num_features_ > 0) {
-        size_t n = num_features_;
+        size_t ch = std::max(1, config_.input_channels);
+        size_t n = num_features_ / ch;
         size_t d = 0;
         while ((1ULL << d) < n) ++d;
         if ((1ULL << d) == n)
