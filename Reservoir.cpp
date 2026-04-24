@@ -152,6 +152,14 @@ void Reservoir<DIM>::InjectInput(size_t channel, float input)
 }
 
 template <size_t DIM>
+void Reservoir<DIM>::InjectState(const float* src, size_t rotation)
+{
+    const size_t off = rotation % N;
+    for (size_t v = 0; v < N; ++v)
+        vtx_output_[v] = src[(v + off) % N];
+}
+
+template <size_t DIM>
 void Reservoir<DIM>::Reset()
 {
     memset(vtx_state_, 0, N * sizeof(float));

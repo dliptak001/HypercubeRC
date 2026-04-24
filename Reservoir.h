@@ -11,13 +11,13 @@
 /// Construct with defaults, override what you need.
 struct ReservoirConfig
 {
-    uint64_t              seed             = 0;
-    float                 alpha            = 1.0f;
-    float                 spectral_radius  = 0.9f;     // scale-invariant optimum (see ScaleInvariance.md)
-    float                 leak_rate        = 1.0f;     // 1.0 = full replacement, <1.0 = leaky integrator
-    float                 input_scaling    = 0.02f;    // scale-invariant optimum (see ScaleInvariance.md)
-    size_t                num_inputs       = 1;
-    float                 output_fraction  = 1.0f;     // fraction of N vertices used as readout features (0.0, 1.0]
+    uint64_t seed = 0;
+    float alpha = 1.0f;
+    float spectral_radius = 0.9f; // scale-invariant optimum (see ScaleInvariance.md)
+    float leak_rate = 1.0f; // 1.0 = full replacement, <1.0 = leaky integrator
+    float input_scaling = 0.02f; // scale-invariant optimum (see ScaleInvariance.md)
+    size_t num_inputs = 1;
+    float output_fraction = 1.0f; // fraction of N vertices used as readout features (0.0, 1.0]
 };
 
 /// @brief Per-DIM reservoir seed from 500-seed survey.
@@ -28,13 +28,13 @@ struct ReservoirConfig
 template <size_t DIM>
 constexpr uint64_t SurveyedSeed()
 {
-    if      constexpr (DIM == 5)  return 2121059498467618174ULL;
-    else if constexpr (DIM == 6)  return 10977843040216038077ULL;
-    else if constexpr (DIM == 7)  return 6437149480297576047ULL;
-    else if constexpr (DIM == 8)  return 13602423379507409791ULL;
-    else if constexpr (DIM == 9)  return 10293005394405557670ULL;
+    if constexpr (DIM == 5) return 2121059498467618174ULL;
+    else if constexpr (DIM == 6) return 10977843040216038077ULL;
+    else if constexpr (DIM == 7) return 6437149480297576047ULL;
+    else if constexpr (DIM == 8) return 13602423379507409791ULL;
+    else if constexpr (DIM == 9) return 10293005394405557670ULL;
     else if constexpr (DIM == 10) return 6437149480297576047ULL;
-    else                          return 42ULL;
+    else return 42ULL;
 }
 
 /// @brief Echo-state reservoir whose neurons live on a Boolean hypercube.
@@ -89,7 +89,7 @@ class Reservoir
     static_assert(DIM >= 5 && DIM <= 16, "DIM must be in 5 <= DIM <= 16");
 
     static constexpr size_t N = 1ULL << DIM;
-    static constexpr size_t NUM_SHELL = DIM - 2;          // shells 3, 7, ..., 2^(DIM-1)-1
+    static constexpr size_t NUM_SHELL = DIM - 2; // shells 3, 7, ..., 2^(DIM-1)-1
     static constexpr size_t NUM_CONNECTIONS = NUM_SHELL + DIM;
 
 public:
@@ -117,6 +117,10 @@ public:
     /// @param input    Scalar value. Clamped to [-1, 1].
     void InjectInput(size_t channel, float input);
 
+    /// @brief Inject a full N-dim state vector with circular rotation.
+    /// Overwrites vtx_output_ with src rotated by `rotation` vertices.
+    void InjectState(const float* src, size_t rotation = 0);
+
     /// @brief Zero the reservoir state. Equivalent to "return to quiescence".
     ///
     /// Clears both state buffers (`vtx_state_` and `vtx_output_`). The
@@ -131,13 +135,15 @@ public:
     void Reset();
 
     /// @brief Snapshot the current reservoir state (vtx_state_ + vtx_output_).
-    void SaveState(float* state_out, float* output_out) const {
+    void SaveState(float* state_out, float* output_out) const
+    {
         std::memcpy(state_out, vtx_state_, N * sizeof(float));
         std::memcpy(output_out, vtx_output_, N * sizeof(float));
     }
 
     /// @brief Restore a previously saved reservoir state.
-    void RestoreState(const float* state_in, const float* output_in) {
+    void RestoreState(const float* state_in, const float* output_in)
+    {
         std::memcpy(vtx_state_, state_in, N * sizeof(float));
         std::memcpy(vtx_output_, output_in, N * sizeof(float));
     }
