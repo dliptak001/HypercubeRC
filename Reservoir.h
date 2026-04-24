@@ -7,6 +7,8 @@
 #include <vector>
 #include "IReservoir.h"
 
+enum class CouplingMode { Raw, Binarize, Normalize, Center };
+
 /// Reservoir configuration. Defaults are scale-invariant — SR=0.90 and
 /// input_scaling=0.02 are optimal across all DIMs (see ScaleInvariance.md).
 /// Construct with defaults, override what you need.
@@ -18,6 +20,7 @@ struct ReservoirConfig
     float leak_rate = 1.0f; // 1.0 = full replacement, <1.0 = leaky integrator
     float input_scaling = 0.02f; // scale-invariant optimum (see ScaleInvariance.md)
     float coupling_scaling = 0.02f; // inter-layer coupling weight scale (cascade)
+    CouplingMode coupling_mode = CouplingMode::Raw; // inter-layer signal conditioning
     size_t num_inputs = 1;
     float output_fraction = 1.0f; // fraction of N vertices used as readout features (0.0, 1.0]
 };

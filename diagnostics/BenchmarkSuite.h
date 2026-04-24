@@ -60,7 +60,7 @@ private:
         ReadoutArchConfig arch;
         arch.num_layers    = kNumLayers;
         arch.conv_channels = kConvChannels;
-        arch.seed          = presets::Baseline<DIM>().arch.seed + 34343;
+        arch.seed          = presets::Baseline<DIM>().arch.seed + 34343;    // ...playing with new seeds for the cascade architecture
 
         ReadoutTrainConfig train;
         train.epochs     = kEpochs;

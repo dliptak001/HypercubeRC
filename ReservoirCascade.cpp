@@ -18,6 +18,8 @@ ReservoirCascade<DIM>::ReservoirCascade(size_t depth, const ReservoirConfig& cfg
     }
 
     output_buf_.resize(depth * N, 0.0f);
+    coupling_mode_ = cfg.coupling_mode;
+    coupling_scratch_.resize(N, 0.0f);
 }
 
 template <size_t DIM>
@@ -26,8 +28,58 @@ void ReservoirCascade<DIM>::Step()
     reservoirs_[0]->Step();
     for (size_t i = 1; i < reservoirs_.size(); ++i)
     {
-        reservoirs_[i]->InjectState(reservoirs_[i - 1]->Outputs(), input_rotations_[i]);
+        const float* src = reservoirs_[i - 1]->Outputs();
+        const float* signal = src;
+        if (coupling_mode_ != CouplingMode::Raw)
+        {
+            ConditionSignal(src, coupling_scratch_.data());
+            signal = coupling_scratch_.data();
+        }
+        reservoirs_[i]->InjectState(signal, input_rotations_[i]);
         reservoirs_[i]->Step();
+    }
+}
+
+template <size_t DIM>
+void ReservoirCascade<DIM>::ConditionSignal(const float* src, float* dst) const
+{
+    switch (coupling_mode_)
+    {
+    case CouplingMode::Binarize:
+        for (size_t v = 0; v < N; ++v)
+            dst[v] = (src[v] >= 0.0f) ? 1.0f : -1.0f;
+        break;
+
+    case CouplingMode::Normalize:
+    {
+        float lo = src[0], hi = src[0];
+        for (size_t v = 1; v < N; ++v) {
+            if (src[v] < lo) lo = src[v];
+            if (src[v] > hi) hi = src[v];
+        }
+        float range = hi - lo;
+        if (range < 1e-12f) {
+            for (size_t v = 0; v < N; ++v) dst[v] = 0.0f;
+        } else {
+            float inv = 2.0f / range;
+            for (size_t v = 0; v < N; ++v)
+                dst[v] = (src[v] - lo) * inv - 1.0f;
+        }
+        break;
+    }
+
+    case CouplingMode::Center:
+    {
+        float sum = 0.0f;
+        for (size_t v = 0; v < N; ++v) sum += src[v];
+        float mean = sum / static_cast<float>(N);
+        for (size_t v = 0; v < N; ++v)
+            dst[v] = src[v] - mean;
+        break;
+    }
+
+    default:
+        break;
     }
 }
 

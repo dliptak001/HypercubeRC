@@ -50,4 +50,8 @@ private:
     std::vector<std::unique_ptr<Reservoir<DIM>>> reservoirs_;
     std::vector<size_t> input_rotations_;
     mutable std::vector<float> output_buf_;
+    CouplingMode coupling_mode_;
+    std::vector<float> coupling_scratch_;
+
+    void ConditionSignal(const float* src, float* dst) const;
 };
