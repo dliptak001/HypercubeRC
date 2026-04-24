@@ -53,9 +53,10 @@ public:
     };
 
     NARMA10(const ReservoirConfig* config = nullptr,
+            size_t depth = 1,
             const ReadoutArchConfig& arch = BenchmarkArchConfig(),
             const ReadoutTrainConfig& train = BenchmarkTrainConfig())
-        : config_(config), arch_(arch), train_(train)
+        : depth_(depth), config_(config), arch_(arch), train_(train)
     {
     }
 
@@ -71,7 +72,8 @@ public:
 
     Result Run()
     {
-        constexpr size_t warmup = (N < 256) ? 200 : 500;
+        const size_t base_warmup = (N < 256) ? 200 : 500;
+        const size_t warmup = base_warmup * depth_;
         constexpr size_t collect = 18 * N;
 
         double s_nrmse = 0.0;
@@ -96,7 +98,7 @@ public:
             cfg.seed = seed;
             cfg.output_fraction = 1.0f;
 
-            ESN<DIM> esn(1, cfg);
+            ESN<DIM> esn(depth_, cfg);
             esn.Warmup(ri.data(), warmup);
             esn.Run(ri.data() + warmup, collect);
 
@@ -120,6 +122,7 @@ public:
     static inline thread_local uint64_t single_seed = 0;
 
 private:
+    size_t depth_;
     const ReservoirConfig* config_;
     ReadoutArchConfig arch_;
     ReadoutTrainConfig train_;

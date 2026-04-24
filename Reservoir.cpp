@@ -156,7 +156,7 @@ void Reservoir<DIM>::InjectState(const float* src, size_t rotation)
 {
     const size_t off = rotation % N;
     for (size_t v = 0; v < N; ++v)
-        vtx_output_[v] = src[(v + off) % N];
+        vtx_output_[v] += src[(v + off) % N] * input_scaling_;
 }
 
 template <size_t DIM>

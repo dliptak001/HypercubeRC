@@ -5,8 +5,14 @@
 #include "NARMA10.h"
 
 /// Unified NARMA-10 benchmark suite across DIM 7-10.
+/// Runs each DIM at depth 1 (single reservoir) and depth 2 (cascade).
 struct BenchmarkSuite
 {
+    static constexpr int   kNumLayers    = 1;
+    static constexpr int   kConvChannels = 8;
+    static constexpr int   kEpochs       = 1000;
+    static constexpr float kLrMax        = 0.0015f;
+
     static void RunAll(const ReservoirConfig* config = nullptr)
     {
         std::cout << "=== HypercubeRC Benchmark Suite ===\n\n";
@@ -23,7 +29,9 @@ struct BenchmarkSuite
 
         std::cout << "  DIM  -- hypercube dimension; the reservoir has N = 2^DIM neurons\n";
         std::cout << "  HCNN -- HypercubeCNN readout (learned convolution)\n";
-        std::cout << "          nl=1 ch=8 FLAT ep=2000 lr=0.0015 bs=1<<(DIM-1)\n\n";
+        std::cout << "          nl=" << kNumLayers << " ch=" << kConvChannels
+                  << " ep=" << kEpochs << " lr=" << kLrMax
+                  << " bs=1<<(DIM-1)\n\n";
 
         std::cout << "--- NARMA-10 (NRMSE, lower is better) ---\n";
         std::cout << "Nonlinear autoregressive benchmark requiring both memory (10-step\n";
@@ -40,21 +48,40 @@ struct BenchmarkSuite
 private:
     static void PrintHeader()
     {
-        std::cout << "  DIM |     N |      HCNN |  time(s)\n";
-        std::cout << "  ----+-------+-----------+---------\n" << std::flush;
+        std::cout << "  DIM |     N | d1 NRMSE   | d2 NRMSE   |   diff\n";
+        std::cout << "  ----+-------+------------+------------+--------\n" << std::flush;
     }
 
     template <size_t DIM>
     static void RunDIM(const ReservoirConfig* config)
     {
+        constexpr size_t N = 1ULL << DIM;
+
+        ReadoutArchConfig arch;
+        arch.num_layers    = kNumLayers;
+        arch.conv_channels = kConvChannels;
+        arch.seed          = presets::Baseline<DIM>().arch.seed;
+
+        ReadoutTrainConfig train;
+        train.epochs     = kEpochs;
+        train.batch_size = 1 << (DIM - 1);
+        train.lr_max     = kLrMax;
+
         std::cout << "  " << std::setw(3) << DIM
-                  << "  | " << std::setw(4) << (1ULL << DIM) << " |" << std::flush;
+                  << "  | " << std::setw(4) << N << " |" << std::flush;
 
-        NARMA10<DIM> narma(config);
-        auto r = narma.Run();
+        NARMA10<DIM> narma1(config, 1, arch, train);
+        auto r1 = narma1.Run();
 
-        std::cout << " " << std::fixed << std::setprecision(6) << std::setw(9) << r.nrmse_hcnn
-                  << " | " << std::setprecision(2) << std::setw(7) << r.hcnn_time_s
-                  << "\n" << std::flush;
+        std::cout << " " << std::fixed << std::setprecision(6) << std::setw(10) << r1.nrmse_hcnn
+                  << " |" << std::flush;
+
+        NARMA10<DIM> narma2(config, 2, arch, train);
+        auto r2 = narma2.Run();
+
+        double pct = (r2.nrmse_hcnn - r1.nrmse_hcnn) / r1.nrmse_hcnn * 100.0;
+        std::cout << " " << std::fixed << std::setprecision(6) << std::setw(10) << r2.nrmse_hcnn
+                  << " | " << std::showpos << std::setprecision(1) << std::setw(5) << pct << "%"
+                  << std::noshowpos << "\n" << std::flush;
     }
 };
