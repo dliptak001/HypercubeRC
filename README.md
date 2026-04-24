@@ -263,18 +263,19 @@ defaults (SR=0.90, input_scaling=0.02).
 
 | DIM | N    | depth 1 | depth 2 (cascade) | diff    |
 |-----|------|---------|--------------------|---------|
-| 7   | 128  | 0.227   | 0.199              | -12.3%  |
-| 8   | 256  | 0.153   | 0.152              |  -1.0%  |
-| 9   | 512  | 0.138   | 0.119              | -13.8%  |
-| 10  | 1024 | 0.121   | 0.112              |  -7.4%  |
+| 7   | 128  | 0.229   | 0.212              |  -7.3%  |
+| 8   | 256  | 0.153   | 0.152              |  -0.9%  |
+| 9   | 512  | 0.138   | 0.124              |  -9.9%  |
+| 10  | 1024 | 0.121   | 0.111              |  -8.1%  |
 
 Standard ESN baseline: 0.2-0.4 (Jaeger 2001, Rodan & Tino 2011).
 
-The cascade stacks two identical-seed reservoirs in series with
-rotation-based symmetry breaking and per-vertex coupling weights,
-extending memory depth beyond a single reservoir. These results use
-seeds surveyed for depth 1; a dedicated cascade seed survey would likely
-improve depth 2 results further.
+The cascade stacks two identical-seed reservoirs with Jacobi update
+semantics — all layers step against the same temporal snapshot, each
+reading its predecessor's T-1 output. Inter-layer coupling uses
+rotation-based symmetry breaking and per-vertex coupling weights. These
+results use seeds surveyed for depth 1; a dedicated cascade seed survey
+would likely improve depth 2 results further.
 
 ## Related Work
 
