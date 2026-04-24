@@ -31,7 +31,8 @@ public:
     void InjectInput(size_t channel, float input);
     void Reset();
 
-    [[nodiscard]] const float* Outputs() const { return reservoirs_.back()->Outputs(); }
+    [[nodiscard]] const float* Outputs() const;
+    [[nodiscard]] size_t TotalOutputSize() const { return reservoirs_.size() * N; }
     [[nodiscard]] size_t Depth() const { return reservoirs_.size(); }
 
 private:
@@ -40,4 +41,5 @@ private:
 
     std::vector<std::unique_ptr<Reservoir<DIM>>> reservoirs_;
     std::vector<size_t> input_rotations_;
+    mutable std::vector<float> output_buf_;
 };

@@ -117,10 +117,6 @@ public:
     /// @param input    Scalar value. Clamped to [-1, 1].
     void InjectInput(size_t channel, float input);
 
-    /// @brief Inject a full N-dim state vector with circular rotation.
-    /// Overwrites vtx_output_ with src rotated by `rotation` vertices.
-    void InjectState(const float* src, size_t rotation = 0);
-
     /// @brief Zero the reservoir state. Equivalent to "return to quiescence".
     ///
     /// Clears both state buffers (`vtx_state_` and `vtx_output_`). The
@@ -172,5 +168,8 @@ private:
 
     void Initialize();
     void UpdateState(size_t v);
+    void InjectState(const float* src, size_t rotation);
     [[nodiscard]] float EstimateSpectralRadius() const;
+
+    template <size_t> friend class ReservoirCascade;
 };

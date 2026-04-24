@@ -17,10 +17,7 @@ ReservoirCascade<DIM>::ReservoirCascade(size_t depth, const ReservoirConfig& cfg
         input_rotations_.push_back(i * (N / depth));
     }
 
-    // The cascade is purely reservoir-to-reservoir via raw state injection (InjectState) —
-    // no readout in the loop. The single readout sits downstream
-    // and consumes the concatenated output state from all layers, giving it a much richer
-    // feature space (depth * N features instead of N).
+    output_buf_.resize(depth * N, 0.0f);
 }
 
 template <size_t DIM>
@@ -38,6 +35,14 @@ template <size_t DIM>
 void ReservoirCascade<DIM>::InjectInput(size_t channel, float input)
 {
     reservoirs_[0]->InjectInput(channel, input);
+}
+
+template <size_t DIM>
+const float* ReservoirCascade<DIM>::Outputs() const
+{
+    for (size_t i = 0; i < reservoirs_.size(); ++i)
+        std::memcpy(output_buf_.data() + i * N, reservoirs_[i]->Outputs(), N * sizeof(float));
+    return output_buf_.data();
 }
 
 template <size_t DIM>
