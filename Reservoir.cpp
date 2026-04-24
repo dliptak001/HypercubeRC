@@ -37,8 +37,8 @@ void Reservoir<DIM>::Initialize()
     std::mt19937_64 rng(rng_seed_);
     std::uniform_real_distribution<double> dist(-1.0, 1.0);
 
-    memset(vtx_state_, 0, N * sizeof(float));
-    memset(vtx_output_, 0, N * sizeof(float));
+    memset(buf_, 0, sizeof(buf_));
+    cur_ = 0;
 
     // N * NUM_CONNECTIONS fully independent weights
     const size_t num_weights = N * NUM_CONNECTIONS;
@@ -71,8 +71,6 @@ void Reservoir<DIM>::Step()
 {
     for (size_t v = 0; v < N; v++)
         UpdateState(v);
-
-    memcpy(vtx_output_, vtx_state_, N * sizeof(float));
 }
 
 template <size_t DIM>
@@ -81,16 +79,16 @@ void Reservoir<DIM>::UpdateState(size_t v)
     const float* w = vtx_weight_.data() + v * NUM_CONNECTIONS;
     float s = 0.0f;
 
-    // Recurrent: Hamming shells (3, 7, 15, ...) — skip distance-1 and antipodal
-    for (size_t i = 0; i < NUM_SHELL; i++)
-        s += vtx_output_[v ^ ShellMask(i + 1)] * w[i];
+    const float* rd = buf_[cur_];
 
-    // Recurrent: Nearest neighbors (1, 2, 4, 8, ...)
+    for (size_t i = 0; i < NUM_SHELL; i++)
+        s += rd[v ^ ShellMask(i + 1)] * w[i];
+
     for (size_t i = 0; i < DIM; i++)
-        s += vtx_output_[v ^ NearestMask(i)] * w[NUM_SHELL + i];
+        s += rd[v ^ NearestMask(i)] * w[NUM_SHELL + i];
 
     const float activation = std::tanh(alpha_ * s);
-    vtx_state_[v] = (1.0f - leak_rate_) * vtx_output_[v] + leak_rate_ * activation;
+    buf_[1 - cur_][v] = (1.0f - leak_rate_) * rd[v] + leak_rate_ * activation;
 }
 
 // Power iteration on the (non-symmetric) recurrent weight matrix.
@@ -153,7 +151,7 @@ void Reservoir<DIM>::InjectInput(size_t channel, float input)
     else if (input > 1.0f) input = 1.0f;
 
     for (size_t v = channel; v < N; v += num_inputs_)
-        vtx_output_[v] += vtx_input_weight_[v] * input;
+        buf_[cur_][v] += vtx_input_weight_[v] * input;
 }
 
 template <size_t DIM>
@@ -161,14 +159,14 @@ void Reservoir<DIM>::InjectState(const float* src, size_t rotation)
 {
     const size_t off = rotation % N;
     for (size_t v = 0; v < N; ++v)
-        vtx_output_[v] += src[(v + off) % N] * vtx_coupling_weight_[v];
+        buf_[cur_][v] += src[(v + off) % N] * vtx_coupling_weight_[v];
 }
 
 template <size_t DIM>
 void Reservoir<DIM>::Reset()
 {
-    memset(vtx_state_, 0, N * sizeof(float));
-    memset(vtx_output_, 0, N * sizeof(float));
+    memset(buf_, 0, sizeof(buf_));
+    cur_ = 0;
 }
 
 // Explicit template instantiations (DIM 5-16)

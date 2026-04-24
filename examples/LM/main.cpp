@@ -63,7 +63,7 @@ static int RunTrain()
     arch.num_layers    = args.cnn_num_layers;
     arch.conv_channels = args.cnn_conv_channels;
 
-    Model<kDIM> model(rcfg, arch);
+    Model<kDIM> model(rcfg, arch, args.cascade_depth);
 
     Trainer<kDIM> trainer(model, corpus, vocab, args);
     return trainer.Run();

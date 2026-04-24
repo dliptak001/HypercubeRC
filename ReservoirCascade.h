@@ -7,6 +7,8 @@
 #include <vector>
 #include "Reservoir.h"
 
+namespace hcnn { class ThreadPool; }
+
 template <size_t DIM>
 class ReservoirCascade : public IReservoir<DIM>
 {
@@ -18,9 +20,12 @@ public:
 
     static constexpr size_t dim = DIM;
 
-    static std::unique_ptr<ReservoirCascade> Create(size_t depth, const ReservoirConfig& cfg)
+    static std::unique_ptr<ReservoirCascade> Create(
+        size_t depth, const ReservoirConfig& cfg,
+        hcnn::ThreadPool* pool = nullptr)
     {
-        return std::unique_ptr<ReservoirCascade>(new ReservoirCascade(depth, cfg));
+        return std::unique_ptr<ReservoirCascade>(
+            new ReservoirCascade(depth, cfg, pool));
     }
 
     ReservoirCascade(const ReservoirCascade&) = delete;
@@ -45,13 +50,16 @@ public:
 
 private:
 
-    explicit ReservoirCascade(size_t depth, const ReservoirConfig& cfg);
+    explicit ReservoirCascade(size_t depth, const ReservoirConfig& cfg,
+                              hcnn::ThreadPool* pool);
 
     std::vector<std::unique_ptr<Reservoir<DIM>>> reservoirs_;
     std::vector<size_t> input_rotations_;
     mutable std::vector<float> output_buf_;
     CouplingMode coupling_mode_;
-    std::vector<float> coupling_scratch_;
+
+    hcnn::ThreadPool* pool_ = nullptr;
+    std::vector<float> coupling_buf_;
 
     void ConditionSignal(const float* src, float* dst) const;
 };

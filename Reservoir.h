@@ -124,32 +124,30 @@ public:
 
     /// @brief Zero the reservoir state. Equivalent to "return to quiescence".
     ///
-    /// Clears both state buffers (`vtx_state_` and `vtx_output_`). The
-    /// recurrent weights, W_in, seed, and hyperparameters are left untouched
-    /// — only the time-varying state is wiped. After Reset() the reservoir
-    /// behaves as if it had just been constructed, with zero prior history.
-    ///
-    /// Intended for episodic tasks where each episode should start from a
-    /// fixed, history-free state (e.g., per-expression reset in char-level
-    /// sequence tasks). For stream tasks that rely on continuous dynamics
-    /// across many inputs, do not call this.
+    /// Clears both double-buffer slots. The recurrent weights, W_in, seed,
+    /// and hyperparameters are left untouched — only the time-varying state
+    /// is wiped. After Reset() the reservoir behaves as if it had just been
+    /// constructed, with zero prior history.
     void Reset() override;
 
-    /// @brief Snapshot the current reservoir state (vtx_state_ + vtx_output_).
     void SaveState(float* state_out, float* output_out) const override
     {
-        std::memcpy(state_out, vtx_state_, N * sizeof(float));
-        std::memcpy(output_out, vtx_output_, N * sizeof(float));
+        std::memcpy(state_out,  buf_[cur_], N * sizeof(float));
+        std::memcpy(output_out, buf_[cur_], N * sizeof(float));
     }
 
-    /// @brief Restore a previously saved reservoir state.
-    void RestoreState(const float* state_in, const float* output_in) override
+    void RestoreState(const float* /*state_in*/, const float* output_in) override
     {
-        std::memcpy(vtx_state_, state_in, N * sizeof(float));
-        std::memcpy(vtx_output_, output_in, N * sizeof(float));
+        std::memcpy(buf_[0], output_in, N * sizeof(float));
+        std::memcpy(buf_[1], output_in, N * sizeof(float));
+        cur_ = 0;
     }
 
-    [[nodiscard]] const float* Outputs() const override { return vtx_output_; }
+    [[nodiscard]] const float* Outputs() const override { return buf_[cur_]; }
+
+    /// Publish the write buffer as current (pointer swap, no memcpy).
+    /// Called by ReservoirCascade after parallel Step().
+    void SwapBuffers() { cur_ = 1 - cur_; }
     [[nodiscard]] size_t OutputSize() const override { return N; }
     [[nodiscard]] float GetAlpha() const override { return alpha_; }
     [[nodiscard]] uint64_t GetSeed() const override { return rng_seed_; }
@@ -161,8 +159,8 @@ private:
     explicit Reservoir(const ReservoirConfig& cfg);
     uint64_t rng_seed_;
 
-    alignas(64) float vtx_state_[N]{};
-    alignas(64) float vtx_output_[N]{};
+    alignas(64) float buf_[2][N]{};
+    int cur_ = 0;
     std::vector<float> vtx_input_weight_; // flat [N] — one W_in weight per vertex
     std::vector<float> vtx_coupling_weight_; // flat [N] — one W_coupling weight per vertex
     std::vector<float> vtx_weight_; // flat [N * NUM_CONNECTIONS]

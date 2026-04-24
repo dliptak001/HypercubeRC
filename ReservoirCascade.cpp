@@ -1,9 +1,13 @@
 #include "ReservoirCascade.h"
+#include "ThreadPool.h"
+#include <cstring>
 #include <stdexcept>
 
 
 template <size_t DIM>
-ReservoirCascade<DIM>::ReservoirCascade(size_t depth, const ReservoirConfig& cfg)
+ReservoirCascade<DIM>::ReservoirCascade(size_t depth, const ReservoirConfig& cfg,
+                                        hcnn::ThreadPool* pool)
+    : pool_(depth > 1 ? pool : nullptr)
 {
     if (depth == 0)
         throw std::invalid_argument("cascade depth must be >= 1");
@@ -19,25 +23,61 @@ ReservoirCascade<DIM>::ReservoirCascade(size_t depth, const ReservoirConfig& cfg
 
     output_buf_.resize(depth * N, 0.0f);
     coupling_mode_ = cfg.coupling_mode;
-    coupling_scratch_.resize(N, 0.0f);
+
+    if (depth > 1)
+        coupling_buf_.resize(depth * N, 0.0f);
 }
 
 template <size_t DIM>
 void ReservoirCascade<DIM>::Step()
 {
-    reservoirs_[0]->Step();
-    for (size_t i = 1; i < reservoirs_.size(); ++i)
+    const size_t D = reservoirs_.size();
+
+    if (D == 1)
+    {
+        reservoirs_[0]->Step();
+        reservoirs_[0]->SwapBuffers();
+        return;
+    }
+
+    // Snapshot coupling from clean T-1 outputs before any layer steps.
+    // This guarantees Jacobi semantics: every layer sees its predecessor's
+    // previous completed output, never an in-progress result from this step.
+    for (size_t i = 1; i < D; ++i)
     {
         const float* src = reservoirs_[i - 1]->Outputs();
-        const float* signal = src;
+        float* dst = coupling_buf_.data() + i * N;
         if (coupling_mode_ != CouplingMode::Raw)
-        {
-            ConditionSignal(src, coupling_scratch_.data());
-            signal = coupling_scratch_.data();
-        }
-        reservoirs_[i]->InjectState(signal, input_rotations_[i]);
-        reservoirs_[i]->Step();
+            ConditionSignal(src, dst);
+        else
+            std::memcpy(dst, src, N * sizeof(float));
     }
+
+    if (pool_)
+    {
+        pool_->ForEach(D, [&](size_t /*tid*/, size_t begin, size_t end) {
+            for (size_t i = begin; i < end; ++i)
+            {
+                if (i > 0)
+                    reservoirs_[i]->InjectState(
+                        coupling_buf_.data() + i * N, input_rotations_[i]);
+                reservoirs_[i]->Step();
+            }
+        });
+    }
+    else
+    {
+        for (size_t i = 0; i < D; ++i)
+        {
+            if (i > 0)
+                reservoirs_[i]->InjectState(
+                    coupling_buf_.data() + i * N, input_rotations_[i]);
+            reservoirs_[i]->Step();
+        }
+    }
+
+    for (auto& r : reservoirs_)
+        r->SwapBuffers();
 }
 
 template <size_t DIM>

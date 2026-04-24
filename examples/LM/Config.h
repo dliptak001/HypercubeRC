@@ -37,6 +37,8 @@ struct TrainCfg
     int           num_passes         = 3;       // number of passes over the training region
     std::size_t   val_chars          = 50000;   // chars scored after each pass for eval metrics
 
+    std::size_t   cascade_depth      = 5;       // number of stacked reservoir layers (1 = single, >1 = cascade)
+
     float         spectral_radius   = 0.90f;   // reservoir weight matrix scaling (controls echo memory)
     float         leak_rate         = 1.0f;     // 1.0 = full update; <1.0 = leaky integrator (smooths dynamics)
     float         input_scaling     = 0.02f;    // scale factor applied to input before injection into reservoir

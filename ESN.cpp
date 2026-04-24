@@ -8,7 +8,8 @@
 
 template <size_t DIM>
 ESN<DIM>::ESN(size_t depth, const ReservoirConfig& cfg)
-    : reservoir_(ReservoirCascade<DIM>::Create(depth, cfg))
+    : pool_(depth > 1 && DIM >= 11 ? std::make_unique<hcnn::ThreadPool>() : nullptr),
+      reservoir_(ReservoirCascade<DIM>::Create(depth, cfg, pool_.get()))
 {
     depth_ = depth;
     Init(cfg);

@@ -6,6 +6,7 @@
 #include <vector>
 #include "ReservoirCascade.h"
 #include "Readout.h"
+#include "ThreadPool.h"
 
 /// @brief Echo-state network implementing the full pipeline:
 ///        Reservoir -> [Output Selection] -> Readout.
@@ -127,6 +128,7 @@ public:
 private:
     void Init(const ReservoirConfig& cfg);
 
+    std::unique_ptr<hcnn::ThreadPool> pool_;
     std::unique_ptr<IReservoir<DIM>> reservoir_;
     Readout readout_;
 
