@@ -37,13 +37,13 @@ struct TrainCfg
     int           num_passes         = 20;       // number of passes over the training region
     std::size_t   val_chars          = 50000;   // chars scored after each pass for eval metrics
 
-    std::size_t   cascade_depth      = 10;       // number of stacked reservoir layers (1 = single, >1 = cascade)
+    std::size_t   cascade_depth      = 1;       // number of stacked reservoir layers (1 = single, >1 = cascade)
 
     float         spectral_radius   = 0.90f;   // reservoir weight matrix scaling (controls echo memory)
     float         leak_rate         = 1.0f;     // 1.0 = full update; <1.0 = leaky integrator (smooths dynamics)
     float         input_scaling     = 0.02f;    // scale factor applied to input before injection into reservoir
     float         coupling_scaling  = 0.02f;    // inter-layer coupling weight scale (cascade depth > 1)
-    int           coupling_mode     = 1;        // CouplingMode enum: 0=Raw 1=Binarize 2=Normalize 3=Center
+    int           coupling_mode     = 2;        // CouplingMode enum: 0=Raw 1=Binarize 2=Normalize 3=Center
     float         output_fraction   = 1.0f;     // fraction of reservoir vertices fed to the readout (0,1]
 
     int           cnn_num_layers    = 1;        // Conv+Pool pairs in the HCNN readout
