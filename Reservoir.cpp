@@ -64,28 +64,36 @@ void Reservoir<DIM>::Initialize()
 template <size_t DIM>
 void Reservoir<DIM>::Step()
 {
+    // Save the pre-injection output values for the classic leaky-integrator formula.
+    // This is the value that should be decayed by (1-leak_rate_).
+    float old_output[N];
+    std::memcpy(old_output, vtx_output_, N * sizeof(float));
+
     for (size_t v = 0; v < N; v++)
-        UpdateState(v);
+        UpdateState(v, old_output[v]);   // pass the pre-injection value
 
     memcpy(vtx_output_, vtx_state_, N * sizeof(float));
 }
 
 template <size_t DIM>
-void Reservoir<DIM>::UpdateState(size_t v)
+void Reservoir<DIM>::UpdateState(size_t v, float old_output_v)
 {
     const float* w = vtx_weight_.data() + v * NUM_CONNECTIONS;
     float s = 0.0f;
 
-    // Recurrent: Hamming shells (3, 7, 15, ...) — skip distance-1 and antipodal
+    // Recurrent: Hamming shells — still uses the *injected* vtx_output_
+    // (neighbors correctly see the current input)
     for (size_t i = 0; i < NUM_SHELL; i++)
         s += vtx_output_[v ^ ShellMask(i + 1)] * w[i];
 
-    // Recurrent: Nearest neighbors (1, 2, 4, 8, ...)
+    // Recurrent: Nearest neighbors
     for (size_t i = 0; i < DIM; i++)
         s += vtx_output_[v ^ NearestMask(i)] * w[NUM_SHELL + i];
 
     const float activation = std::tanh(alpha_ * s);
-    vtx_state_[v] = (1.0f - leak_rate_) * vtx_output_[v] + leak_rate_ * activation;
+
+    // Classic ESN leaky-integrator formula (the fix)
+    vtx_state_[v] = (1.0f - leak_rate_) * old_output_v + leak_rate_ * activation;
 }
 
 // Power iteration on the (non-symmetric) recurrent weight matrix.

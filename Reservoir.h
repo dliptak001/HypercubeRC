@@ -165,6 +165,6 @@ private:
     float input_scaling_ = 0.02f;
 
     void Initialize();
-    void UpdateState(size_t v);
+    void UpdateState(size_t v, float old_output_v);
     [[nodiscard]] float EstimateSpectralRadius() const;
 };
