@@ -140,6 +140,7 @@ public:
     void RestoreState(const float* state_in, const float* output_in) {
         std::memcpy(vtx_state_, state_in, N * sizeof(float));
         std::memcpy(vtx_output_, output_in, N * sizeof(float));
+        std::memcpy(vtx_prev_, output_in, N * sizeof(float));
     }
 
     [[nodiscard]] const float* Outputs() const { return vtx_output_; }
@@ -155,6 +156,7 @@ private:
 
     alignas(64) float vtx_state_[N]{};
     alignas(64) float vtx_output_[N]{};
+    alignas(64) float vtx_prev_[N]{};   // clean previous state (pre-injection) for correct leaky integrator
     std::vector<float> vtx_input_weight_; // flat [N] — one W_in weight per vertex
     std::vector<float> vtx_weight_; // flat [N * NUM_CONNECTIONS]
 

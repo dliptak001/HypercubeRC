@@ -38,6 +38,7 @@ void Reservoir<DIM>::Initialize()
 
     memset(vtx_state_, 0, N * sizeof(float));
     memset(vtx_output_, 0, N * sizeof(float));
+    memset(vtx_prev_, 0, N * sizeof(float));
 
     // N * NUM_CONNECTIONS fully independent weights
     const size_t num_weights = N * NUM_CONNECTIONS;
@@ -67,12 +68,15 @@ void Reservoir<DIM>::Step()
     // Save the pre-injection output values for the classic leaky-integrator formula.
     // This is the value that should be decayed by (1-leak_rate_).
     float old_output[N];
-    std::memcpy(old_output, vtx_output_, N * sizeof(float));
+    std::memcpy(old_output, vtx_prev_, N * sizeof(float));
 
     for (size_t v = 0; v < N; v++)
         UpdateState(v, old_output[v]);   // pass the pre-injection value
 
     memcpy(vtx_output_, vtx_state_, N * sizeof(float));
+
+    // Save the new clean state so the *next* Step() will have the correct pre-injection old value.
+    std::memcpy(vtx_prev_, vtx_output_, N * sizeof(float));
 }
 
 template <size_t DIM>
@@ -164,6 +168,7 @@ void Reservoir<DIM>::Reset()
 {
     memset(vtx_state_, 0, N * sizeof(float));
     memset(vtx_output_, 0, N * sizeof(float));
+    std::memset(vtx_prev_, 0, N * sizeof(float));
 }
 
 // Explicit template instantiations (DIM 5-16)

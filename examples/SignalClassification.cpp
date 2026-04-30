@@ -172,7 +172,7 @@ int main(int argc, char* argv[])
     std::cout << "  Sine (f=0.11)  |  Square (f=0.13)  |  Triangle (f=0.12)  |  Chirp (f=0.10)\n";
     std::cout << "Frequencies are deliberately close; " << NOISE_LEVEL
               << " noise forces classification by shape, not frequency.\n";
-    std::cout << "\nThe leak_rate is intentionally detuned to 0.65 to produce visible classification errors.\nChange leak_rate to 0.35 for PERFECT accuracy.\n\n";
+    std::cout << "\nThe leak_rate is intentionally detuned to 0.65 to produce visible classification errors.\nChange leak_rate to 0.35 for near PERFECT accuracy.\n\n";
 
     std::vector<float> signal(warmup + collect);
     std::vector<size_t> labels(collect);
