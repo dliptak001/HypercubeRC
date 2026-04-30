@@ -25,7 +25,7 @@ from ._core import (
     _ESN13, _ESN14, _ESN15, _ESN16,
 )
 
-__version__ = "0.2.0"
+__version__ = "0.2.4"
 __all__ = ["ESN"]
 
 _ESN_CLASSES = {
