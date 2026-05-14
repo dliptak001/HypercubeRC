@@ -282,6 +282,26 @@ graph of an echo-state network, with XOR-addressed wiring between tanh neurons.
 The two architectures share the hypercube as a structural primitive but differ in
 dynamics, activation model, and the role the hypercube plays.
 
+## Exploratory: FractalHypercubeRC
+
+[FractalHypercubeRC](https://github.com/dliptak001/FractalHypercubeRC) was an
+exploratory fork that asked whether recursive, self-similar reservoirs could
+overcome the shallow-memory ceiling of a flat hypercube. Each neuron was
+recursively replaced with an identical hypercube sub-reservoir (depths 1–5),
+giving every "neuron" its own internal persistent state while keeping a
+vector-in/scalar-out interface.
+
+The hypothesis failed, and the repository is archived as a cautionary
+reference. The central finding: **recursive depth multiplies state without
+extending memory** — a depth-5 fractal accumulated ~37k internal states yet the
+effective rank of its state covariance grew only from ~2 to ~28, NARMA NRMSE
+plateaued near 0.65 across all depths, and per-step cost scaled as ~8^depth.
+Memory in these reservoirs is governed by spectral structure, not raw state
+capacity. The work also produced a methodological lesson worth keeping: state
+geometry (rank, non-degeneracy) does not predict task performance — a reservoir
+can score well geometrically while remaining functionally misaligned with the
+task.
+
 ## Python SDK
 
 Pre-built wheels are available on [PyPI](https://pypi.org/project/hypercube-rc/)
