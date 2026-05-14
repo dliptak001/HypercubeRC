@@ -263,12 +263,17 @@ All results: per-DIM surveyed seed, HCNN baseline config
 
 | DIM | N    | HCNN NRMSE |
 |-----|------|------------|
-| 7   | 128  | 0.218      |
-| 8   | 256  | 0.153      |
-| 9   | 512  | 0.134      |
-| 10  | 1024 | 0.122      |
+| 7   | 128  | 0.188      |
+| 8   | 256  | 0.118      |
+| 9   | 512  | 0.096      |
+| 10  | 1024 | 0.084      |
 
 Standard ESN baseline: 0.2-0.4 (Jaeger 2001, Rodan & Tino 2011).
+
+> These numbers come from the generalized `NARMA_N` generator (see
+> [diagnostics/NARMA_N.md](diagnostics/NARMA_N.md)) and supersede the
+> prior table (0.218 / 0.153 / 0.134 / 0.122). The replacement also
+> corrected a target-alignment bug carried over from the source project.
 
 ## Related Work
 
@@ -367,7 +372,7 @@ HypercubeRC/
 
   diagnostics/
     BenchmarkSuite.h      Orchestrates NARMA-10 across DIM
-    NARMA10.h/md          Nonlinear memory benchmark (includes NARMA-10 generator)
+    NARMA_N.h/md          Nonlinear memory benchmark (generalized NARMA-N generator)
     StateRank.h/md        Reservoir dimensionality and input correlation
 
   docs/

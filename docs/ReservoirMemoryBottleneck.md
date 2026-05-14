@@ -281,7 +281,7 @@ sequential context.  For tasks where the relevant context fits within the
 echo state horizon (~20-40 steps at SR = 0.90), the reservoir + HCNN
 readout is highly effective:
 
-- **NARMA-10** (10-step nonlinear memory): NRMSE 0.122 at DIM 10
+- **NARMA-10** (10-step nonlinear memory): NRMSE 0.084 at DIM 10
 - **Signal classification** (waveform recognition): near-perfect accuracy
 - **Streaming anomaly detection**: real-time with minimal latency
 - **Time series prediction** with short-horizon dependencies

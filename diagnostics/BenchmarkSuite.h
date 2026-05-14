@@ -2,7 +2,7 @@
 
 #include <iostream>
 #include <iomanip>
-#include "NARMA10.h"
+#include "NARMA_N.h"
 
 /// Unified NARMA-10 benchmark suite across DIM 7-10.
 struct BenchmarkSuite
@@ -50,7 +50,7 @@ private:
         std::cout << "  " << std::setw(3) << DIM
                   << "  | " << std::setw(4) << (1ULL << DIM) << " |" << std::flush;
 
-        NARMA10<DIM> narma(config);
+        NARMA_N<DIM> narma(config);
         auto r = narma.Run();
 
         std::cout << " " << std::fixed << std::setprecision(6) << std::setw(9) << r.nrmse_hcnn

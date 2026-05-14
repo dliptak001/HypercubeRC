@@ -39,7 +39,7 @@ with educational `.md` documentation:
 
 | Diagnostic | What it measures |
 |------------|-----------------|
-| [NARMA10](../diagnostics/NARMA10.md) | Combined memory + nonlinear computation (the hardest standard benchmark) |
+| [NARMA-N](../diagnostics/NARMA_N.md) | Combined memory + nonlinear computation (the hardest standard benchmark) |
 | [StateRank](../diagnostics/StateRank.md) | Reservoir dimensionality and input correlation analysis |
 
 ### 4. Go deeper
@@ -59,5 +59,5 @@ in the header files are written for an educational audience:
 |--------|----------------|
 | `ESN.h` | `ESN<DIM>` — the pipeline wrapper (warmup, run, collect states) |
 | `Reservoir.h` | `Reservoir<DIM>` — the hypercube reservoir core |
-| `diagnostics/NARMA10.h` | `GenerateNARMA10()`, `NARMA10<DIM>` benchmark |
+| `diagnostics/NARMA_N.h` | `NARMA_N_Generator<T>`, `NARMA_N<DIM>` benchmark |
 | `Readout.h` | `Readout` — learned convolutional readout |
