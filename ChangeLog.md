@@ -1,5 +1,21 @@
 # HypercubeRC - Change Log
 
+## Unreleased
+
+### NARMA-N diagnostic
+
+- Replace the NARMA-10 diagnostic with a generalized NARMA-N generator:
+  configurable order, O(1) per step (incremental running sum + ring buffers),
+  and a `use_tanh` stability flag replacing the old hard clamp to [0, 1]
+- Rename `diagnostics/NARMA10.{h,md}` → `NARMA_N.{h,md}` and `NARMA10<DIM>` →
+  `NARMA_N<DIM>`; the benchmark suite still runs canonical NARMA-10 by default
+- Fix a target-alignment bug carried over from FractalHypercubeRC's generator:
+  pairing `u(t)` with `y(t+1)` made the target depend on an unseen future
+  input. Aligned to `u(t)`/`y(t)`, NARMA-10 NRMSE for DIM 7-10 is now
+  0.188 / 0.118 / 0.096 / 0.084 (was reported as 0.218 / 0.153 / 0.134 / 0.122)
+- Add an "Exploratory: FractalHypercubeRC" section to the README, including a
+  followup note on the benchmark bug and its effect on that project's findings
+
 ## v0.2.1 (Apr 23, 2026)
 
 ### Pre-merge cleanup

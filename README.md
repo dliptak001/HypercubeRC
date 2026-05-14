@@ -307,6 +307,18 @@ geometry (rank, non-degeneracy) does not predict task performance — a reservoi
 can score well geometrically while remaining functionally misaligned with the
 task.
 
+**Followup (2026-05): a benchmark bug behind that NARMA result.** While porting
+FractalHypercubeRC's NARMA generator into this repository, its diagnostic was
+found to have a target-alignment bug — it paired input `u(t)` with target
+`y(t+1)`, a one-step-ahead shift that makes the target depend on an input the
+reservoir has never seen, leaving the task partly unlearnable. The ~0.65 NRMSE
+plateau was therefore at least partly a benchmark artifact, not a pure
+architectural ceiling. The bug is fixed in both repositories; with correct
+alignment, HypercubeRC's own NARMA-10 scores dropped from ~0.8 to ~0.08–0.19.
+The effective-rank measurement and the ~8^depth cost scaling are unaffected, so
+the broader conclusion retains independent support — but the NARMA evidence
+specifically should be re-evaluated before the project's findings are cited.
+
 ## Python SDK
 
 Pre-built wheels are available on [PyPI](https://pypi.org/project/hypercube-rc/)
