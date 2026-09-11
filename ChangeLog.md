@@ -1,0 +1,91 @@
+# HypercubeRC - Change Log
+
+## Unreleased
+
+### NARMA-N diagnostic
+
+- Replace the NARMA-10 diagnostic with a generalized NARMA-N generator:
+  configurable order, O(1) per step (incremental running sum + ring buffers),
+  and a `use_tanh` stability flag replacing the old hard clamp to [0, 1]
+- Rename `diagnostics/NARMA10.{h,md}` → `NARMA_N.{h,md}` and `NARMA10<DIM>` →
+  `NARMA_N<DIM>`; the benchmark suite still runs canonical NARMA-10 by default
+- Fix a target-alignment bug carried over from FractalHypercubeRC's generator:
+  pairing `u(t)` with `y(t+1)` made the target depend on an unseen future
+  input. Aligned to `u(t)`/`y(t)`, NARMA-10 NRMSE for DIM 7-10 is now
+  0.188 / 0.118 / 0.096 / 0.084 (was reported as 0.218 / 0.153 / 0.134 / 0.122)
+- Add an "Exploratory: FractalHypercubeRC" section to the README, including a
+  followup note on the benchmark bug and its effect on that project's findings
+
+## v0.2.1 (Apr 23, 2026)
+
+### Pre-merge cleanup
+
+- Flatten readout/ directory into project root alongside Reservoir and ESN
+- Rename HCNNReadout → Readout, HCNNReadoutConfig → ReadoutConfig, HCNNTask → ReadoutTask
+- Rename HCNNPresets → Presets, HCNNPreset → Preset, HRCCNNBaseline → Baseline, hcnn_presets → presets namespace
+- Rename HRCCNN_LM_Text → LM_Text: directory, namespace, CMake target, and docs
+- Rename private ESN::HCNNState() → ReadoutInput() (last stale HCNN reference in non-library code)
+- Add Python train_cnn() convenience wrapper and DLL bundling for wheels
+- Fix README claims, unify lr_max guidance, add HypercubeCNN readout coverage
+- Audit examples and diagnostics: fix doc accuracy, remove dead code, clean up stale references
+
+## v0.2.0 (Apr 23, 2026)
+
+### HypercubeCNN readout (replaces LinearReadout + RidgeRegression)
+
+- Add Readout: topology-native convolutional readout operating directly on hypercube reservoir state
+- Auto-sized Conv+Pool stack from DIM with configurable layers (nl), channels (ch), and FLATTEN/GAP head
+- Support multi-output regression and multi-class classification (softmax + cross-entropy)
+- Add online training API: InitOnline(), TrainOnlineStep(), TrainOnlineBatch(), PredictLiveRaw()
+- Add per-DIM frozen baseline configs in Presets.h (DIM 5-10, NARMA-10 tuned)
+- Add FLATTEN readout head preserving per-vertex identity end-to-end
+- Add output_fraction subsampling: CNN sees a sub-hypercube of the reservoir state
+- Add Reservoir::SaveReservoirState() / RestoreReservoirState() for eval checkpointing
+
+### Streaming online training
+
+- Add streaming training mode: one CNN gradient step per reservoir timestep, constant RAM
+- Add mini-batch gradient accumulation for streaming training
+- Add per-pass evaluation with reservoir state save/restore
+- Add linear LR schedule with configurable floor fraction across all passes
+- Eliminate hot-path allocations in streaming training loop
+- Add docs/TrainingModes.md: batch vs streaming training comparison
+
+### LM_Text example (character-level language model)
+
+- Add character-level text LM on Tiny Shakespeare (96-token fixed ASCII vocab)
+- Streaming online training at DIM 13 (8192 neurons), no states buffer, <50 MiB steady-state RAM
+- Multi-pass training with linear LR decay, per-pass eval, autoregressive text sampling
+- Binary model serialization with embedded vocab for train/eval/infer workflow
+- Eval wraps to corpus start when train+val exceeds corpus length
+- Add leak_rate to ReservoirConfig and LM_Text config plumbing
+- Project paused: all configs converge to BPC ~3.05 (reservoir memory bottleneck)
+- Add docs/ReservoirMemoryBottleneck.md documenting the ceiling analysis
+
+### Removed components
+
+- Remove LinearReadout and RidgeRegression readout (replaced by Readout)
+- Remove TranslationLayer and FeatureMode enum
+- Remove Mackey-Glass benchmark and presets
+- Remove MemoryCapacity, MemoryCapacityProfile, SeedSurvey, StandaloneESNSweep diagnostics
+- Remove CnnSeedSurvey diagnostic (seeds baked into Presets.h)
+- Remove HRCCNN_LLM_Math example (superseded by LM_Text)
+- Remove OpenMP dependency (thread pools via HypercubeCNN/ThreadPool.h only)
+
+### Examples and diagnostics
+
+- Merge BasicPrediction and CNNPrediction into single comparison example
+- Add HCNN multi-class classification path to SignalClassification
+- Add StreamingAnomaly dual-readout variant
+- Move CoreSmokeTest to diagnostics/ with HCNN smoke tests (prediction, classification, multi-output)
+- Merge BenchmarkSuite and HCNNBenchmarkSuite into unified NARMA-10 suite
+- Retune BasicPrediction and SignalClassification epoch counts for HCNN readout
+
+### Documentation
+
+- Rewrite CPP_SDK.md and Python_SDK.md for Readout API
+- Add docs/Readout.md: architecture, auto-sizing, training modes, serialization
+- Rewrite NARMA10.md, DoesTopologyMatter.md, ScaleInvariance.md with HCNN results
+- Move LM_Text.md to examples/LM_Text/ alongside its code
+- Fix docs/Reservoir.md DIM range: [5, 12] to [5, 16]
+- Purge all stale Ridge/TranslationLayer/ReadoutType references from docs
